@@ -1,0 +1,10 @@
+services:
+  router-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pixelwizard-router:local
+    container_name: pixelwizard-router
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
