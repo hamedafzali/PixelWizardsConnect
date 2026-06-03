@@ -11,15 +11,15 @@
   </PropertyGroup>
 
   <!--
-    On Windows: net9.0-windows is listed first so `dotnet run` (no -f flag) picks it,
-    enabling the WINDOWS define and full host support (screen capture + input injection).
-    On macOS/Linux: only net9.0 is built, avoiding a broken Windows target on CI/dev machines.
+    Use a single TargetFramework per OS so `dotnet run` never needs -f and there
+    is no ambiguity about which TFM is active.  Single TFM = WINDOWS define is
+    always set on Windows = WindowsHostProvider = host mode enabled.
   -->
   <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-    <TargetFrameworks>net9.0-windows;net9.0</TargetFrameworks>
+    <TargetFramework>net9.0-windows</TargetFramework>
   </PropertyGroup>
   <PropertyGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
-    <TargetFrameworks>net9.0</TargetFrameworks>
+    <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
