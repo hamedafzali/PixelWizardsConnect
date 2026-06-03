@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- net9.0 = Mac/Linux viewer; net9.0-windows = Windows full host+viewer -->
+    <TargetFrameworks>net9.0;net9.0-windows</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <!-- Allows cross-compiling the windows target from macOS -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.0" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.0" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.3.0" />
+    <PackageReference Include="ReactiveUI" Version="20.1.1" />
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PixelWizard.Core\PixelWizard.Core.csproj" />
+    <ProjectReference Include="..\..\src\PixelWizard.Transport\PixelWizard.Transport.csproj" />
+  </ItemGroup>
+
+  <!-- WindowsHost only wired in for the Windows target -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0-windows'">
+    <ProjectReference Include="..\..\src\PixelWizard.WindowsHost\PixelWizard.WindowsHost.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,92 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PixelWizard.AvaloniaClient.Views.ConsentDialog"
+        Title="Incoming Connection"
+        Width="400" Height="240"
+        CanResize="False"
+        WindowStartupLocation="CenterOwner"
+        Background="#F0F4F8"
+        ShowInTaskbar="False">
+
+    <Border Background="White"
+            CornerRadius="12"
+            BoxShadow="0 4 24 0 #28000000"
+            Margin="0">
+        <Grid Margin="28" RowDefinitions="Auto,*,Auto">
+
+            <!-- Icon + title -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                <Border Width="42" Height="42"
+                        Background="#EFF6FF"
+                        CornerRadius="10"
+                        Margin="0,0,14,0">
+                    <TextBlock Text="🖥" FontSize="20"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="Incoming Connection"
+                               FontSize="16" FontWeight="SemiBold"
+                               Foreground="#111827"/>
+                    <TextBlock Text="Someone wants to view this screen"
+                               FontSize="12" Foreground="#6B7280"
+                               Margin="0,2,0,0"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Detail box -->
+            <Border Grid.Row="1"
+                    Background="#F9FAFB"
+                    BorderBrush="#E5E7EB"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="14,12">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="60,*">
+                        <TextBlock Grid.Column="0" Text="Time"
+                                   FontSize="13" Foreground="#9CA3AF"/>
+                        <TextBlock Grid.Column="1" x:Name="TimeText"
+                                   FontSize="13" FontWeight="Medium"
+                                   Foreground="#111827"/>
+                    </Grid>
+                    <Grid ColumnDefinitions="60,*">
+                        <TextBlock Grid.Column="0" Text="From"
+                                   FontSize="13" Foreground="#9CA3AF"/>
+                        <TextBlock Grid.Column="1" x:Name="EndpointText"
+                                   FontSize="13" FontWeight="Medium"
+                                   Foreground="#111827"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Buttons -->
+            <Grid Grid.Row="2" ColumnDefinitions="*,12,*" Margin="0,16,0,0">
+                <Button Grid.Column="0"
+                        Content="Deny"
+                        Background="#FEF2F2"
+                        Foreground="#EF4444"
+                        BorderBrush="#FECACA"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Height="40"
+                        FontWeight="SemiBold"
+                        FontSize="13"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Click="OnDeny"/>
+                <Button Grid.Column="2"
+                        Content="Allow"
+                        Background="#2563EB"
+                        Foreground="White"
+                        CornerRadius="8"
+                        Height="40"
+                        FontWeight="SemiBold"
+                        FontSize="13"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Click="OnAllow"/>
+            </Grid>
+
+        </Grid>
+    </Border>
+</Window>

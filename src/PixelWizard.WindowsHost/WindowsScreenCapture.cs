@@ -1,0 +1,48 @@
+using System;
+using System.Collections.Generic;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.Windows.Forms;
+using PixelWizard.Core.Interfaces;
+using PixelWizard.Core.Protocol;
+
+namespace PixelWizard.WindowsHost
+{
+    public class WindowsScreenCapture : IScreenCapture
+    {
+        private readonly Screen _screen;
+        private readonly ScreenChangeDetector _detector = new();
+        private DateTime _lastFull = DateTime.MinValue;
+        private TimeSpan _fullRefreshInterval;
+
+        public WindowsScreenCapture(Screen? screen = null, TimeSpan? fullRefreshInterval = null)
+        {
+            _screen = screen ?? Screen.PrimaryScreen ?? Screen.AllScreens[0];
+            _fullRefreshInterval = fullRefreshInterval ?? TimeSpan.FromSeconds(10);
+        }
+
+        public (int Width, int Height) Resolution => (_screen.Bounds.Width, _screen.Bounds.Height);
+
+        public List<ScreenDelta> Capture(bool forceFullFrame, long jpegQuality)
+        {
+            bool force = forceFullFrame || (DateTime.UtcNow - _lastFull) >= _fullRefreshInterval;
+            using var bmp = CaptureScreen();
+            var deltas = _detector.DetectChanges(bmp, force, jpegQuality);
+            if (force) _lastFull = DateTime.UtcNow;
+            return deltas;
+        }
+
+        private Bitmap CaptureScreen()
+        {
+            var b = _screen.Bounds;
+            var bmp = new Bitmap(b.Width, b.Height, PixelFormat.Format24bppRgb);
+            using var g = Graphics.FromImage(bmp);
+            g.CopyFromScreen(b.X, b.Y, 0, 0, new Size(b.Width, b.Height), CopyPixelOperation.SourceCopy);
+            return bmp;
+        }
+
+        public void Reset() => _detector.Reset();
+
+        public void Dispose() => _detector.Dispose();
+    }
+}
