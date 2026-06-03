@@ -1,0 +1,36 @@
+version: "3.9"
+
+# Bring up with:
+#   docker compose -f docker-compose.https.yml up -d
+#
+# Prerequisites:
+#   1. Point your DNS A/AAAA record for DOMAIN to this machine.
+#   2. Copy Caddyfile.example to Caddyfile and replace DOMAIN with your real domain.
+#   3. Caddy obtains and auto-renews a Let's Encrypt certificate.
+
+services:
+  router:
+    build: .
+    restart: unless-stopped
+    expose:
+      - "9000"          # internal only — Caddy proxies inbound HTTPS to here
+    environment:
+      ROUTER_ADDR: ":9000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"         # HTTP → HTTPS redirect
+      - "443:443"       # HTTPS
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - router
+
+volumes:
+  caddy_data:
+  caddy_config:

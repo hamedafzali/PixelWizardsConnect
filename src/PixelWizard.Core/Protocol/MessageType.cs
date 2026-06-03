@@ -29,6 +29,12 @@ namespace PixelWizard.Core.Protocol
         // Handshake
         Handshake       = 40,
         HandshakeOk     = 41,
-        HandshakeFailed = 42
+        HandshakeFailed = 42,
+
+        // Clipboard
+        ClipboardText = 50,
+
+        // Chat
+        ChatMessage = 60
     }
 }

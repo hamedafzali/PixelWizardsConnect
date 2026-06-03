@@ -356,6 +356,21 @@
                                 </StackPanel>
                             </DockPanel>
 
+                            <!-- Feature 2: Monitor dropdown -->
+                            <TextBlock Text="Monitor" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="#374151" Margin="0,0,0,6"/>
+                            <ComboBox SelectedIndex="{Binding SelectedMonitorIndex}"
+                                      ItemsSource="{Binding AvailableMonitors}"
+                                      IsEnabled="{Binding !IsHostRunning}"
+                                      Width="300" Height="36" FontSize="12"
+                                      Margin="0,0,0,16">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Name}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+
                             <!-- Method toggle -->
                             <Border Background="#F3F4F6" CornerRadius="9" Padding="3"
                                     Margin="0,0,0,20" HorizontalAlignment="Left">
@@ -472,13 +487,34 @@
                                         Command="{Binding StopHostCommand}"/>
                             </Grid>
 
+                            <!-- Feature 6: Session notes toggle (only while running) -->
+                            <Button Classes="ghost" Content="📝 Session Notes"
+                                    Height="30" FontSize="12"
+                                    HorizontalAlignment="Left"
+                                    Margin="0,12,0,0"
+                                    IsVisible="{Binding IsHostRunning}"
+                                    Command="{Binding ToggleSessionNotesCommand}"/>
+
+                            <Border IsVisible="{Binding SessionNotesVisible}"
+                                    Background="#FFFBEB" BorderBrush="#FDE68A"
+                                    BorderThickness="1" CornerRadius="8"
+                                    Padding="12,10" Margin="0,6,0,0">
+                                <TextBox Text="{Binding SessionNotes}"
+                                         Watermark="Session notes (saved on disconnect)…"
+                                         AcceptsReturn="True"
+                                         Height="100"
+                                         FontSize="12"
+                                         TextWrapping="Wrap"/>
+                            </Border>
+
                         </StackPanel>
                     </ScrollViewer>
 
                     <!-- ─── SCREEN DISPLAY ─── -->
                     <Grid IsVisible="{Binding ShowScreenDisplay}"
-                          RowDefinitions="48,*">
+                          RowDefinitions="48,Auto,*,Auto">
 
+                        <!-- Toolbar -->
                         <Border Grid.Row="0" Background="#0F172A"
                                 CornerRadius="12,12,0,0" Padding="16,0">
                             <DockPanel VerticalAlignment="Center">
@@ -497,9 +533,40 @@
                                     <TextBlock Text="{Binding BandwidthText}"
                                                Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <!-- Right: zoom controls + disconnect -->
+                                <!-- Right: zoom controls + feature buttons + disconnect -->
                                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"
                                             Spacing="4" VerticalAlignment="Center">
+                                    <!-- Feature 9: Quality preset ComboBox -->
+                                    <ComboBox SelectedIndex="{Binding ViewerQualityIndex}"
+                                              Height="30" FontSize="11"
+                                              Foreground="#E2E8F0" Background="#1E293B"
+                                              Width="84"
+                                              VerticalAlignment="Center">
+                                        <ComboBoxItem Content="Low"/>
+                                        <ComboBoxItem Content="Balanced"/>
+                                        <ComboBoxItem Content="High"/>
+                                        <ComboBoxItem Content="Fast"/>
+                                    </ComboBox>
+
+                                    <!-- Feature 1: Clipboard -->
+                                    <Button Classes="toolbar-btn" Content="Clipboard"
+                                            Command="{Binding SendClipboardCommand}" Width="70"/>
+
+                                    <!-- Feature 4: Chat toggle with unread badge -->
+                                    <Panel>
+                                        <Button Classes="toolbar-btn" Content="Chat"
+                                                Command="{Binding ToggleChatCommand}" Width="44"/>
+                                        <Border Background="#EF4444" CornerRadius="8"
+                                                Padding="4,1"
+                                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                Margin="0,-4,-4,0"
+                                                IsVisible="{Binding HasUnreadChat}">
+                                            <TextBlock Text="{Binding UnreadChatCount}"
+                                                       FontSize="9" Foreground="White"
+                                                       FontWeight="Bold"/>
+                                        </Border>
+                                    </Panel>
+
                                     <Button Classes="toolbar-btn" Content="Fit"
                                             Command="{Binding FitWindowCommand}" Width="36"/>
                                     <Button Classes="toolbar-btn" Content="50%"
@@ -521,39 +588,96 @@
                             </DockPanel>
                         </Border>
 
-                        <!-- Fit mode: Image fills the panel and Stretch=Uniform scales it down.
-                             The Image must NOT be inside a ScrollViewer here — ScrollViewer gives
-                             infinite space and prevents Stretch=Uniform from shrinking the image. -->
-                        <Border Grid.Row="1" IsVisible="{Binding IsFitMode}" Background="#020617">
-                            <Image Stretch="Uniform"
-                                   Source="{Binding RemoteScreen}"
-                                   HorizontalAlignment="Stretch"
-                                   VerticalAlignment="Stretch"
-                                   Cursor="Cross"
-                                   PointerPressed="OnScreenPointerPressed"
-                                   PointerMoved="OnScreenPointerMoved"
-                                   PointerEntered="OnScreenPointerEntered"
-                                   PointerExited="OnScreenPointerExited"/>
+                        <!-- Feature 3: No-frames warning banner -->
+                        <Border Grid.Row="1"
+                                IsVisible="{Binding ShowNoFramesBanner}"
+                                Background="#FEF3C7" BorderBrush="#F59E0B"
+                                BorderThickness="0,0,0,1" Padding="16,8">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="⚠" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="No frames received — check connection"
+                                           FontSize="12" Foreground="#92400E"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
                         </Border>
 
-                        <!-- Zoom mode: explicit pixel dimensions + scrollbars -->
-                        <ScrollViewer Grid.Row="1"
-                                      IsVisible="{Binding !IsFitMode}"
-                                      Background="#020617"
-                                      HorizontalScrollBarVisibility="Auto"
-                                      VerticalScrollBarVisibility="Auto">
-                            <Image Source="{Binding RemoteScreen}"
-                                   Stretch="None"
-                                   Width="{Binding ScaledImageWidth}"
-                                   Height="{Binding ScaledImageHeight}"
-                                   HorizontalAlignment="Left"
-                                   VerticalAlignment="Top"
-                                   Cursor="Cross"
-                                   PointerPressed="OnScreenPointerPressed"
-                                   PointerMoved="OnScreenPointerMoved"
-                                   PointerEntered="OnScreenPointerEntered"
-                                   PointerExited="OnScreenPointerExited"/>
-                        </ScrollViewer>
+                        <!-- Screen area -->
+                        <Grid Grid.Row="2">
+                            <!-- Fit mode -->
+                            <Border IsVisible="{Binding IsFitMode}" Background="#020617">
+                                <Image Stretch="Uniform"
+                                       Source="{Binding RemoteScreen}"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       Cursor="Cross"
+                                       PointerPressed="OnScreenPointerPressed"
+                                       PointerMoved="OnScreenPointerMoved"
+                                       PointerEntered="OnScreenPointerEntered"
+                                       PointerExited="OnScreenPointerExited"/>
+                            </Border>
+
+                            <!-- Zoom mode -->
+                            <ScrollViewer IsVisible="{Binding !IsFitMode}"
+                                          Background="#020617"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Auto">
+                                <Image Source="{Binding RemoteScreen}"
+                                       Stretch="None"
+                                       Width="{Binding ScaledImageWidth}"
+                                       Height="{Binding ScaledImageHeight}"
+                                       HorizontalAlignment="Left"
+                                       VerticalAlignment="Top"
+                                       Cursor="Cross"
+                                       PointerPressed="OnScreenPointerPressed"
+                                       PointerMoved="OnScreenPointerMoved"
+                                       PointerEntered="OnScreenPointerEntered"
+                                       PointerExited="OnScreenPointerExited"/>
+                            </ScrollViewer>
+                        </Grid>
+
+                        <!-- Feature 4: Chat panel (collapsible) -->
+                        <Border Grid.Row="3"
+                                IsVisible="{Binding ChatVisible}"
+                                Background="#0F172A"
+                                BorderBrush="#1E293B"
+                                BorderThickness="0,1,0,0"
+                                Height="180">
+                            <Grid RowDefinitions="*,44">
+                                <!-- Chat messages -->
+                                <ScrollViewer Grid.Row="0"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled"
+                                              Padding="12,8">
+                                    <ItemsControl ItemsSource="{Binding ChatMessages}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Display}"
+                                                           FontSize="11"
+                                                           Foreground="#CBD5E1"
+                                                           TextWrapping="Wrap"
+                                                           Margin="0,2"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                                <!-- Chat input -->
+                                <Grid Grid.Row="1" ColumnDefinitions="*,80" Margin="8,4,8,8">
+                                    <TextBox Grid.Column="0"
+                                             Text="{Binding ChatInput}"
+                                             Watermark="Type a message…"
+                                             Background="#1E293B"
+                                             Foreground="#F1F5F9"
+                                             BorderBrush="#334155"
+                                             Height="36"
+                                             FontSize="12"
+                                             Margin="0,0,6,0"/>
+                                    <Button Grid.Column="1" Classes="primary"
+                                            Content="Send"
+                                            Height="36"
+                                            Command="{Binding SendChatCommand}"/>
+                                </Grid>
+                            </Grid>
+                        </Border>
 
                     </Grid>
 

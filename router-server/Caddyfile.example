@@ -1,0 +1,6 @@
+# Minimal Caddyfile — copy to Caddyfile and replace DOMAIN with your real domain.
+# Caddy obtains a TLS certificate automatically via ACME (Let's Encrypt).
+
+DOMAIN {
+    reverse_proxy router:9000
+}

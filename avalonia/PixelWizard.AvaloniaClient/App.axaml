@@ -7,4 +7,19 @@
         <FluentTheme />
     </Application.Styles>
 
+    <!-- Feature 7: System tray icon -->
+    <TrayIcon.Icons>
+        <TrayIcons>
+            <TrayIcon ToolTipText="PixelWizard Connect">
+                <TrayIcon.Menu>
+                    <NativeMenu>
+                        <NativeMenuItem Header="Show"/>
+                        <NativeMenuItemSeparator/>
+                        <NativeMenuItem Header="Quit"/>
+                    </NativeMenu>
+                </TrayIcon.Menu>
+            </TrayIcon>
+        </TrayIcons>
+    </TrayIcon.Icons>
+
 </Application>

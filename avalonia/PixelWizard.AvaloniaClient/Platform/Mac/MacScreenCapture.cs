@@ -16,10 +16,12 @@ public sealed class MacScreenCapture : IScreenCapture
     private readonly SkiaScreenChangeDetector _detector = new();
     private readonly TimeSpan _fullRefreshInterval;
     private DateTime _lastFull = DateTime.MinValue;
+    private readonly uint _displayId;
 
-    public MacScreenCapture(TimeSpan? fullRefreshInterval = null)
+    public MacScreenCapture(TimeSpan? fullRefreshInterval = null, uint displayId = 0)
     {
         _fullRefreshInterval = fullRefreshInterval ?? TimeSpan.FromSeconds(10);
+        _displayId = displayId == 0 ? CGMainDisplayID() : displayId;
 
         // Request Screen Recording permission (macOS 10.15+).
         if (!CGPreflightScreenCaptureAccess())
@@ -36,8 +38,7 @@ public sealed class MacScreenCapture : IScreenCapture
     {
         get
         {
-            var id     = CGMainDisplayID();
-            var bounds = CGDisplayBounds(id);
+            var bounds = CGDisplayBounds(_displayId);
             return ((int)bounds.Size.Width, (int)bounds.Size.Height);
         }
     }
@@ -46,8 +47,7 @@ public sealed class MacScreenCapture : IScreenCapture
     {
         bool force = forceFullFrame || (DateTime.UtcNow - _lastFull) >= _fullRefreshInterval;
 
-        var displayId = CGMainDisplayID();
-        var cgImage   = CGDisplayCreateImage(displayId);
+        var cgImage = CGDisplayCreateImage(_displayId);
         if (cgImage == IntPtr.Zero) return new List<ScreenDelta>();
 
         try
@@ -55,7 +55,7 @@ public sealed class MacScreenCapture : IScreenCapture
             // CGDisplayBounds returns logical (point) size; CGDisplayCreateImage returns
             // physical pixels. On a 2× Retina display they differ by the backing scale factor.
             // Scale the bitmap down to logical size so the viewer sees the correct dimensions.
-            var bounds   = CGDisplayBounds(displayId);
+            var bounds   = CGDisplayBounds(_displayId);
             int logicalW = (int)bounds.Size.Width;
             int logicalH = (int)bounds.Size.Height;
 
@@ -116,12 +116,12 @@ public sealed class MacScreenCapture : IScreenCapture
 
     // ── CoreGraphics ─────────────────────────────────────────────────────────
 
-    private const string CG = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
-    private const string CF = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
+    internal const string CG = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
+    private  const string CF = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
 
-    [DllImport(CG)] static extern uint    CGMainDisplayID();
-    [DllImport(CG)] static extern CGRect  CGDisplayBounds(uint displayId);
-    [DllImport(CG)] static extern IntPtr  CGDisplayCreateImage(uint displayId);
+    [DllImport(CG)] internal static extern uint   CGMainDisplayID();
+    [DllImport(CG)] internal static extern CGRect CGDisplayBounds(uint displayId);
+    [DllImport(CG)] internal static extern IntPtr CGDisplayCreateImage(uint displayId);
     [DllImport(CG)] static extern void    CGImageRelease(IntPtr image);
     [DllImport(CG)] static extern nuint   CGImageGetWidth(IntPtr image);
     [DllImport(CG)] static extern nuint   CGImageGetHeight(IntPtr image);
@@ -130,6 +130,18 @@ public sealed class MacScreenCapture : IScreenCapture
     [DllImport(CG)] static extern IntPtr  CGDataProviderCopyData(IntPtr provider);
     [DllImport(CG)] static extern bool    CGPreflightScreenCaptureAccess();
     [DllImport(CG)] static extern bool    CGRequestScreenCaptureAccess();
+
+    /// <summary>
+    /// Populates <paramref name="displayArray"/> with active display IDs.
+    /// Pass null/0 to query just the count.
+    /// </summary>
+    [DllImport(CG)]
+    internal static extern int CGGetActiveDisplayList(
+        uint maxDisplays,
+        [Out] uint[]? displayArray,
+        out uint displayCount);
+
+    [DllImport(CG)] internal static extern bool CGDisplayIsMain(uint displayId);
 
     [DllImport(CF)] static extern nint    CFDataGetLength(IntPtr cfData);
     [DllImport(CF)] static extern IntPtr  CFDataGetBytePtr(IntPtr cfData);

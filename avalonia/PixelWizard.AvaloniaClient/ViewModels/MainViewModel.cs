@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Reactive;
 using System.Text;
@@ -104,7 +106,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     // ── Zoom ──────────────────────────────────────────────────────────────────
 
-    private double _viewScale = 0;   // 0 = fit to window
+    private double _viewScale = 0;
     public double ViewScale
     {
         get => _viewScale;
@@ -182,24 +184,123 @@ public class MainViewModel : ReactiveObject, IDisposable
     private string _bandwidthText = "↓ —";
     public string BandwidthText { get => _bandwidthText; set => this.RaiseAndSetIfChanged(ref _bandwidthText, value); }
 
+    // ── Feature 2: Monitor selection ──────────────────────────────────────────
+
+    private IReadOnlyList<MonitorInfo> _availableMonitors = new List<MonitorInfo>();
+    public IReadOnlyList<MonitorInfo> AvailableMonitors
+    {
+        get => _availableMonitors;
+        set => this.RaiseAndSetIfChanged(ref _availableMonitors, value);
+    }
+
+    private int _selectedMonitorIndex = 0;
+    public int SelectedMonitorIndex
+    {
+        get => _selectedMonitorIndex;
+        set => this.RaiseAndSetIfChanged(ref _selectedMonitorIndex, value);
+    }
+
+    // ── Feature 3: Viewer-side frame timeout banner ───────────────────────────
+
+    private bool _showNoFramesBanner;
+    public bool ShowNoFramesBanner
+    {
+        get => _showNoFramesBanner;
+        set => this.RaiseAndSetIfChanged(ref _showNoFramesBanner, value);
+    }
+
+    private System.Timers.Timer? _frameTimeoutTimer;
+
+    // ── Feature 4: Chat ───────────────────────────────────────────────────────
+
+    public ObservableCollection<ChatEntry> ChatMessages { get; } = new();
+
+    private bool _chatVisible;
+    public bool ChatVisible
+    {
+        get => _chatVisible;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _chatVisible, value);
+            if (value) UnreadChatCount = 0;
+        }
+    }
+
+    private int _unreadChatCount;
+    public int UnreadChatCount
+    {
+        get => _unreadChatCount;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _unreadChatCount, value);
+            this.RaisePropertyChanged(nameof(HasUnreadChat));
+        }
+    }
+    public bool HasUnreadChat => _unreadChatCount > 0;
+
+    private string _chatInput = "";
+    public string ChatInput { get => _chatInput; set => this.RaiseAndSetIfChanged(ref _chatInput, value); }
+
+    // ── Feature 6: Session notes ──────────────────────────────────────────────
+
+    private string _sessionNotes = "";
+    public string SessionNotes { get => _sessionNotes; set => this.RaiseAndSetIfChanged(ref _sessionNotes, value); }
+
+    private bool _sessionNotesVisible;
+    public bool SessionNotesVisible
+    {
+        get => _sessionNotesVisible;
+        set => this.RaiseAndSetIfChanged(ref _sessionNotesVisible, value);
+    }
+
+    private DateTime _sessionStartTime;
+    private string   _sessionRemoteEndpoint = "";
+
+    // ── Feature 7: System tray tooltip ────────────────────────────────────────
+
+    private string _trayTooltip = "Idle";
+    public string TrayTooltip { get => _trayTooltip; set => this.RaiseAndSetIfChanged(ref _trayTooltip, value); }
+
+    // ── Feature 8: Viewing badge callbacks ────────────────────────────────────
+
+    public Action? ShowViewingBadgeCallback { get; set; }
+    public Action? HideViewingBadgeCallback { get; set; }
+
+    // ── Feature 9: Viewer-side quality ────────────────────────────────────────
+
+    private int _viewerQualityIndex = 1;
+    public int ViewerQualityIndex
+    {
+        get => _viewerQualityIndex;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _viewerQualityIndex, value);
+            SendViewerQualityPreset(value);
+        }
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────────
 
-    public ReactiveCommand<Unit, Unit> GoHostCommand          { get; }
-    public ReactiveCommand<Unit, Unit> GoViewerCommand        { get; }
-    public ReactiveCommand<Unit, Unit> BackCommand            { get; }
-    public ReactiveCommand<Unit, Unit> ConnectDirectCommand   { get; }
-    public ReactiveCommand<Unit, Unit> ConnectViaCodeCommand  { get; }
-    public ReactiveCommand<Unit, Unit> StartDirectHostCommand { get; }
-    public ReactiveCommand<Unit, Unit> RegisterHostCommand    { get; }
-    public ReactiveCommand<Unit, Unit> StopHostCommand        { get; }
-    public ReactiveCommand<Unit, Unit> CopyCodeCommand        { get; }
-    public ReactiveCommand<Unit, Unit> DisconnectCommand      { get; }
-    public ReactiveCommand<Unit, Unit> FitWindowCommand       { get; }
-    public ReactiveCommand<Unit, Unit> Zoom50Command          { get; }
-    public ReactiveCommand<Unit, Unit> Zoom75Command          { get; }
-    public ReactiveCommand<Unit, Unit> Zoom100Command         { get; }
-    public ReactiveCommand<Unit, Unit> ZoomInCommand          { get; }
-    public ReactiveCommand<Unit, Unit> ZoomOutCommand         { get; }
+    public ReactiveCommand<Unit, Unit> GoHostCommand             { get; }
+    public ReactiveCommand<Unit, Unit> GoViewerCommand           { get; }
+    public ReactiveCommand<Unit, Unit> BackCommand               { get; }
+    public ReactiveCommand<Unit, Unit> ConnectDirectCommand      { get; }
+    public ReactiveCommand<Unit, Unit> ConnectViaCodeCommand     { get; }
+    public ReactiveCommand<Unit, Unit> StartDirectHostCommand    { get; }
+    public ReactiveCommand<Unit, Unit> RegisterHostCommand       { get; }
+    public ReactiveCommand<Unit, Unit> StopHostCommand           { get; }
+    public ReactiveCommand<Unit, Unit> CopyCodeCommand           { get; }
+    public ReactiveCommand<Unit, Unit> DisconnectCommand         { get; }
+    public ReactiveCommand<Unit, Unit> FitWindowCommand          { get; }
+    public ReactiveCommand<Unit, Unit> Zoom50Command             { get; }
+    public ReactiveCommand<Unit, Unit> Zoom75Command             { get; }
+    public ReactiveCommand<Unit, Unit> Zoom100Command            { get; }
+    public ReactiveCommand<Unit, Unit> ZoomInCommand             { get; }
+    public ReactiveCommand<Unit, Unit> ZoomOutCommand            { get; }
+    public ReactiveCommand<Unit, Unit> SendClipboardCommand      { get; }
+    public ReactiveCommand<Unit, Unit> ToggleChatCommand         { get; }
+    public ReactiveCommand<Unit, Unit> SendChatCommand           { get; }
+    public ReactiveCommand<Unit, Unit> ToggleSessionNotesCommand { get; }
 
     // ── Internal state ────────────────────────────────────────────────────────
 
@@ -221,46 +322,51 @@ public class MainViewModel : ReactiveObject, IDisposable
     private System.Timers.Timer? _pingTimer;
     private System.Timers.Timer? _sessionWatchdog;
 
-    // Session secret: set before connecting/hosting, consumed during TCP handshake.
-    private string _sessionSecret         = "";  // viewer side — sent to host
-    private string _expectedSessionSecret = "";  // host side — validated against viewer's secret
+    private string _sessionSecret         = "";
+    private string _expectedSessionSecret = "";
+    private bool   _hostHandshakeComplete;
+    private int    _activeHostPort = 8888;
 
-    // Handshake gate: set false when viewer connects, set true after secret verified.
-    private bool _hostHandshakeComplete;
-
-    // Active host port — needed to re-listen after a viewer disconnects.
-    private int _activeHostPort = 8888;
-
-    // Set by App.axaml.cs — shows a consent dialog and returns allow/deny
-    public Func<string, Task<bool>>? ConsentCallback { get; set; }
-    // Set by App.axaml.cs — copies text to clipboard via TopLevel
-    public Func<string, Task>? ClipboardCallback { get; set; }
+    public Func<string, Task<bool>>? ConsentCallback     { get; set; }
+    public Func<string, Task>?       ClipboardCallback   { get; set; }
+    public Func<Task<string?>>?      GetClipboardCallback { get; set; }
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
     public MainViewModel()
     {
-        GoHostCommand          = ReactiveCommand.Create(() => { Screen = AppScreen.Host; });
-        GoViewerCommand        = ReactiveCommand.Create(() => { Screen = AppScreen.Viewer; });
-        BackCommand            = ReactiveCommand.Create(GoBack);
-        ConnectDirectCommand   = ReactiveCommand.CreateFromTask(ConnectDirect);
-        ConnectViaCodeCommand  = ReactiveCommand.CreateFromTask(ConnectViaCode);
-        StartDirectHostCommand = ReactiveCommand.CreateFromTask(StartDirectHost);
-        RegisterHostCommand    = ReactiveCommand.CreateFromTask(RegisterWithRouter);
-        StopHostCommand        = ReactiveCommand.Create(StopHost);
-        CopyCodeCommand        = ReactiveCommand.Create(CopyCode);
-        DisconnectCommand      = ReactiveCommand.Create(DisconnectViewer);
-        FitWindowCommand       = ReactiveCommand.Create(() => { ViewScale = 0; });
-        Zoom50Command          = ReactiveCommand.Create(() => { ViewScale = 0.5; });
-        Zoom75Command          = ReactiveCommand.Create(() => { ViewScale = 0.75; });
-        Zoom100Command         = ReactiveCommand.Create(() => { ViewScale = 1.0; });
-        ZoomInCommand          = ReactiveCommand.Create(() => { ViewScale = _viewScale <= 0 ? 1.0 : Math.Min(_viewScale + 0.25, 4.0); });
-        ZoomOutCommand         = ReactiveCommand.Create(() => { if (_viewScale > 0) ViewScale = Math.Max(_viewScale - 0.25, 0.25); });
+        GoHostCommand             = ReactiveCommand.Create(GoHost);
+        GoViewerCommand           = ReactiveCommand.Create(() => { Screen = AppScreen.Viewer; });
+        BackCommand               = ReactiveCommand.Create(GoBack);
+        ConnectDirectCommand      = ReactiveCommand.CreateFromTask(ConnectDirect);
+        ConnectViaCodeCommand     = ReactiveCommand.CreateFromTask(ConnectViaCode);
+        StartDirectHostCommand    = ReactiveCommand.CreateFromTask(StartDirectHost);
+        RegisterHostCommand       = ReactiveCommand.CreateFromTask(RegisterWithRouter);
+        StopHostCommand           = ReactiveCommand.Create(StopHost);
+        CopyCodeCommand           = ReactiveCommand.Create(CopyCode);
+        DisconnectCommand         = ReactiveCommand.Create(DisconnectViewer);
+        FitWindowCommand          = ReactiveCommand.Create(() => { ViewScale = 0; });
+        Zoom50Command             = ReactiveCommand.Create(() => { ViewScale = 0.5; });
+        Zoom75Command             = ReactiveCommand.Create(() => { ViewScale = 0.75; });
+        Zoom100Command            = ReactiveCommand.Create(() => { ViewScale = 1.0; });
+        ZoomInCommand             = ReactiveCommand.Create(() => { ViewScale = _viewScale <= 0 ? 1.0 : Math.Min(_viewScale + 0.25, 4.0); });
+        ZoomOutCommand            = ReactiveCommand.Create(() => { if (_viewScale > 0) ViewScale = Math.Max(_viewScale - 0.25, 0.25); });
+        SendClipboardCommand      = ReactiveCommand.CreateFromTask(SendClipboardAsync);
+        ToggleChatCommand         = ReactiveCommand.Create(() => { ChatVisible = !ChatVisible; });
+        SendChatCommand           = ReactiveCommand.Create(SendChatMessage);
+        ToggleSessionNotesCommand = ReactiveCommand.Create(() => { SessionNotesVisible = !SessionNotesVisible; });
 
         StartMetricsTimer();
     }
 
     // ── Navigation ────────────────────────────────────────────────────────────
+
+    private void GoHost()
+    {
+        try { AvailableMonitors = _hostProvider.ListMonitors(); }
+        catch { AvailableMonitors = new List<MonitorInfo> { new MonitorInfo(0, "Default", 1920, 1080, true) }; }
+        Screen = AppScreen.Host;
+    }
 
     private void GoBack()
     {
@@ -273,7 +379,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private async Task ConnectDirect()
     {
-        _sessionSecret = "";   // no shared secret for direct LAN connections
+        _sessionSecret = "";
         IsConnecting = true;
         Status = $"Connecting to {HostAddress}…";
         try
@@ -307,7 +413,6 @@ public class MainViewModel : ReactiveObject, IDisposable
         var t = new TcpTransport();
         t.Connected += async () =>
         {
-            // Send the session secret as the first message so the host can verify us.
             await t.SendMessageAsync(new NetworkMessage
             {
                 Type = MessageType.Handshake,
@@ -320,10 +425,12 @@ public class MainViewModel : ReactiveObject, IDisposable
                 Screen       = AppScreen.LiveScreen;
                 Status       = "Connected";
                 _pingTimer?.Start();
+                StartFrameTimeoutTimer();
             });
         };
         t.Disconnected += () => Dispatcher.UIThread.Post(() =>
         {
+            StopFrameTimeoutTimer();
             IsConnected  = false;
             IsConnecting = false;
             Screen       = AppScreen.Viewer;
@@ -339,19 +446,50 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void DisconnectViewer()
     {
+        StopFrameTimeoutTimer();
         _transport?.Disconnect();
         _transport   = null;
         IsConnected  = false;
         IsConnecting = false;
-        RemoteScreen = null;          // clear display BEFORE disposing the bitmap
+        RemoteScreen = null;
         ViewScale    = 0;
         var toDispose = _canvas;
         _canvas       = null;
         _canvasWidth  = 0;
         _canvasHeight = 0;
         toDispose?.Dispose();
-        KeyboardActive = false;
+        KeyboardActive  = false;
+        ChatMessages.Clear();
+        ChatVisible     = false;
+        UnreadChatCount = 0;
         if (Screen == AppScreen.LiveScreen) Screen = AppScreen.Viewer;
+    }
+
+    // ── Feature 3: Frame timeout timer ────────────────────────────────────────
+
+    private void StartFrameTimeoutTimer()
+    {
+        _frameTimeoutTimer?.Dispose();
+        _frameTimeoutTimer = new System.Timers.Timer(30_000) { AutoReset = false };
+        _frameTimeoutTimer.Elapsed += (_, _) =>
+            Dispatcher.UIThread.Post(() => ShowNoFramesBanner = true);
+        _frameTimeoutTimer.Start();
+    }
+
+    private void ResetFrameTimeoutTimer()
+    {
+        if (_frameTimeoutTimer == null) return;
+        _frameTimeoutTimer.Stop();
+        ShowNoFramesBanner = false;
+        _frameTimeoutTimer.Start();
+    }
+
+    private void StopFrameTimeoutTimer()
+    {
+        _frameTimeoutTimer?.Stop();
+        _frameTimeoutTimer?.Dispose();
+        _frameTimeoutTimer  = null;
+        ShowNoFramesBanner  = false;
     }
 
     // ── Host mode ─────────────────────────────────────────────────────────────
@@ -360,7 +498,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     {
         if (!_hostProvider.IsAvailable) { Status = "Host not available on this platform"; return; }
         if (!int.TryParse(HostPort, out int port)) port = 8888;
-        _expectedSessionSecret = "";  // no secret for direct LAN connections
+        _expectedSessionSecret = "";
         _activeHostPort        = port;
         Status = "Starting host…";
         try
@@ -413,7 +551,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     private void SetupHostServices()
     {
         var settings = StreamingSettings.FromPresetIndex(HostQualityIndex);
-        _capture = _hostProvider.CreateCapture(settings.FullRefreshInterval);
+        _capture = _hostProvider.CreateCapture(settings.FullRefreshInterval, SelectedMonitorIndex);
         _input   = _hostProvider.CreateInput();
 
         _wsServer = new WebSocketHostServer(9001);
@@ -422,6 +560,11 @@ public class MainViewModel : ReactiveObject, IDisposable
         WebViewerUrl  = "http://localhost:9001/";
         ShowWebViewer = true;
         IsHostRunning = true;
+
+        _sessionStartTime      = DateTime.Now;
+        _sessionRemoteEndpoint = "";
+        SessionNotes           = "";
+        TrayTooltip            = "Hosting — waiting for viewer";
     }
 
     private ISessionTransport BuildHostTransport()
@@ -440,6 +583,9 @@ public class MainViewModel : ReactiveObject, IDisposable
         {
             _sessionWatchdog?.Stop();
             _hostHandshakeComplete = false;
+            HideViewingBadgeCallback?.Invoke();
+            TrayTooltip = "Hosting — waiting for viewer";
+            SaveSessionNotes();
             HostStatus = "Client disconnected";
             Status     = "Client disconnected";
             if (IsHostRunning)
@@ -469,6 +615,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void StopHost()
     {
+        SaveSessionNotes();
         _captureTimer?.Stop();
         _sessionWatchdog?.Stop();
         _sessionWatchdog?.Dispose();
@@ -486,6 +633,12 @@ public class MainViewModel : ReactiveObject, IDisposable
         ShowWebViewer  = false;
         HostStatus     = "Stopped";
         Status         = "Host stopped";
+        TrayTooltip    = "Idle";
+        HideViewingBadgeCallback?.Invoke();
+        ChatMessages.Clear();
+        ChatVisible     = false;
+        UnreadChatCount = 0;
+        SessionNotesVisible = false;
     }
 
     private void CopyCode()
@@ -495,6 +648,37 @@ public class MainViewModel : ReactiveObject, IDisposable
             _ = ClipboardCallback(HostConnectionCode);
             Status = "Code copied to clipboard";
         }
+    }
+
+    // ── Feature 6: Save session notes ─────────────────────────────────────────
+
+    private void SaveSessionNotes()
+    {
+        string notes = SessionNotes?.Trim() ?? "";
+        if (notes.Length == 0) return;
+
+        try
+        {
+            string dir  = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "PixelWizardNotes");
+            Directory.CreateDirectory(dir);
+
+            string ts      = _sessionStartTime.ToString("yyyy-MM-dd_HH-mm-ss");
+            string machine = Environment.MachineName;
+            string file    = Path.Combine(dir, $"{ts}_{machine}.txt");
+
+            var sb = new StringBuilder();
+            sb.AppendLine($"Start time   : {_sessionStartTime:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"End time     : {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+            sb.AppendLine($"Remote       : {(_sessionRemoteEndpoint.Length > 0 ? _sessionRemoteEndpoint : "(unknown)")}");
+            sb.AppendLine();
+            sb.AppendLine("─── Notes ───────────────────────────────────────");
+            sb.AppendLine(notes);
+
+            File.WriteAllText(file, sb.ToString(), Encoding.UTF8);
+        }
+        catch { /* best-effort */ }
     }
 
     // ── Session watchdog (host side) ──────────────────────────────────────────
@@ -565,10 +749,15 @@ public class MainViewModel : ReactiveObject, IDisposable
     {
         switch (msg.Type)
         {
-            case MessageType.FullScreen:  ApplyFullScreen(msg.Data);                                   break;
-            case MessageType.ScreenDelta: ApplyDelta(ScreenDelta.Deserialize(msg.Data));               break;
+            case MessageType.FullScreen:
+                ApplyFullScreen(msg.Data);
+                ResetFrameTimeoutTimer();
+                break;
+            case MessageType.ScreenDelta:
+                ApplyDelta(ScreenDelta.Deserialize(msg.Data));
+                ResetFrameTimeoutTimer();
+                break;
             case MessageType.HandshakeOk:
-                // Host accepted — screen frames will start arriving; nothing to do here.
                 break;
             case MessageType.HandshakeFailed:
                 Dispatcher.UIThread.Post(() =>
@@ -583,6 +772,15 @@ public class MainViewModel : ReactiveObject, IDisposable
                         (DateTime.UtcNow - new DateTime(BitConverter.ToInt64(msg.Data, 0), DateTimeKind.Utc))
                         .TotalMilliseconds);
                 break;
+            case MessageType.ClipboardText:
+                string cbText = Encoding.UTF8.GetString(msg.Data);
+                if (ClipboardCallback != null)
+                    Dispatcher.UIThread.Post(() => _ = ClipboardCallback(cbText));
+                break;
+            case MessageType.ChatMessage:
+                string chat = Encoding.UTF8.GetString(msg.Data);
+                Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: true, text: chat));
+                break;
         }
     }
 
@@ -594,7 +792,6 @@ public class MainViewModel : ReactiveObject, IDisposable
             return;
         }
 
-        // Reset the inactivity watchdog on every message.
         ResetSessionWatchdog();
 
         switch (msg.Type)
@@ -622,6 +819,15 @@ public class MainViewModel : ReactiveObject, IDisposable
                 if (msg.Data.Length >= 4)
                     Dispatcher.UIThread.Post(() => HostQualityIndex = BitConverter.ToInt32(msg.Data, 0));
                 break;
+            case MessageType.ClipboardText:
+                string cbText = Encoding.UTF8.GetString(msg.Data);
+                if (ClipboardCallback != null)
+                    Dispatcher.UIThread.Post(() => _ = ClipboardCallback(cbText));
+                break;
+            case MessageType.ChatMessage:
+                string chat = Encoding.UTF8.GetString(msg.Data);
+                Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: false, text: chat));
+                break;
         }
     }
 
@@ -647,8 +853,6 @@ public class MainViewModel : ReactiveObject, IDisposable
         var transport = _hostTransport;
         _ = transport?.SendMessageAsync(new NetworkMessage { Type = MessageType.HandshakeOk });
 
-        // ShowDialog requires the UI thread — use InvokeAsync so the consent dialog
-        // and all follow-up state updates run there.
         _ = Dispatcher.UIThread.InvokeAsync(async () =>
         {
             bool allowed = ConsentCallback != null
@@ -667,6 +871,71 @@ public class MainViewModel : ReactiveObject, IDisposable
             HostStatus    = "Client connected — sharing screen";
             IsHostRunning = true;
             Status        = "Client connected";
+            TrayTooltip   = "Hosting — viewer connected";
+            ShowViewingBadgeCallback?.Invoke();
+        });
+    }
+
+    // ── Feature 1: Clipboard sync ─────────────────────────────────────────────
+
+    private async Task SendClipboardAsync()
+    {
+        string? text = null;
+        if (GetClipboardCallback != null)
+            text = await GetClipboardCallback();
+        if (string.IsNullOrEmpty(text)) return;
+
+        var msg = new NetworkMessage
+        {
+            Type = MessageType.ClipboardText,
+            Data = Encoding.UTF8.GetBytes(text)
+        };
+
+        if (_transport?.IsConnected == true)
+            await _transport.SendMessageAsync(msg);
+        else if (_hostTransport?.IsConnected == true)
+            await _hostTransport.SendMessageAsync(msg);
+    }
+
+    // ── Feature 4: Chat ───────────────────────────────────────────────────────
+
+    private void SendChatMessage()
+    {
+        string text = ChatInput.Trim();
+        if (string.IsNullOrEmpty(text)) return;
+        ChatInput = "";
+
+        bool isHost = _hostTransport?.IsConnected == true;
+        ChatMessages.Add(new ChatEntry(DateTime.Now, isHost, text));
+
+        var msg = new NetworkMessage
+        {
+            Type = MessageType.ChatMessage,
+            Data = Encoding.UTF8.GetBytes(text)
+        };
+
+        if (_transport?.IsConnected == true)
+            _ = _transport.SendMessageAsync(msg);
+        else if (_hostTransport?.IsConnected == true)
+            _ = _hostTransport.SendMessageAsync(msg);
+    }
+
+    private void ReceiveChatMessage(bool isFromHost, string text)
+    {
+        ChatMessages.Add(new ChatEntry(DateTime.Now, isFromHost, text));
+        if (!ChatVisible)
+            UnreadChatCount++;
+    }
+
+    // ── Feature 9: Viewer quality preset ─────────────────────────────────────
+
+    private void SendViewerQualityPreset(int index)
+    {
+        if (_transport?.IsConnected != true) return;
+        _ = _transport.SendMessageAsync(new NetworkMessage
+        {
+            Type = MessageType.QualityPreset,
+            Data = BitConverter.GetBytes(index)
         });
     }
 
@@ -674,9 +943,6 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void ApplyFullScreen(byte[] data)
     {
-        // Keep a reference to the canvas currently shown by the UI thread.
-        // Disposing it immediately would black-out the display until the Post below runs.
-        // Defer disposal to inside the Post so it only happens after RemoteScreen switches.
         var toDispose = _canvas;
         _canvas       = null;
         _canvasWidth  = 0;
@@ -689,12 +955,12 @@ public class MainViewModel : ReactiveObject, IDisposable
         using var dc = _canvas!.CreateDrawingContext();
         dc.DrawImage(decoded, new Rect(0, 0, w, h));
 
-        var snapshot = _canvas;  // capture by value — not affected by later assignments
+        var snapshot = _canvas;
         Dispatcher.UIThread.Post(() =>
         {
             RemoteScreen = snapshot;
             _renderedFrames++;
-            toDispose?.Dispose();   // safe: UI has already switched to snapshot
+            toDispose?.Dispose();
         });
     }
 
@@ -708,7 +974,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         using var dc = _canvas!.CreateDrawingContext();
         dc.DrawImage(patch, new Rect(delta.X, delta.Y, delta.Width, delta.Height));
 
-        var snapshot = _canvas;  // capture by value so a racing ApplyFullScreen can't change it
+        var snapshot = _canvas;
         Dispatcher.UIThread.Post(() => { RemoteScreen = snapshot; _renderedFrames++; });
     }
 
@@ -722,13 +988,10 @@ public class MainViewModel : ReactiveObject, IDisposable
         {
             using var dc = _canvas.CreateDrawingContext();
             dc.DrawImage(old, new Rect(0, 0, old.Size.Width, old.Size.Height));
-            // Do NOT dispose old here — it is still referenced by RemoteScreen on the
-            // UI thread. ApplyFullScreen disposes it inside the UI Post after switching.
-            // For delta-triggered resizes the old canvas is released to the GC naturally.
         }
     }
 
-    // ── Input forwarding (called from View code-behind) ───────────────────────
+    // ── Input forwarding ─────────────────────────────────────────────────────
 
     public async void SendMouseMove(int rx, int ry)
     {
@@ -806,7 +1069,6 @@ public class MainViewModel : ReactiveObject, IDisposable
         if (routerHost.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
             routerHost == "127.0.0.1")
             return "localhost:8888";
-
         return $"{GetLanIp()}:8888";
     }
 
@@ -817,6 +1079,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         _metricsTimer?.Dispose();
         _pingTimer?.Dispose();
         _sessionWatchdog?.Dispose();
+        _frameTimeoutTimer?.Dispose();
         _canvas?.Dispose();
     }
 }
