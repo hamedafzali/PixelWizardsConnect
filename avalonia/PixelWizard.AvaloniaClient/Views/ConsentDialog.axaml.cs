@@ -9,7 +9,9 @@ public partial class ConsentDialog : Window
 {
     public bool? Result { get; private set; }
 
-    public ConsentDialog(string endpoint = "")
+    public ConsentDialog() : this("") { }
+
+    public ConsentDialog(string endpoint)
     {
         InitializeComponent();
         TimeText.Text     = DateTime.Now.ToString("HH:mm:ss");

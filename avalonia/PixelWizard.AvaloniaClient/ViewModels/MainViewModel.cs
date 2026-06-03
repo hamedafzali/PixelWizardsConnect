@@ -12,6 +12,7 @@ using Avalonia.Platform;
 using Avalonia.Threading;
 using ReactiveUI;
 using PixelWizard.AvaloniaClient.Platform;
+using PixelWizard.AvaloniaClient.Services;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
 using PixelWizard.Core.Protocol;
@@ -23,6 +24,38 @@ public enum AppScreen { ModeSelection, Viewer, Host, LiveScreen }
 
 public class MainViewModel : ReactiveObject, IDisposable
 {
+    // ── Settings ──────────────────────────────────────────────────────────────
+
+    private readonly AppSettings _settings = AppSettings.Load();
+
+    // ── Window title ──────────────────────────────────────────────────────────
+
+    private string _windowTitle = "PixelWizard Connect";
+    public string WindowTitle { get => _windowTitle; set => this.RaiseAndSetIfChanged(ref _windowTitle, value); }
+
+    private void UpdateWindowTitle()
+    {
+        WindowTitle = _screen switch
+        {
+            AppScreen.LiveScreen => $"PixelWizard Connect — Viewing {HostAddress}",
+            AppScreen.Host when IsHostRunning => "PixelWizard Connect — Hosting",
+            _ => "PixelWizard Connect"
+        };
+    }
+
+    // ── Onboarding ────────────────────────────────────────────────────────────
+
+    private bool _showOnboarding;
+    public bool ShowOnboarding { get => _showOnboarding; set => this.RaiseAndSetIfChanged(ref _showOnboarding, value); }
+    public ReactiveCommand<Unit, Unit> DismissOnboardingCommand { get; }
+
+    private void DismissOnboarding()
+    {
+        ShowOnboarding = false;
+        _settings.OnboardingSeen = true;
+        _settings.Save();
+    }
+
     // ── Navigation ────────────────────────────────────────────────────────────
 
     private AppScreen _screen = AppScreen.ModeSelection;
@@ -36,6 +69,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             this.RaisePropertyChanged(nameof(ShowViewerPanel));
             this.RaisePropertyChanged(nameof(ShowHostPanel));
             this.RaisePropertyChanged(nameof(ShowScreenDisplay));
+            UpdateWindowTitle();
         }
     }
 
@@ -177,7 +211,11 @@ public class MainViewModel : ReactiveObject, IDisposable
     public string HostStatus { get => _hostStatus; set => this.RaiseAndSetIfChanged(ref _hostStatus, value); }
 
     private bool _isHostRunning;
-    public bool IsHostRunning { get => _isHostRunning; set => this.RaiseAndSetIfChanged(ref _isHostRunning, value); }
+    public bool IsHostRunning
+    {
+        get => _isHostRunning;
+        set { this.RaiseAndSetIfChanged(ref _isHostRunning, value); UpdateWindowTitle(); }
+    }
 
     private bool _showCodeCard;
     public bool ShowCodeCard { get => _showCodeCard; set => this.RaiseAndSetIfChanged(ref _showCodeCard, value); }
@@ -292,6 +330,33 @@ public class MainViewModel : ReactiveObject, IDisposable
             this.RaiseAndSetIfChanged(ref _viewerQualityIndex, value);
             SendViewerQualityPreset(value);
         }
+    }
+
+    // ── Connection history ────────────────────────────────────────────────────
+
+    public System.Collections.ObjectModel.ObservableCollection<string> RecentHosts { get; } = new();
+
+    private string? _selectedRecentHost;
+    public string? SelectedRecentHost
+    {
+        get => _selectedRecentHost;
+        set { this.RaiseAndSetIfChanged(ref _selectedRecentHost, value); if (!string.IsNullOrEmpty(value)) HostAddress = value!; }
+    }
+
+    public bool HasRecentHosts => RecentHosts.Count > 0;
+
+    private void SyncRecentHosts()
+    {
+        RecentHosts.Clear();
+        foreach (var h in _settings.RecentHosts) RecentHosts.Add(h);
+        this.RaisePropertyChanged(nameof(HasRecentHosts));
+    }
+
+    private void RememberHost(string host)
+    {
+        AppSettings.PushRecent(_settings.RecentHosts, host);
+        SyncRecentHosts();
+        _settings.Save();
     }
 
     // ── Network discovery ─────────────────────────────────────────────────────
@@ -412,6 +477,16 @@ public class MainViewModel : ReactiveObject, IDisposable
         SendChatCommand           = ReactiveCommand.Create(SendChatMessage);
         ToggleSessionNotesCommand = ReactiveCommand.Create(() => { SessionNotesVisible = !SessionNotesVisible; });
         ScanNetworkCommand        = ReactiveCommand.Create(ToggleScan);
+        DismissOnboardingCommand  = ReactiveCommand.Create(DismissOnboarding);
+
+        // Restore persisted preferences.
+        if (!string.IsNullOrWhiteSpace(_settings.LastRouterAddress))
+        {
+            RouterAddress     = _settings.LastRouterAddress;
+            HostRouterAddress = _settings.LastRouterAddress;
+        }
+        SyncRecentHosts();
+        ShowOnboarding = !_settings.OnboardingSeen;
 
         StartMetricsTimer();
     }
@@ -444,7 +519,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             _transport = BuildViewerTransport();
             await _transport.ConnectAsync(HostAddress.Trim(), 8888, UseTls);
         }
-        catch (Exception ex) { Status = $"Error: {ex.Message}"; IsConnecting = false; }
+        catch (Exception ex) { Status = FriendlyError.Describe(ex); IsConnecting = false; }
     }
 
     private async Task ConnectViaCode()
@@ -458,11 +533,13 @@ public class MainViewModel : ReactiveObject, IDisposable
         {
             var result = await _router.ResolveEndpointAsync(host, port, code);
             _sessionSecret = result.SessionSecret;
+            _settings.LastRouterAddress = RouterAddress;
+            _settings.Save();
             var parts = result.HostEndpoint.Split(':');
             _transport = BuildViewerTransport();
             await _transport.ConnectAsync(parts[0], int.Parse(parts[1]), UseTls);
         }
-        catch (Exception ex) { Status = $"Router error: {ex.Message}"; IsConnecting = false; }
+        catch (Exception ex) { Status = FriendlyError.Describe(ex); IsConnecting = false; }
     }
 
     private ISessionTransport BuildViewerTransport()
@@ -481,6 +558,8 @@ public class MainViewModel : ReactiveObject, IDisposable
                 IsConnecting = false;
                 Screen       = AppScreen.LiveScreen;
                 Status       = "Connected";
+                RememberHost(HostAddress.Trim());
+                UpdateWindowTitle();
                 _pingTimer?.Start();
                 StartFrameTimeoutTimer();
             });
@@ -499,7 +578,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         t.BytesReceived   += b => _receivedBytes += b;
         t.Error += ex => {
             if (t.IsConnected)
-                Dispatcher.UIThread.Post(() => Status = $"Error: {ex.Message}");
+                Dispatcher.UIThread.Post(() => Status = FriendlyError.Describe(ex));
         };
         return t;
     }
@@ -573,7 +652,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             HostStatus = $"Listening — tell viewer to connect to {lanIp}:{port}";
             Status     = $"Host ready. Viewer address: {lanIp}:{port}";
         }
-        catch (Exception ex) { Status = $"Host error: {ex.Message}"; }
+        catch (Exception ex) { Status = FriendlyError.Describe(ex); }
     }
 
     private static string GetLanIp()
@@ -594,6 +673,8 @@ public class MainViewModel : ReactiveObject, IDisposable
         {
             string localIp   = GetLocalEndpoint(host);
             var result       = await _router.RegisterHostAsync(host, port, localIp);
+            _settings.LastRouterAddress = HostRouterAddress;
+            _settings.Save();
             _expectedSessionSecret = result.SessionSecret;
             _activeHostPort        = 8888;
 
@@ -609,7 +690,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             HostStatus = $"Ready — code: {result.ConnectionCode}";
             Status = $"Host registered. Share code: {result.ConnectionCode}";
         }
-        catch (Exception ex) { Status = $"Router error: {ex.Message}"; }
+        catch (Exception ex) { Status = FriendlyError.Describe(ex); }
     }
 
     private void SetupHostServices()
@@ -659,7 +740,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         t.Error += ex => {
             // Only surface error if transport was actually connected — ignore EOF/reset on disconnect
             if (t.IsConnected)
-                Dispatcher.UIThread.Post(() => Status = $"Host error: {ex.Message}");
+                Dispatcher.UIThread.Post(() => Status = FriendlyError.Describe(ex));
         };
         return t;
     }
@@ -683,7 +764,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         }
         catch (Exception ex)
         {
-            Status = $"Re-listen error: {ex.Message}";
+            Status = FriendlyError.Describe(ex);
             IsHostRunning = false;
         }
         finally
@@ -827,7 +908,7 @@ public class MainViewModel : ReactiveObject, IDisposable
                 }
             }
         }
-        catch (Exception ex) { Status = $"Capture error: {ex.Message}"; }
+        catch { Status = "Screen capture error — the session may be unstable."; }
         finally { _isSendingFrame = false; }
     }
 
@@ -1095,7 +1176,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     public async void SendMouseMove(int rx, int ry)
     {
         if (_transport?.IsConnected != true) return;
-        if (Math.Abs(rx - _lastMousePos.x) < 2 && Math.Abs(ry - _lastMousePos.y) < 2) return;
+        if (Math.Abs(rx - _lastMousePos.x) < 1 && Math.Abs(ry - _lastMousePos.y) < 1) return;
         _lastMousePos = (rx, ry);
         await _transport.SendMessageAsync(new NetworkMessage
         {

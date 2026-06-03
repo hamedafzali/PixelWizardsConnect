@@ -2,7 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:PixelWizard.AvaloniaClient.ViewModels"
         x:Class="PixelWizard.AvaloniaClient.Views.MainWindow"
-        Title="PixelWizard Connect"
+        Title="{Binding WindowTitle}"
         Width="880" Height="620"
         MinWidth="720" MinHeight="540"
         Background="{StaticResource Brush.App.Bg}"
@@ -203,6 +203,11 @@
                     <ScrollViewer IsVisible="{Binding ShowViewerPanel}"
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
+                        <ScrollViewer.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut"/>
+                            </Transitions>
+                        </ScrollViewer.Transitions>
                         <StackPanel Margin="32,24" Spacing="0" MaxWidth="520">
 
                             <DockPanel Margin="0,0,0,24">
@@ -228,6 +233,21 @@
                             <TextBlock Text="DIRECT IP" FontSize="11" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Muted}"
                                        Margin="0,0,0,10"/>
+
+                            <!-- Recent hosts -->
+                            <StackPanel IsVisible="{Binding HasRecentHosts}" Margin="0,0,0,12">
+                                <TextBlock Text="Recent" FontSize="12" FontWeight="SemiBold"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
+                                           Margin="0,0,0,4"/>
+                                <ComboBox ItemsSource="{Binding RecentHosts}"
+                                          SelectedItem="{Binding SelectedRecentHost}"
+                                          HorizontalAlignment="Stretch"
+                                          FontSize="13"
+                                          IsEnabled="{Binding InputEnabled}"
+                                          ToolTip.Tip="Recently connected hosts"
+                                          AutomationProperties.Name="Recent hosts"/>
+                            </StackPanel>
+
                             <TextBlock Text="Host IP Address" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Secondary}"
                                        Margin="0,0,0,4"/>
@@ -335,6 +355,11 @@
                     <ScrollViewer IsVisible="{Binding ShowHostPanel}"
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
+                        <ScrollViewer.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut"/>
+                            </Transitions>
+                        </ScrollViewer.Transitions>
                         <StackPanel Margin="32,24" Spacing="0" MaxWidth="520">
 
                             <DockPanel Margin="0,0,0,24">
@@ -517,6 +542,11 @@
                     <!-- ─── SCREEN DISPLAY ─── -->
                     <Grid IsVisible="{Binding ShowScreenDisplay}"
                           RowDefinitions="48,Auto,*,Auto">
+                        <Grid.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut"/>
+                            </Transitions>
+                        </Grid.Transitions>
 
                         <!-- Toolbar -->
                         <Border Grid.Row="0" Background="{StaticResource Brush.Toolbar.Bg}"
@@ -773,6 +803,80 @@
                            Foreground="{StaticResource Brush.Text.Secondary}"
                            VerticalAlignment="Center"/>
             </DockPanel>
+        </Border>
+
+        <!-- ════ First-run onboarding overlay ════ -->
+        <Border Grid.Row="0" Grid.RowSpan="2"
+                IsVisible="{Binding ShowOnboarding}"
+                Background="#CC0F172A">
+            <Border Background="{StaticResource Brush.Surface}"
+                    CornerRadius="14"
+                    BoxShadow="0 8 32 0 #40000000"
+                    MaxWidth="460"
+                    Margin="32"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Padding="32,28">
+                <StackPanel Spacing="0">
+
+                    <TextBlock Text="Welcome to PixelWizard Connect"
+                               FontSize="22" FontWeight="Bold"
+                               Foreground="{StaticResource Brush.Text.Primary}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,8"/>
+                    <TextBlock Text="Secure, consent-first remote desktop in three steps."
+                               FontSize="13"
+                               Foreground="{StaticResource Brush.Text.Muted}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,0,24"/>
+
+                    <!-- Step 1 -->
+                    <Grid ColumnDefinitions="32,*" Margin="0,0,0,16">
+                        <Border Grid.Column="0" Width="24" Height="24"
+                                Background="{StaticResource Brush.Primary}" CornerRadius="12"
+                                VerticalAlignment="Top">
+                            <TextBlock Text="1" FontSize="12" FontWeight="Bold" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                   FontSize="13" Foreground="{StaticResource Brush.Text.Secondary}"
+                                   Text="Host a machine — choose Host, then share the connection code or your local IP."/>
+                    </Grid>
+
+                    <!-- Step 2 -->
+                    <Grid ColumnDefinitions="32,*" Margin="0,0,0,16">
+                        <Border Grid.Column="0" Width="24" Height="24"
+                                Background="{StaticResource Brush.Primary}" CornerRadius="12"
+                                VerticalAlignment="Top">
+                            <TextBlock Text="2" FontSize="12" FontWeight="Bold" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                   FontSize="13" Foreground="{StaticResource Brush.Text.Secondary}"
+                                   Text="Connect from another machine — choose Connect, enter the code or scan your network."/>
+                    </Grid>
+
+                    <!-- Step 3 -->
+                    <Grid ColumnDefinitions="32,*" Margin="0,0,0,28">
+                        <Border Grid.Column="0" Width="24" Height="24"
+                                Background="{StaticResource Brush.Primary}" CornerRadius="12"
+                                VerticalAlignment="Top">
+                            <TextBlock Text="3" FontSize="12" FontWeight="Bold" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                                   FontSize="13" Foreground="{StaticResource Brush.Text.Secondary}"
+                                   Text="Stay in control — the host approves every session and can stop sharing anytime."/>
+                    </Grid>
+
+                    <Button Classes="Primary" Content="Get started"
+                            Height="42"
+                            HorizontalAlignment="Stretch"
+                            Command="{Binding DismissOnboardingCommand}"
+                            AutomationProperties.Name="Dismiss onboarding"/>
+
+                </StackPanel>
+            </Border>
         </Border>
 
     </Grid>

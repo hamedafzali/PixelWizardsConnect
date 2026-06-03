@@ -37,6 +37,7 @@ router-server/            — Go HTTP relay server
 - **Mouse and keyboard input** — forwarded over the encrypted TCP channel
 - **TLS** — self-signed certificate generated on first run; trust-on-first-use for LAN deployments
 - **WebSocket viewer** — built-in local WebSocket server lets a browser watch the session on port 9001
+- **LAN host discovery** — the viewer's **Scan network** button finds PixelWizard hosts on the local network without typing an IP
 
 ## Quick start
 
@@ -61,15 +62,32 @@ The server starts on port 9000. Available env vars:
 
 ### 2. Client application
 
+From the repository root, run the launch script for your platform:
+
+```bash
+./run.sh    # macOS / Linux
+```
+
+```bat
+run.cmd     :: Windows
+```
+
+These restore dependencies and start the app. The first launch shows a short onboarding overlay.
+
+Prefer running it directly? You can still use the .NET CLI:
+
 ```bash
 cd avalonia/PixelWizard.AvaloniaClient
-dotnet run                    # macOS / Linux (net9.0)
-dotnet run -f net9.0-windows  # Windows
+dotnet run    # picks the correct target automatically on every platform
 ```
 
 **Host mode:** choose Host → enter the router address → click Register. Share the 6-character code with the viewer.
 
-**Viewer mode:** choose Viewer → enter the code and router address → click Connect via Code. Or enter an IP address for a direct LAN connection.
+**Viewer mode:** choose Connect → enter the code and router address → click Connect. Or enter an IP address for a direct LAN connection. You can also click **Scan network** to discover PixelWizard hosts on your local network automatically.
+
+### Troubleshooting
+
+After pulling new changes, a stale build can cause unexpected errors. If the app fails to start or behaves oddly, delete the `bin` and `obj` folders under `avalonia/PixelWizard.AvaloniaClient` and run the launch script again to rebuild from scratch.
 
 ### macOS permissions
 
