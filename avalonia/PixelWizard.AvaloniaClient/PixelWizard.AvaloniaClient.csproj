@@ -2,14 +2,24 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <!-- net9.0 = Mac/Linux viewer; net9.0-windows = Windows full host+viewer -->
-    <TargetFrameworks>net9.0;net9.0-windows</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <!-- Allows cross-compiling the windows target from macOS -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!--
+    On Windows: net9.0-windows is listed first so `dotnet run` (no -f flag) picks it,
+    enabling the WINDOWS define and full host support (screen capture + input injection).
+    On macOS/Linux: only net9.0 is built, avoiding a broken Windows target on CI/dev machines.
+  -->
+  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <TargetFrameworks>net9.0-windows;net9.0</TargetFrameworks>
+  </PropertyGroup>
+  <PropertyGroup Condition="!$([MSBuild]::IsOSPlatform('Windows'))">
+    <TargetFrameworks>net9.0</TargetFrameworks>
   </PropertyGroup>
 
   <ItemGroup>
