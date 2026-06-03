@@ -231,7 +231,7 @@
                             <TextBlock Text="Host IP Address" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Secondary}"
                                        Margin="0,0,0,4"/>
-                            <Grid ColumnDefinitions="*,10,120" Margin="0,0,0,28">
+                            <Grid ColumnDefinitions="*,10,120" Margin="0,0,0,12">
                                 <TextBox Grid.Column="0" Text="{Binding HostAddress}"
                                          Watermark="192.168.1.10" IsEnabled="{Binding InputEnabled}"
                                          KeyDown="OnAddressKeyDown"
@@ -242,6 +242,32 @@
                                         HorizontalAlignment="Stretch"
                                         AutomationProperties.Name="Connect via IP address"/>
                             </Grid>
+
+                            <!-- Network discovery -->
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4"
+                                        IsVisible="{Binding !IsConnecting}">
+                                <Button Classes="Secondary" Content="Scan network"
+                                        IsVisible="{Binding !IsScanning}"
+                                        Command="{Binding ScanNetworkCommand}"
+                                        AutomationProperties.Name="Scan local network"
+                                        ToolTip.Tip="Scan local network for PixelWizard hosts (10 s)"/>
+                                <Button Classes="Secondary" Content="Stop scan"
+                                        IsVisible="{Binding IsScanning}"
+                                        Command="{Binding ScanNetworkCommand}"
+                                        AutomationProperties.Name="Stop scanning"/>
+                                <TextBlock Text="{Binding DiscoveredHosts.Count, StringFormat='{}{0} found'}"
+                                           FontSize="12" Foreground="{StaticResource Brush.Text.Muted}"
+                                           VerticalAlignment="Center"
+                                           IsVisible="{Binding IsScanning}"/>
+                            </StackPanel>
+
+                            <ListBox ItemsSource="{Binding DiscoveredHosts}"
+                                     IsVisible="{Binding DiscoveredHosts.Count}"
+                                     SelectedItem="{Binding SelectedDiscoveredHost}"
+                                     Margin="0,0,0,16" MaxHeight="120"
+                                     BorderBrush="{StaticResource Brush.Border}"
+                                     BorderThickness="1" CornerRadius="8"
+                                     FontSize="13"/>
 
                             <!-- Divider -->
                             <Grid ColumnDefinitions="*,Auto,*" Margin="0,0,0,28">
@@ -622,6 +648,7 @@
                                            VerticalAlignment="Stretch"
                                            Cursor="Cross"
                                            PointerPressed="OnScreenPointerPressed"
+                                           PointerReleased="OnScreenPointerReleased"
                                            PointerMoved="OnScreenPointerMoved"
                                            PointerEntered="OnScreenPointerEntered"
                                            PointerExited="OnScreenPointerExited"/>
@@ -651,6 +678,7 @@
                                        VerticalAlignment="Top"
                                        Cursor="Cross"
                                        PointerPressed="OnScreenPointerPressed"
+                                       PointerReleased="OnScreenPointerReleased"
                                        PointerMoved="OnScreenPointerMoved"
                                        PointerEntered="OnScreenPointerEntered"
                                        PointerExited="OnScreenPointerExited"/>

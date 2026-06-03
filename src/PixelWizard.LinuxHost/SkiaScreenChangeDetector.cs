@@ -54,17 +54,22 @@ internal sealed class SkiaScreenChangeDetector : IDisposable
         return blocks;
     }
 
-    private bool BlockChanged(SKBitmap current, int x, int y, int w, int h)
+    private unsafe bool BlockChanged(SKBitmap current, int x, int y, int w, int h)
     {
         const int step = 4;
+        int stride  = current.Width * 4;
+        byte* curr  = (byte*)current.GetPixels().ToPointer();
+        byte* prev  = (byte*)_prev!.GetPixels().ToPointer();
         int changed = 0, total = 0;
+
         for (int py = y; py < y + h; py += step)
         for (int px = x; px < x + w; px += step)
         {
             if (px >= current.Width || py >= current.Height) continue;
-            var c = current.GetPixel(px, py);
-            var p = _prev!.GetPixel(px, py);
-            int diff = Math.Abs(c.Red - p.Red) + Math.Abs(c.Green - p.Green) + Math.Abs(c.Blue - p.Blue);
+            int off = py * stride + px * 4;
+            int diff = Math.Abs(curr[off]     - prev[off])
+                     + Math.Abs(curr[off + 1] - prev[off + 1])
+                     + Math.Abs(curr[off + 2] - prev[off + 2]);
             if (diff > 10) changed++;
             total++;
         }

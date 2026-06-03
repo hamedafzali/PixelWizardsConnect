@@ -38,6 +38,20 @@ public sealed class LinuxInputInjector : IInputInjector
         XFlush(_display);
     }
 
+    public void ButtonDown(int x, int y, bool leftButton)
+    {
+        MoveMouse(x, y);
+        XTestFakeButtonEvent(_display, leftButton ? 1u : 3u, true,  0);
+        XFlush(_display);
+    }
+
+    public void ButtonUp(int x, int y, bool leftButton)
+    {
+        MoveMouse(x, y);
+        XTestFakeButtonEvent(_display, leftButton ? 1u : 3u, false, 0);
+        XFlush(_display);
+    }
+
     public void SendKey(int windowsVk, bool isKeyDown)
     {
         ulong? keysym = LinuxKeyMap.ToKeySym(windowsVk);

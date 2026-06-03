@@ -49,6 +49,28 @@ public sealed class MacInputInjector : IInputInjector
         if (evtUp   != IntPtr.Zero) { CGEventPost(CGEventTapLocation.HID, evtUp);   CFRelease(evtUp);   }
     }
 
+    public void ButtonDown(int x, int y, bool leftButton)
+    {
+        var pt  = new CGPoint { X = x, Y = y };
+        var evt = CGEventCreateMouseEvent(IntPtr.Zero,
+            leftButton ? CGEventType.LeftMouseDown : CGEventType.RightMouseDown, pt,
+            leftButton ? 0 : 1);
+        if (evt == IntPtr.Zero) return;
+        CGEventPost(CGEventTapLocation.HID, evt);
+        CFRelease(evt);
+    }
+
+    public void ButtonUp(int x, int y, bool leftButton)
+    {
+        var pt  = new CGPoint { X = x, Y = y };
+        var evt = CGEventCreateMouseEvent(IntPtr.Zero,
+            leftButton ? CGEventType.LeftMouseUp : CGEventType.RightMouseUp, pt,
+            leftButton ? 0 : 1);
+        if (evt == IntPtr.Zero) return;
+        CGEventPost(CGEventTapLocation.HID, evt);
+        CFRelease(evt);
+    }
+
     public void SendKey(int windowsVk, bool isKeyDown)
     {
         ushort? mac = MacKeyMap.ToMacKeyCode(windowsVk);

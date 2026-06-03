@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Reactive;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media.Imaging;
@@ -293,6 +294,29 @@ public class MainViewModel : ReactiveObject, IDisposable
         }
     }
 
+    // ── Network discovery ─────────────────────────────────────────────────────
+
+    private readonly System.Collections.ObjectModel.ObservableCollection<string> _discoveredHosts = new();
+    public System.Collections.ObjectModel.ObservableCollection<string> DiscoveredHosts => _discoveredHosts;
+
+    private bool _isScanning;
+    public bool IsScanning { get => _isScanning; set => this.RaiseAndSetIfChanged(ref _isScanning, value); }
+
+    private string? _selectedDiscoveredHost;
+    public string? SelectedDiscoveredHost
+    {
+        get => _selectedDiscoveredHost;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedDiscoveredHost, value);
+            if (value != null)
+            {
+                var parts = value.Split(':');
+                HostAddress = parts[0];
+            }
+        }
+    }
+
     // ── Commands ──────────────────────────────────────────────────────────────
 
     public ReactiveCommand<Unit, Unit> GoHostCommand             { get; }
@@ -315,6 +339,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> ToggleChatCommand         { get; }
     public ReactiveCommand<Unit, Unit> SendChatCommand           { get; }
     public ReactiveCommand<Unit, Unit> ToggleSessionNotesCommand { get; }
+    public ReactiveCommand<Unit, Unit> ScanNetworkCommand        { get; }
 
     // ── Internal state ────────────────────────────────────────────────────────
 
@@ -324,8 +349,11 @@ public class MainViewModel : ReactiveObject, IDisposable
     private IScreenCapture?       _capture;
     private IInputInjector?       _input;
     private WebSocketHostServer?  _wsServer;
-    private DispatcherTimer?      _captureTimer;
+    private System.Timers.Timer?  _captureTimer;
     private bool                  _isSendingFrame;
+    private bool                  _relistening = false;
+    private CancellationTokenSource? _discoveryCts;
+    private CancellationTokenSource? _announceCts;
 
     private RenderTargetBitmap? _canvas;
     private int _canvasWidth, _canvasHeight;
@@ -383,6 +411,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         ToggleChatCommand         = ReactiveCommand.Create(() => { ChatVisible = !ChatVisible; });
         SendChatCommand           = ReactiveCommand.Create(SendChatMessage);
         ToggleSessionNotesCommand = ReactiveCommand.Create(() => { SessionNotesVisible = !SessionNotesVisible; });
+        ScanNetworkCommand        = ReactiveCommand.Create(ToggleScan);
 
         StartMetricsTimer();
     }
@@ -468,7 +497,10 @@ public class MainViewModel : ReactiveObject, IDisposable
         });
         t.MessageReceived += OnViewerMessage;
         t.BytesReceived   += b => _receivedBytes += b;
-        t.Error += ex => Dispatcher.UIThread.Post(() => Status = $"Error: {ex.Message}");
+        t.Error += ex => {
+            if (t.IsConnected)
+                Dispatcher.UIThread.Post(() => Status = $"Error: {ex.Message}");
+        };
         return t;
     }
 
@@ -535,6 +567,8 @@ public class MainViewModel : ReactiveObject, IDisposable
             _hostTransport = BuildHostTransport();
             await _hostTransport.StartServerAsync(port, HostTlsEnabled);
             StartCaptureTimer();
+            _announceCts = new CancellationTokenSource();
+            _ = NetworkDiscovery.AnnounceAsync(_activeHostPort, _announceCts.Token);
             string lanIp = GetLanIp();
             HostStatus = $"Listening — tell viewer to connect to {lanIp}:{port}";
             Status     = $"Host ready. Viewer address: {lanIp}:{port}";
@@ -570,6 +604,8 @@ public class MainViewModel : ReactiveObject, IDisposable
             _hostTransport = BuildHostTransport();
             await _hostTransport.StartServerAsync(8888, HostTlsEnabled);
             StartCaptureTimer();
+            _announceCts = new CancellationTokenSource();
+            _ = NetworkDiscovery.AnnounceAsync(_activeHostPort, _announceCts.Token);
             HostStatus = $"Ready — code: {result.ConnectionCode}";
             Status = $"Host registered. Share code: {result.ConnectionCode}";
         }
@@ -616,21 +652,32 @@ public class MainViewModel : ReactiveObject, IDisposable
             SaveSessionNotes();
             HostStatus = "Client disconnected";
             Status     = "Client disconnected";
-            if (IsHostRunning)
+            if (IsHostRunning && !_relistening)
                 await RelistenHostAsync();
         });
         t.MessageReceived += OnHostMessage;
-        t.Error += ex => Dispatcher.UIThread.Post(() => Status = $"Host error: {ex.Message}");
+        t.Error += ex => {
+            // Only surface error if transport was actually connected — ignore EOF/reset on disconnect
+            if (t.IsConnected)
+                Dispatcher.UIThread.Post(() => Status = $"Host error: {ex.Message}");
+        };
         return t;
     }
 
     private async Task RelistenHostAsync()
     {
+        if (_relistening) return;
+        _relistening = true;
         HostStatus = "Waiting for next connection…";
         Status     = "Waiting for next connection…";
         try
         {
-            _hostTransport?.Dispose();
+            // Null out first so the Disconnected event fired by Dispose
+            // sees _hostTransport == null and skips the re-listen guard.
+            var old = _hostTransport;
+            _hostTransport = null;
+            old?.Dispose();
+
             _hostTransport = BuildHostTransport();
             await _hostTransport.StartServerAsync(_activeHostPort, HostTlsEnabled);
         }
@@ -639,12 +686,20 @@ public class MainViewModel : ReactiveObject, IDisposable
             Status = $"Re-listen error: {ex.Message}";
             IsHostRunning = false;
         }
+        finally
+        {
+            _relistening = false;
+        }
     }
 
     private void StopHost()
     {
         SaveSessionNotes();
         _captureTimer?.Stop();
+        _captureTimer?.Dispose();
+        _captureTimer = null;
+        _announceCts?.Cancel();
+        _announceCts = null;
         _sessionWatchdog?.Stop();
         _sessionWatchdog?.Dispose();
         _sessionWatchdog = null;
@@ -735,8 +790,13 @@ public class MainViewModel : ReactiveObject, IDisposable
     private void StartCaptureTimer()
     {
         var settings = StreamingSettings.FromPresetIndex(HostQualityIndex);
-        _captureTimer = new DispatcherTimer { Interval = settings.FrameInterval };
-        _captureTimer.Tick += async (_, _) => await CaptureTickAsync();
+        _captureTimer?.Stop();
+        _captureTimer?.Dispose();
+        _captureTimer = new System.Timers.Timer(settings.FrameInterval.TotalMilliseconds)
+        {
+            AutoReset = true
+        };
+        _captureTimer.Elapsed += async (_, _) => await CaptureTickAsync();
         _captureTimer.Start();
     }
 
@@ -831,6 +891,14 @@ public class MainViewModel : ReactiveObject, IDisposable
             case MessageType.MouseClick:
                 var cl = MouseClickMessage.Deserialize(msg.Data);
                 Dispatcher.UIThread.Post(() => _input?.Click(cl.X, cl.Y, cl.LeftButton));
+                break;
+            case MessageType.MouseButtonDown:
+                var bd = MouseClickMessage.Deserialize(msg.Data);
+                Dispatcher.UIThread.Post(() => _input?.ButtonDown(bd.X, bd.Y, bd.LeftButton));
+                break;
+            case MessageType.MouseButtonUp:
+                var bu = MouseClickMessage.Deserialize(msg.Data);
+                Dispatcher.UIThread.Post(() => _input?.ButtonUp(bu.X, bu.Y, bu.LeftButton));
                 break;
             case MessageType.KeyPress:
                 var kp = KeyMessage.Deserialize(msg.Data);
@@ -971,22 +1039,21 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void ApplyFullScreen(byte[] data)
     {
-        var toDispose = _canvas;
-        _canvas       = null;
-        _canvasWidth  = 0;
-        _canvasHeight = 0;
-
-        using var ms = new MemoryStream(data);
-        var decoded  = new Bitmap(ms);
-        int w = (int)decoded.Size.Width, h = (int)decoded.Size.Height;
-        EnsureCanvas(w, h);
-        using var dc = _canvas!.CreateDrawingContext();
-        dc.DrawImage(decoded, new Rect(0, 0, w, h));
-
-        var snapshot = _canvas;
         Dispatcher.UIThread.Post(() =>
         {
-            RemoteScreen = snapshot;
+            var toDispose = _canvas;
+            _canvas       = null;
+            _canvasWidth  = 0;
+            _canvasHeight = 0;
+
+            using var ms      = new MemoryStream(data);
+            using var decoded = new Bitmap(ms);
+            int w = (int)decoded.Size.Width, h = (int)decoded.Size.Height;
+            EnsureCanvas(w, h);
+            using var dc = _canvas!.CreateDrawingContext();
+            dc.DrawImage(decoded, new Rect(0, 0, w, h));
+
+            RemoteScreen = _canvas;
             _renderedFrames++;
             toDispose?.Dispose();
         });
@@ -994,16 +1061,20 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void ApplyDelta(ScreenDelta delta)
     {
-        EnsureCanvas(
-            Math.Max(_canvasWidth,  delta.X + delta.Width),
-            Math.Max(_canvasHeight, delta.Y + delta.Height));
-        using var ms = new MemoryStream(delta.ImageData);
-        var patch    = new Bitmap(ms);
-        using var dc = _canvas!.CreateDrawingContext();
-        dc.DrawImage(patch, new Rect(delta.X, delta.Y, delta.Width, delta.Height));
+        // Decode JPEG on background thread (safe — no shared state)
+        byte[] imageData = delta.ImageData;
+        int dx = delta.X, dy = delta.Y, dw = delta.Width, dh = delta.Height;
 
-        var snapshot = _canvas;
-        Dispatcher.UIThread.Post(() => { RemoteScreen = snapshot; _renderedFrames++; });
+        Dispatcher.UIThread.Post(() =>
+        {
+            EnsureCanvas(Math.Max(_canvasWidth, dx + dw), Math.Max(_canvasHeight, dy + dh));
+            using var ms    = new MemoryStream(imageData);
+            using var patch = new Bitmap(ms);
+            using var dc    = _canvas!.CreateDrawingContext();
+            dc.DrawImage(patch, new Rect(dx, dy, dw, dh));
+            RemoteScreen = _canvas;
+            _renderedFrames++;
+        });
     }
 
     private void EnsureCanvas(int w, int h)
@@ -1039,6 +1110,26 @@ public class MainViewModel : ReactiveObject, IDisposable
         await _transport.SendMessageAsync(new NetworkMessage
         {
             Type = MessageType.MouseClick,
+            Data = new MouseClickMessage { X = rx, Y = ry, LeftButton = leftButton, RightButton = !leftButton }.Serialize()
+        });
+    }
+
+    public async void SendMouseDown(int rx, int ry, bool leftButton)
+    {
+        if (_transport?.IsConnected != true) return;
+        await _transport.SendMessageAsync(new NetworkMessage
+        {
+            Type = MessageType.MouseButtonDown,
+            Data = new MouseClickMessage { X = rx, Y = ry, LeftButton = leftButton, RightButton = !leftButton }.Serialize()
+        });
+    }
+
+    public async void SendMouseUp(int rx, int ry, bool leftButton)
+    {
+        if (_transport?.IsConnected != true) return;
+        await _transport.SendMessageAsync(new NetworkMessage
+        {
+            Type = MessageType.MouseButtonUp,
             Data = new MouseClickMessage { X = rx, Y = ry, LeftButton = leftButton, RightButton = !leftButton }.Serialize()
         });
     }
@@ -1100,6 +1191,40 @@ public class MainViewModel : ReactiveObject, IDisposable
         return $"{GetLanIp()}:8888";
     }
 
+    // ── Network discovery ─────────────────────────────────────────────────────
+
+    private void ToggleScan()
+    {
+        if (_isScanning)
+        {
+            StopScan();
+        }
+        else
+        {
+            _discoveredHosts.Clear();
+            _discoveryCts = new CancellationTokenSource();
+            IsScanning = true;
+            _ = Task.Run(async () =>
+            {
+                await NetworkDiscovery.ListenAsync(host =>
+                    Dispatcher.UIThread.Post(() => _discoveredHosts.Add(host)),
+                    _discoveryCts.Token);
+                Dispatcher.UIThread.Post(() => IsScanning = false);
+            });
+            // Auto-stop after 10 s
+            _ = Task.Delay(10_000).ContinueWith(_ => Dispatcher.UIThread.Post(StopScan));
+        }
+    }
+
+    private void StopScan()
+    {
+        _discoveryCts?.Cancel();
+        _discoveryCts = null;
+        IsScanning = false;
+    }
+
+    // ── Dispose ───────────────────────────────────────────────────────────────
+
     public void Dispose()
     {
         StopHost();
@@ -1108,6 +1233,8 @@ public class MainViewModel : ReactiveObject, IDisposable
         _pingTimer?.Dispose();
         _sessionWatchdog?.Dispose();
         _frameTimeoutTimer?.Dispose();
+        _announceCts?.Cancel();
+        _discoveryCts?.Cancel();
         _canvas?.Dispose();
     }
 }

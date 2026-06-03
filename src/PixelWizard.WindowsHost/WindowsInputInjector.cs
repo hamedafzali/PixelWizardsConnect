@@ -36,6 +36,18 @@ namespace PixelWizard.WindowsHost
             }
         }
 
+        public void ButtonDown(int x, int y, bool leftButton)
+        {
+            Cursor.Position = new System.Drawing.Point(x, y);
+            mouse_event(leftButton ? LEFTDOWN : RIGHTDOWN, 0, 0, 0, 0);
+        }
+
+        public void ButtonUp(int x, int y, bool leftButton)
+        {
+            Cursor.Position = new System.Drawing.Point(x, y);
+            mouse_event(leftButton ? LEFTUP : RIGHTUP, 0, 0, 0, 0);
+        }
+
         public void SendKey(int virtualKey, bool isKeyDown)
         {
             if (isKeyDown)

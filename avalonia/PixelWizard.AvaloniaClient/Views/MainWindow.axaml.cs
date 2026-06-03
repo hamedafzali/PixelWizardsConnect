@@ -58,8 +58,17 @@ public partial class MainWindow : Window
         if (vm?.IsConnected != true || vm.RemoteScreen == null) return;
         var (rx, ry) = ToRemote(sender as Image, e.GetPosition((Image?)sender));
         bool left = e.GetCurrentPoint((Image?)sender).Properties.IsLeftButtonPressed;
-        vm.SendMouseClick(rx, ry, leftButton: left);
+        vm.SendMouseDown(rx, ry, leftButton: left);
         e.Handled = true;
+    }
+
+    private void OnScreenPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        var vm = VM;
+        if (vm?.IsConnected != true || vm.RemoteScreen == null) return;
+        var (rx, ry) = ToRemote(sender as Image, e.GetPosition((Image?)sender));
+        bool left = e.InitialPressMouseButton == MouseButton.Left;
+        vm.SendMouseUp(rx, ry, leftButton: left);
     }
 
     private void OnScreenPointerMoved(object? sender, PointerEventArgs e)

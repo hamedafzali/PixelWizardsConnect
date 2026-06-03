@@ -20,6 +20,8 @@ namespace PixelWizard.Core.Protocol
         MouseClick = 21,
         KeyPress = 22,
         KeyRelease = 23,
+        MouseButtonDown = 24,
+        MouseButtonUp   = 25,
 
         // Health
         Ping = 30,

@@ -52,20 +52,34 @@ namespace PixelWizard.WindowsHost
             return deltas;
         }
 
-        private bool HasChanged(int x, int y, int w, int h, Bitmap current)
+        private unsafe bool HasChanged(int x, int y, int w, int h, Bitmap current)
         {
-            int step = 4, changed = 0, total = 0;
-            for (int py = y; py < y + h; py += step)
-                for (int px = x; px < x + w; px += step)
+            var rect = new Rectangle(x, y, w, h);
+            var bmpDataCurr = current.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            var bmpDataPrev = _previousFrame!.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+
+            const int step = 4;
+            int changed = 0, total = 0;
+            try
+            {
+                for (int row = 0; row < h; row += step)
+                for (int col = 0; col < w; col += step)
                 {
-                    if (px >= current.Width || py >= current.Height) continue;
-                    var c = current.GetPixel(px, py);
-                    var p = _previousFrame!.GetPixel(px, py);
-                    int diff = Math.Abs(c.R - p.R) + Math.Abs(c.G - p.G) + Math.Abs(c.B - p.B);
+                    byte* pc = (byte*)bmpDataCurr.Scan0 + row * bmpDataCurr.Stride + col * 4;
+                    byte* pp = (byte*)bmpDataPrev.Scan0 + row * bmpDataPrev.Stride + col * 4;
+                    int diff = Math.Abs(pc[2] - pp[2])   // R
+                             + Math.Abs(pc[1] - pp[1])   // G
+                             + Math.Abs(pc[0] - pp[0]);  // B
                     if (diff > _threshold) changed++;
                     total++;
                 }
-            return total > 0 && (double)changed / total > 0.1;
+            }
+            finally
+            {
+                current.UnlockBits(bmpDataCurr);
+                _previousFrame!.UnlockBits(bmpDataPrev);
+            }
+            return total > 0 && (double)changed / total > 0.10;
         }
 
         private List<Rectangle> MergeBlocks(List<Rectangle> blocks)
