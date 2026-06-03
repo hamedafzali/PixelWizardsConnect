@@ -323,10 +323,20 @@ public class MainViewModel : ReactiveObject, IDisposable
             _hostTransport = BuildHostTransport();
             await _hostTransport.StartServerAsync(port, HostTlsEnabled);
             StartCaptureTimer();
-            HostStatus = $"Listening on port {port}";
-            Status = $"Host ready on port {port}";
+            string lanIp = GetLanIp();
+            HostStatus = $"Listening — tell viewer to connect to {lanIp}:{port}";
+            Status     = $"Host ready. Viewer address: {lanIp}:{port}";
         }
         catch (Exception ex) { Status = $"Host error: {ex.Message}"; }
+    }
+
+    private static string GetLanIp()
+    {
+        foreach (var ip in System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName()).AddressList)
+            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+                !System.Net.IPAddress.IsLoopback(ip))
+                return ip.ToString();
+        return "127.0.0.1";
     }
 
     private async Task RegisterWithRouter()
@@ -734,11 +744,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             routerHost == "127.0.0.1")
             return "localhost:8888";
 
-        foreach (var ip in System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName()).AddressList)
-            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
-                !System.Net.IPAddress.IsLoopback(ip))
-                return $"{ip}:8888";
-        return "127.0.0.1:8888";
+        return $"{GetLanIp()}:8888";
     }
 
     public void Dispose()
