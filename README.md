@@ -1,133 +1,106 @@
 # PixelWizard Connect
 
-A Windows-based remote desktop automation prototype with network support for remote connections and a Docker-friendly Go router server.
+A self-hostable remote desktop tool with a Go relay server, Avalonia cross-platform client, and a clear consent-first design.
 
-For the product direction, phased implementation plan, competitor notes, and AI strategy, see [docs/ROADMAP.md](docs/ROADMAP.md).
+For product direction, phased plan, and competitor notes see [docs/ROADMAP.md](docs/ROADMAP.md).
 
-## Platform Support
+## Platform support
 
-### Router Server (Go)
-- ✅ **Cross-platform** - Runs on Windows, Linux, macOS
-- ✅ **Docker-ready** - Containerized deployment for easy server deployment
-- ✅ Production-ready for cloud servers
-- See `router-server/README.md` for deployment details
+| Component | Platforms |
+|---|---|
+| **Router server** (Go) | Windows, Linux, macOS, Docker |
+| **Client app** (Avalonia, .NET 9) | Windows, macOS, Linux |
+| **Host mode** (screen capture + input) | Windows (`net9.0-windows`), macOS (CoreGraphics), Linux (Xlib/XTest) |
 
-### Client Application (C# WPF)
-- ⚠️ **Windows-only** - WPF is Windows-specific
-- Requires Windows 10 or later
-- .NET 8.0 required
+## Architecture
 
-### Cross-Platform Client Options
-To make the client cross-platform, consider:
-1. **Avalonia UI** - Cross-platform XAML-based framework (Windows, Linux, macOS)
-2. **.NET MAUI** - Microsoft's cross-platform framework (Windows, iOS, Android, macOS)
-3. **Web Client** - Browser-based client using WebRTC for screen sharing
-
-**Recommendation:** Avalonia UI would be the best choice as it uses XAML (similar to WPF) and maintains most of the current code structure.
+```
+src/
+  PixelWizard.Core        — interfaces, protocol messages, session models
+  PixelWizard.Transport   — TcpTransport (TLS), RouterHttpClient
+  PixelWizard.WindowsHost — Windows screen capture (System.Drawing) + input (SendInput)
+  PixelWizard.LinuxHost   — Linux screen capture (Xlib XGetImage) + input (XTest)
+avalonia/
+  PixelWizard.AvaloniaClient — single Avalonia app: host + viewer on all platforms
+router-server/            — Go HTTP relay server
+```
 
 ## Features
 
-- **Remote Server Mode**: Host your desktop for remote connections
-- **Remote Client Mode**: Connect to a remote desktop
-- **Direct Connect**: Connect directly via IP address
-- **Router Server Mode**: Use a signaling server for connection code-based connections
-- **Screen Change Detection**: Efficient screen streaming by sending only changed regions
-- **Mouse and Keyboard Input**: Send mouse clicks and keyboard inputs to remote desktop
-- **System Tray Integration**: Minimize to tray when connected
-- **Modern UI**: Professional, compact interface with clean design
+- **Host mode** — capture your screen and accept a viewer connection via direct IP or router code
+- **Viewer mode** — connect to a remote host via direct IP or 6-character connection code
+- **Consent dialog** — host must explicitly allow each incoming connection
+- **Session token** — router-mode connections use a per-session secret; invalid tokens are rejected before consent is shown
+- **Session watchdog** — host auto-disconnects viewers that go silent for 30 s
+- **Auto-reconnect** — host re-listens after a viewer disconnects without needing to restart
+- **Screen delta streaming** — only changed 32×32 pixel tiles are sent each frame
+- **Mouse and keyboard input** — forwarded over the encrypted TCP channel
+- **TLS** — self-signed certificate generated on first run; trust-on-first-use for LAN deployments
+- **WebSocket viewer** — built-in local WebSocket server lets a browser watch the session on port 9001
 
-## Requirements
+## Quick start
 
-- .NET 8.0 SDK or later
-- Windows operating system
-- Visual Studio 2022 or compatible IDE (optional)
-
-## Building the Application
+### 1. Router server
 
 ```bash
-cd "c:\repos\Microsoft UI Automation"
-dotnet build
+cd router-server
+go run main.go
+# or with Docker
+docker compose up -d --build
 ```
 
-## Running the Application
+The server starts on port 9000. Available env vars:
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `9000` | Listen port |
+| `CODE_TTL` | `30m` | How long a code stays valid |
+| `CLEANUP_INTERVAL` | `5m` | Expired-code cleanup frequency |
+| `RATE_LIMIT_WINDOW` | `1m` | Rate-limit sliding window |
+| `RATE_LIMIT_MAX` | `10` | Max requests per IP per window |
+
+### 2. Client application
 
 ```bash
-dotnet run
+cd avalonia/PixelWizard.AvaloniaClient
+dotnet run                    # macOS / Linux (net9.0)
+dotnet run -f net9.0-windows  # Windows
 ```
 
-Or build and run from Visual Studio.
+**Host mode:** choose Host → enter the router address → click Register. Share the 6-character code with the viewer.
 
-## How to Use
+**Viewer mode:** choose Viewer → enter the code and router address → click Connect via Code. Or enter an IP address for a direct LAN connection.
 
-### 1. Select a Screen
-- Use the "Select Screen" dropdown to choose which monitor to display
-- Click "Refresh Screens" if you've connected/disconnected monitors
+### macOS permissions
 
-### 2. View Screen Capture
-- The selected screen will be displayed in the main area
-- Check "Auto-refresh screen (2s)" for live updates
-- Manual refresh occurs when you perform automation actions
+- Screen capture: System Settings → Privacy → Screen Recording → grant to the app
+- Input injection: System Settings → Privacy → Accessibility → grant to the app
 
-### 3. Find and Click Elements by Name
-- Enter the UI element's name in the "Element Name" text box
-- Click "Find and Click" to:
-  - Search for the element across all applications
-  - Click the element if found
-  - Refresh the screen to show the result
+### Linux requirements
 
-### 4. Find Elements by Automation ID
-- Enter the Automation ID in the "Automation ID" text box
-- Click "Find by ID" to:
-  - Locate the element
-  - Display its name and class name
-  - Show its bounding rectangle coordinates
+- `libX11` and `libXtst` — usually pre-installed (`sudo apt install libx11-6 libxtst6`)
+- `DISPLAY` environment variable must be set (e.g. `DISPLAY=:0`)
 
-## Finding Element Names and Automation IDs
+## Security notes
 
-To find element names and automation IDs, you can use:
+- Connection codes are **one-time use** — they are deleted from the router the moment a viewer claims them
+- Each code is paired with a per-session secret; the viewer must present the exact secret before the host shows the consent dialog
+- Direct-IP connections (no router) skip the secret check and rely on network-level access control
+- TLS uses a self-signed certificate stored in the app data folder (`PixelWizardConnect/transport.pfx`); the client accepts any server certificate on first connect
+- The router is plain HTTP — put it behind Caddy, Traefik, or nginx with TLS for internet-facing deployments
 
+## Building for release
 
-## Technical Details
+```bash
+# Windows self-contained
+dotnet publish avalonia/PixelWizard.AvaloniaClient -f net9.0-windows -r win-x64 --self-contained
 
+# macOS
+dotnet publish avalonia/PixelWizard.AvaloniaClient -f net9.0 -r osx-x64 --self-contained
 
-### Screen Capture
-Uses `System.Drawing` to capture screen contents:
-- `Graphics.CopyFromScreen()` for capture
-- Converts to BitmapImage for WPF display
+# Linux
+dotnet publish avalonia/PixelWizard.AvaloniaClient -f net9.0 -r linux-x64 --self-contained
 
-### Project Structure
-- `App.xaml/cs` - Application entry point
-- `MainWindow.xaml` - UI layout
-- `MainWindow.xaml.cs` - Core logic and automation
-- `ScreenAutomationApp.csproj` - Project configuration
-
-## Limitations
-
-- Requires Windows OS
-- Some applications may not fully support UI Automation
-- Admin privileges may be needed for certain applications
-- UWP apps have limited automation support
-
-## Troubleshooting
-
-### "UI Automation not initialized"
-- Ensure UIAutomationClient COM library is properly referenced
-- Run as administrator if needed
-
-### "Element not found"
-- Verify the element name/ID using Inspect.exe
-- Some elements may have dynamic names
-- Try using Automation ID instead of Name
-
-### Screen capture not working
-- Ensure the app has display access permissions
-- Check if the selected screen is still connected
-
-## Next Steps
-
-Potential enhancements:
-- Add element highlighting on screen
-- Support for more automation patterns (text input, selection)
-- Record and replay automation sequences
-- Support for keyboard automation
-- Element tree viewer
+# Router (Docker)
+cd router-server && docker compose up -d --build
+```

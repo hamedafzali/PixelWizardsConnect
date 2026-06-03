@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Reactive;
+using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media.Imaging;
@@ -154,9 +155,9 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     // ── Commands ──────────────────────────────────────────────────────────────
 
-    public ReactiveCommand<Unit, Unit> GoHostCommand       { get; }
-    public ReactiveCommand<Unit, Unit> GoViewerCommand     { get; }
-    public ReactiveCommand<Unit, Unit> BackCommand         { get; }
+    public ReactiveCommand<Unit, Unit> GoHostCommand          { get; }
+    public ReactiveCommand<Unit, Unit> GoViewerCommand        { get; }
+    public ReactiveCommand<Unit, Unit> BackCommand            { get; }
     public ReactiveCommand<Unit, Unit> ConnectDirectCommand   { get; }
     public ReactiveCommand<Unit, Unit> ConnectViaCodeCommand  { get; }
     public ReactiveCommand<Unit, Unit> StartDirectHostCommand { get; }
@@ -183,6 +184,17 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private System.Timers.Timer? _metricsTimer;
     private System.Timers.Timer? _pingTimer;
+    private System.Timers.Timer? _sessionWatchdog;
+
+    // Session secret: set before connecting/hosting, consumed during TCP handshake.
+    private string _sessionSecret         = "";  // viewer side — sent to host
+    private string _expectedSessionSecret = "";  // host side — validated against viewer's secret
+
+    // Handshake gate: set false when viewer connects, set true after secret verified.
+    private bool _hostHandshakeComplete;
+
+    // Active host port — needed to re-listen after a viewer disconnects.
+    private int _activeHostPort = 8888;
 
     // Set by App.axaml.cs — shows a consent dialog and returns allow/deny
     public Func<string, Task<bool>>? ConsentCallback { get; set; }
@@ -193,16 +205,16 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public MainViewModel()
     {
-        GoHostCommand         = ReactiveCommand.Create(() => { Screen = AppScreen.Host; });
-        GoViewerCommand       = ReactiveCommand.Create(() => { Screen = AppScreen.Viewer; });
-        BackCommand           = ReactiveCommand.Create(GoBack);
-        ConnectDirectCommand  = ReactiveCommand.CreateFromTask(ConnectDirect);
-        ConnectViaCodeCommand = ReactiveCommand.CreateFromTask(ConnectViaCode);
+        GoHostCommand          = ReactiveCommand.Create(() => { Screen = AppScreen.Host; });
+        GoViewerCommand        = ReactiveCommand.Create(() => { Screen = AppScreen.Viewer; });
+        BackCommand            = ReactiveCommand.Create(GoBack);
+        ConnectDirectCommand   = ReactiveCommand.CreateFromTask(ConnectDirect);
+        ConnectViaCodeCommand  = ReactiveCommand.CreateFromTask(ConnectViaCode);
         StartDirectHostCommand = ReactiveCommand.CreateFromTask(StartDirectHost);
-        RegisterHostCommand   = ReactiveCommand.CreateFromTask(RegisterWithRouter);
-        StopHostCommand       = ReactiveCommand.Create(StopHost);
-        CopyCodeCommand       = ReactiveCommand.Create(CopyCode);
-        DisconnectCommand     = ReactiveCommand.Create(DisconnectViewer);
+        RegisterHostCommand    = ReactiveCommand.CreateFromTask(RegisterWithRouter);
+        StopHostCommand        = ReactiveCommand.Create(StopHost);
+        CopyCodeCommand        = ReactiveCommand.Create(CopyCode);
+        DisconnectCommand      = ReactiveCommand.Create(DisconnectViewer);
 
         StartMetricsTimer();
     }
@@ -220,6 +232,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private async Task ConnectDirect()
     {
+        _sessionSecret = "";   // no shared secret for direct LAN connections
         IsConnecting = true;
         Status = $"Connecting to {HostAddress}…";
         try
@@ -239,8 +252,9 @@ public class MainViewModel : ReactiveObject, IDisposable
         Status = "Resolving via router…";
         try
         {
-            string endpoint = await _router.ResolveEndpointAsync(host, port, code);
-            var parts = endpoint.Split(':');
+            var result = await _router.ResolveEndpointAsync(host, port, code);
+            _sessionSecret = result.SessionSecret;
+            var parts = result.HostEndpoint.Split(':');
             _transport = BuildViewerTransport();
             await _transport.ConnectAsync(parts[0], int.Parse(parts[1]), UseTls);
         }
@@ -250,14 +264,23 @@ public class MainViewModel : ReactiveObject, IDisposable
     private ISessionTransport BuildViewerTransport()
     {
         var t = new TcpTransport();
-        t.Connected    += () => Dispatcher.UIThread.Post(() =>
+        t.Connected += async () =>
         {
-            IsConnected  = true;
-            IsConnecting = false;
-            Screen       = AppScreen.LiveScreen;
-            Status       = "Connected";
-            _pingTimer?.Start();
-        });
+            // Send the session secret as the first message so the host can verify us.
+            await t.SendMessageAsync(new NetworkMessage
+            {
+                Type = MessageType.Handshake,
+                Data = Encoding.UTF8.GetBytes(_sessionSecret)
+            });
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsConnected  = true;
+                IsConnecting = false;
+                Screen       = AppScreen.LiveScreen;
+                Status       = "Connected";
+                _pingTimer?.Start();
+            });
+        };
         t.Disconnected += () => Dispatcher.UIThread.Post(() =>
         {
             IsConnected  = false;
@@ -291,6 +314,8 @@ public class MainViewModel : ReactiveObject, IDisposable
     {
         if (!_hostProvider.IsAvailable) { Status = "Host not available on this platform"; return; }
         if (!int.TryParse(HostPort, out int port)) port = 8888;
+        _expectedSessionSecret = "";  // no secret for direct LAN connections
+        _activeHostPort        = port;
         Status = "Starting host…";
         try
         {
@@ -312,16 +337,19 @@ public class MainViewModel : ReactiveObject, IDisposable
         try
         {
             string localIp   = GetLocalEndpoint(host);
-            string code      = await _router.RegisterHostAsync(host, port, localIp);
-            HostConnectionCode = code;
+            var result       = await _router.RegisterHostAsync(host, port, localIp);
+            _expectedSessionSecret = result.SessionSecret;
+            _activeHostPort        = 8888;
+
+            HostConnectionCode = result.ConnectionCode;
             ShowCodeCard = true;
 
             SetupHostServices();
             _hostTransport = BuildHostTransport();
             await _hostTransport.StartServerAsync(8888, HostTlsEnabled);
             StartCaptureTimer();
-            HostStatus = $"Ready — code: {code}";
-            Status = $"Host registered. Share code: {code}";
+            HostStatus = $"Ready — code: {result.ConnectionCode}";
+            Status = $"Host registered. Share code: {result.ConnectionCode}";
         }
         catch (Exception ex) { Status = $"Router error: {ex.Message}"; }
     }
@@ -343,46 +371,60 @@ public class MainViewModel : ReactiveObject, IDisposable
     private ISessionTransport BuildHostTransport()
     {
         var t = new TcpTransport();
-        t.Connected += async () =>
+        t.Connected += () =>
         {
-            bool allowed = ConsentCallback != null
-                ? await ConsentCallback("incoming viewer")
-                : true;
-
-            if (!allowed)
-            {
-                Dispatcher.UIThread.Post(() => { HostStatus = "Connection denied"; Status = "Connection denied"; });
-                t.Disconnect();
-                return;
-            }
-
+            _hostHandshakeComplete = false;
             Dispatcher.UIThread.Post(() =>
             {
-                HostStatus    = "Client connected — sharing screen";
-                IsHostRunning = true;
-                Status        = "Client connected";
+                HostStatus = "Viewer connecting — authenticating…";
+                Status     = "Authenticating viewer…";
             });
         };
-        t.Disconnected += () => Dispatcher.UIThread.Post(() =>
+        t.Disconnected += () => Dispatcher.UIThread.Post(async () =>
         {
+            _sessionWatchdog?.Stop();
+            _hostHandshakeComplete = false;
             HostStatus = "Client disconnected";
             Status     = "Client disconnected";
+            if (IsHostRunning)
+                await RelistenHostAsync();
         });
         t.MessageReceived += OnHostMessage;
         t.Error += ex => Dispatcher.UIThread.Post(() => Status = $"Host error: {ex.Message}");
         return t;
     }
 
+    private async Task RelistenHostAsync()
+    {
+        HostStatus = "Waiting for next connection…";
+        Status     = "Waiting for next connection…";
+        try
+        {
+            _hostTransport?.Dispose();
+            _hostTransport = BuildHostTransport();
+            await _hostTransport.StartServerAsync(_activeHostPort, HostTlsEnabled);
+        }
+        catch (Exception ex)
+        {
+            Status = $"Re-listen error: {ex.Message}";
+            IsHostRunning = false;
+        }
+    }
+
     private void StopHost()
     {
         _captureTimer?.Stop();
+        _sessionWatchdog?.Stop();
+        _sessionWatchdog?.Dispose();
+        _sessionWatchdog = null;
         _hostTransport?.Disconnect();
         _capture?.Dispose();
         _wsServer?.Stop();
-        _hostTransport = null;
-        _capture       = null;
-        _input         = null;
-        _wsServer      = null;
+        _hostTransport         = null;
+        _capture               = null;
+        _input                 = null;
+        _wsServer              = null;
+        _hostHandshakeComplete = false;
         IsHostRunning  = false;
         ShowCodeCard   = false;
         ShowWebViewer  = false;
@@ -397,6 +439,27 @@ public class MainViewModel : ReactiveObject, IDisposable
             _ = ClipboardCallback(HostConnectionCode);
             Status = "Code copied to clipboard";
         }
+    }
+
+    // ── Session watchdog (host side) ──────────────────────────────────────────
+
+    private void StartSessionWatchdog()
+    {
+        _sessionWatchdog?.Dispose();
+        _sessionWatchdog = new System.Timers.Timer(30_000) { AutoReset = false };
+        _sessionWatchdog.Elapsed += (_, _) => Dispatcher.UIThread.Post(() =>
+        {
+            HostStatus = "Session timed out — viewer inactive";
+            Status     = "Session timed out";
+            _hostTransport?.Disconnect();
+        });
+        _sessionWatchdog.Start();
+    }
+
+    private void ResetSessionWatchdog()
+    {
+        _sessionWatchdog?.Stop();
+        _sessionWatchdog?.Start();
     }
 
     // ── Capture loop ──────────────────────────────────────────────────────────
@@ -446,8 +509,18 @@ public class MainViewModel : ReactiveObject, IDisposable
     {
         switch (msg.Type)
         {
-            case MessageType.FullScreen:  ApplyFullScreen(msg.Data);            break;
-            case MessageType.ScreenDelta: ApplyDelta(ScreenDelta.Deserialize(msg.Data)); break;
+            case MessageType.FullScreen:  ApplyFullScreen(msg.Data);                                   break;
+            case MessageType.ScreenDelta: ApplyDelta(ScreenDelta.Deserialize(msg.Data));               break;
+            case MessageType.HandshakeOk:
+                // Host accepted — screen frames will start arriving; nothing to do here.
+                break;
+            case MessageType.HandshakeFailed:
+                Dispatcher.UIThread.Post(() =>
+                {
+                    Status = "Host rejected: invalid session token";
+                    DisconnectViewer();
+                });
+                break;
             case MessageType.Pong:
                 if (msg.Data.Length >= 8)
                     _lastLatencyMs = (int)Math.Max(0,
@@ -459,6 +532,15 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void OnHostMessage(NetworkMessage msg)
     {
+        if (!_hostHandshakeComplete)
+        {
+            HandleHandshake(msg);
+            return;
+        }
+
+        // Reset the inactivity watchdog on every message.
+        ResetSessionWatchdog();
+
         switch (msg.Type)
         {
             case MessageType.MouseMove:
@@ -487,6 +569,52 @@ public class MainViewModel : ReactiveObject, IDisposable
         }
     }
 
+    private void HandleHandshake(NetworkMessage msg)
+    {
+        if (msg.Type != MessageType.Handshake)
+        {
+            Dispatcher.UIThread.Post(() => { HostStatus = "Bad handshake — disconnecting"; Status = "Bad handshake"; });
+            _hostTransport?.Disconnect();
+            return;
+        }
+
+        string secret = Encoding.UTF8.GetString(msg.Data);
+        if (secret != _expectedSessionSecret)
+        {
+            _ = _hostTransport?.SendMessageAsync(new NetworkMessage { Type = MessageType.HandshakeFailed });
+            Dispatcher.UIThread.Post(() => { HostStatus = "Rejected: invalid token"; Status = "Rejected: invalid session token"; });
+            _hostTransport?.Disconnect();
+            return;
+        }
+
+        _hostHandshakeComplete = true;
+        var transport = _hostTransport;
+        _ = transport?.SendMessageAsync(new NetworkMessage { Type = MessageType.HandshakeOk });
+
+        // Show the consent dialog off the receive thread.
+        _ = Task.Run(async () =>
+        {
+            bool allowed = ConsentCallback != null
+                ? await ConsentCallback("incoming viewer")
+                : true;
+
+            if (!allowed)
+            {
+                Dispatcher.UIThread.Post(() => { HostStatus = "Connection denied"; Status = "Connection denied"; });
+                transport?.Disconnect();
+                return;
+            }
+
+            StartSessionWatchdog();
+            Dispatcher.UIThread.Post(() =>
+            {
+                HostStatus    = "Client connected — sharing screen";
+                IsHostRunning = true;
+                Status        = "Client connected";
+            });
+        });
+    }
+
     // ── Screen rendering ──────────────────────────────────────────────────────
 
     private void ApplyFullScreen(byte[] data)
@@ -506,9 +634,9 @@ public class MainViewModel : ReactiveObject, IDisposable
         EnsureCanvas(
             Math.Max(_canvasWidth,  delta.X + delta.Width),
             Math.Max(_canvasHeight, delta.Y + delta.Height));
-        using var ms    = new MemoryStream(delta.ImageData);
-        var patch       = new Bitmap(ms);
-        using var dc    = _canvas!.CreateDrawingContext();
+        using var ms = new MemoryStream(delta.ImageData);
+        var patch    = new Bitmap(ms);
+        using var dc = _canvas!.CreateDrawingContext();
         dc.DrawImage(patch, new Rect(delta.X, delta.Y, delta.Width, delta.Height));
         Dispatcher.UIThread.Post(() => { RemoteScreen = _canvas; _renderedFrames++; });
     }
@@ -619,6 +747,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         DisconnectViewer();
         _metricsTimer?.Dispose();
         _pingTimer?.Dispose();
+        _sessionWatchdog?.Dispose();
         _canvas?.Dispose();
     }
 }

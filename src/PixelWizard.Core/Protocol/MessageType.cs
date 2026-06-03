@@ -24,6 +24,11 @@ namespace PixelWizard.Core.Protocol
         // Health
         Ping = 30,
         Pong = 31,
-        QualityPreset = 32
+        QualityPreset = 32,
+
+        // Handshake
+        Handshake       = 40,
+        HandshakeOk     = 41,
+        HandshakeFailed = 42
     }
 }

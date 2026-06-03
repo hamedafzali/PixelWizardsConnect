@@ -31,4 +31,9 @@
     <ProjectReference Include="..\..\src\PixelWizard.WindowsHost\PixelWizard.WindowsHost.csproj" />
   </ItemGroup>
 
+  <!-- LinuxHost wired in for the cross-platform target (Mac + Linux) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <ProjectReference Include="..\..\src\PixelWizard.LinuxHost\PixelWizard.LinuxHost.csproj" />
+  </ItemGroup>
+
 </Project>

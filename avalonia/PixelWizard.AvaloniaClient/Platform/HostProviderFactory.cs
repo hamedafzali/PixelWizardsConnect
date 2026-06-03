@@ -2,6 +2,7 @@
 using PixelWizard.WindowsHost;
 #else
 using PixelWizard.AvaloniaClient.Platform.Mac;
+using PixelWizard.LinuxHost;
 #endif
 
 using System;
@@ -16,10 +17,10 @@ public static class HostProviderFactory
 #if WINDOWS
         return new WindowsHostProvider();
 #else
-        // On macOS return the CoreGraphics provider; on Linux it gracefully reports unavailable.
         if (OperatingSystem.IsMacOS())
             return new MacHostProvider();
-
+        if (OperatingSystem.IsLinux())
+            return new LinuxHostProvider();
         return new NullHostProvider();
 #endif
     }

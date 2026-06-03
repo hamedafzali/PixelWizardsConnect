@@ -11,7 +11,7 @@ namespace PixelWizard.Transport
     {
         private readonly HttpClient _http = new();
 
-        public async Task<string> RegisterHostAsync(string routerHost, int routerPort, string hostEndpoint)
+        public async Task<RouterRegistrationResult> RegisterHostAsync(string routerHost, int routerPort, string hostEndpoint)
         {
             var body = new { hostId = Guid.NewGuid().ToString(), hostName = Environment.MachineName, hostEndpoint };
             var json = JsonSerializer.Serialize(body);
@@ -21,11 +21,18 @@ namespace PixelWizard.Transport
 
             response.EnsureSuccessStatusCode();
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            return doc.RootElement.GetProperty("connectionCode").GetString()
+            var root = doc.RootElement;
+
+            string code   = root.GetProperty("connectionCode").GetString()
                 ?? throw new InvalidOperationException("Router did not return a connection code.");
+            string secret = root.TryGetProperty("sessionSecret", out var s)
+                ? (s.GetString() ?? "")
+                : "";
+
+            return new RouterRegistrationResult(code, secret);
         }
 
-        public async Task<string> ResolveEndpointAsync(string routerHost, int routerPort, string connectionCode)
+        public async Task<RouterConnectResult> ResolveEndpointAsync(string routerHost, int routerPort, string connectionCode)
         {
             var body = new { connectionCode, clientId = Guid.NewGuid().ToString() };
             var json = JsonSerializer.Serialize(body);
@@ -37,7 +44,7 @@ namespace PixelWizard.Transport
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             var root = doc.RootElement;
 
-            bool success = root.TryGetProperty("success", out var s) && s.GetBoolean();
+            bool success = root.TryGetProperty("success", out var sv) && sv.GetBoolean();
             if (!success)
             {
                 string msg = root.TryGetProperty("message", out var m)
@@ -46,8 +53,13 @@ namespace PixelWizard.Transport
                 throw new InvalidOperationException(msg);
             }
 
-            return root.GetProperty("hostEndpoint").GetString()
+            string endpoint = root.GetProperty("hostEndpoint").GetString()
                 ?? throw new InvalidOperationException("Router did not return a host endpoint.");
+            string secret = root.TryGetProperty("sessionSecret", out var sec)
+                ? (sec.GetString() ?? "")
+                : "";
+
+            return new RouterConnectResult(endpoint, secret);
         }
     }
 }
