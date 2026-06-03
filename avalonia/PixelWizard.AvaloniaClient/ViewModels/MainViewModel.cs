@@ -601,8 +601,9 @@ public class MainViewModel : ReactiveObject, IDisposable
         var transport = _hostTransport;
         _ = transport?.SendMessageAsync(new NetworkMessage { Type = MessageType.HandshakeOk });
 
-        // Show the consent dialog off the receive thread.
-        _ = Task.Run(async () =>
+        // ShowDialog requires the UI thread — use InvokeAsync so the consent dialog
+        // and all follow-up state updates run there.
+        _ = Dispatcher.UIThread.InvokeAsync(async () =>
         {
             bool allowed = ConsentCallback != null
                 ? await ConsentCallback("incoming viewer")
@@ -610,18 +611,16 @@ public class MainViewModel : ReactiveObject, IDisposable
 
             if (!allowed)
             {
-                Dispatcher.UIThread.Post(() => { HostStatus = "Connection denied"; Status = "Connection denied"; });
+                HostStatus = "Connection denied";
+                Status     = "Connection denied";
                 transport?.Disconnect();
                 return;
             }
 
             StartSessionWatchdog();
-            Dispatcher.UIThread.Post(() =>
-            {
-                HostStatus    = "Client connected — sharing screen";
-                IsHostRunning = true;
-                Status        = "Client connected";
-            });
+            HostStatus    = "Client connected — sharing screen";
+            IsHostRunning = true;
+            Status        = "Client connected";
         });
     }
 
