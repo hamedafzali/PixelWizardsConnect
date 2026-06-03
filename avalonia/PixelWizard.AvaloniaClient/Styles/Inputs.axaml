@@ -1,0 +1,49 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ═══ TextBox global ══════════════════════════════════════════════════ -->
+    <Style Selector="TextBox">
+        <Setter Property="Background"               Value="#F9FAFB"/>
+        <Setter Property="BorderBrush"              Value="#E2E8F0"/>
+        <Setter Property="BorderThickness"          Value="1"/>
+        <Setter Property="CornerRadius"             Value="8"/>
+        <Setter Property="Padding"                  Value="10,0"/>
+        <Setter Property="Height"                   Value="36"/>
+        <Setter Property="FontSize"                 Value="13"/>
+        <Setter Property="Foreground"               Value="#0F172A"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBox:focus">
+        <Setter Property="BorderBrush"    Value="#2563EB"/>
+        <Setter Property="BorderThickness" Value="2"/>
+        <Setter Property="Background"     Value="White"/>
+    </Style>
+    <Style Selector="TextBox:focus-visible">
+        <Setter Property="BorderBrush"    Value="#2563EB"/>
+        <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="TextBox:disabled">
+        <Setter Property="Opacity" Value="0.5"/>
+    </Style>
+
+    <!-- ═══ ComboBox global ═════════════════════════════════════════════════ -->
+    <Style Selector="ComboBox">
+        <Setter Property="Background"               Value="#F9FAFB"/>
+        <Setter Property="BorderBrush"              Value="#E2E8F0"/>
+        <Setter Property="BorderThickness"          Value="1"/>
+        <Setter Property="CornerRadius"             Value="8"/>
+        <Setter Property="Height"                   Value="36"/>
+        <Setter Property="FontSize"                 Value="13"/>
+        <Setter Property="Foreground"               Value="#0F172A"/>
+        <Setter Property="Padding"                  Value="10,0"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ComboBox:focus-visible">
+        <Setter Property="BorderBrush"    Value="#2563EB"/>
+        <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="ComboBox:pointerover">
+        <Setter Property="BorderBrush" Value="#CBD5E1"/>
+    </Style>
+
+</Styles>

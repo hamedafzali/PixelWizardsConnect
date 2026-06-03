@@ -1,4 +1,5 @@
 using System;
+using System.Reactive;
 using Avalonia.Controls;
 using Avalonia.Input;
 using PixelWizard.AvaloniaClient.Input;
@@ -35,6 +36,18 @@ public partial class MainWindow : Window
         if (vk == 0) return;
         e.Handled = true;
         vm.SendKey(vk, isDown: false);
+    }
+
+    // ── Enter key handlers for text inputs ───────────────────────────────────
+
+    private void OnCodeKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Return) { VM?.ConnectViaCodeCommand.Execute(Unit.Default); e.Handled = true; }
+    }
+
+    private void OnAddressKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Return) { VM?.ConnectDirectCommand.Execute(Unit.Default); e.Handled = true; }
     }
 
     // ── Mouse ─────────────────────────────────────────────────────────────────

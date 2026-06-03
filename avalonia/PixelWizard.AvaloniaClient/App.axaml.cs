@@ -101,6 +101,21 @@ public class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    // ── Tray icon click handlers (wired from AXAML NativeMenuItem) ────────────
+
+    public void OnTrayShow(object? sender, EventArgs e)
+    {
+        _mainWindow?.Show();
+        _mainWindow?.Activate();
+    }
+
+    public void OnTrayQuit(object? sender, EventArgs e)
+    {
+        _vm?.Dispose();
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime life)
+            life.Shutdown();
+    }
+
     // ── Feature 7: Build tray icon programmatically ───────────────────────────
 
     private static TrayIcon? SetupTrayIcon(MainWindow window, MainViewModel vm)
@@ -112,27 +127,6 @@ public class App : Application
 
             var trayIcon = trayIcons[0];
             trayIcon.Icon = MakeTrayIcon();
-
-            // Wire menu items
-            if (trayIcon.Menu != null)
-            {
-                foreach (var item in trayIcon.Menu.Items)
-                {
-                    if (item is NativeMenuItem nmi)
-                    {
-                        if (nmi.Header == "Show")
-                            nmi.Click += (_, _) => { window.Show(); window.Activate(); };
-                        else if (nmi.Header == "Quit")
-                            nmi.Click += (_, _) =>
-                            {
-                                vm.Dispose();
-                                if (Application.Current?.ApplicationLifetime is
-                                    IClassicDesktopStyleApplicationLifetime life)
-                                    life.Shutdown();
-                            };
-                    }
-                }
-            }
 
             return trayIcon;
         }

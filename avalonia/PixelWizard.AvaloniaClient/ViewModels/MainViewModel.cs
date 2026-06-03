@@ -106,6 +106,8 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     // ── Zoom ──────────────────────────────────────────────────────────────────
 
+    private static readonly double[] _zoomPresets = { 0, 0.5, 0.75, 1.0, 1.5, 2.0 };
+
     private double _viewScale = 0;
     public double ViewScale
     {
@@ -123,6 +125,18 @@ public class MainViewModel : ReactiveObject, IDisposable
     public string ZoomLabel       => _viewScale <= 0 ? "Fit" : $"{(int)(_viewScale * 100)}%";
     public double ScaledImageWidth  => _remoteScreen != null && _viewScale > 0 ? _remoteScreen.Size.Width  * _viewScale : 0;
     public double ScaledImageHeight => _remoteScreen != null && _viewScale > 0 ? _remoteScreen.Size.Height * _viewScale : 0;
+
+    private int _zoomPresetIndex = 0;
+    public int ZoomPresetIndex
+    {
+        get => _zoomPresetIndex;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _zoomPresetIndex, value);
+            if (value >= 0 && value < _zoomPresets.Length)
+                ViewScale = _zoomPresets[value];
+        }
+    }
 
     private bool _keyboardActive;
     public bool KeyboardActive { get => _keyboardActive; set => this.RaiseAndSetIfChanged(ref _keyboardActive, value); }
@@ -345,12 +359,26 @@ public class MainViewModel : ReactiveObject, IDisposable
         StopHostCommand           = ReactiveCommand.Create(StopHost);
         CopyCodeCommand           = ReactiveCommand.Create(CopyCode);
         DisconnectCommand         = ReactiveCommand.Create(DisconnectViewer);
-        FitWindowCommand          = ReactiveCommand.Create(() => { ViewScale = 0; });
-        Zoom50Command             = ReactiveCommand.Create(() => { ViewScale = 0.5; });
-        Zoom75Command             = ReactiveCommand.Create(() => { ViewScale = 0.75; });
-        Zoom100Command            = ReactiveCommand.Create(() => { ViewScale = 1.0; });
-        ZoomInCommand             = ReactiveCommand.Create(() => { ViewScale = _viewScale <= 0 ? 1.0 : Math.Min(_viewScale + 0.25, 4.0); });
-        ZoomOutCommand            = ReactiveCommand.Create(() => { if (_viewScale > 0) ViewScale = Math.Max(_viewScale - 0.25, 0.25); });
+        FitWindowCommand          = ReactiveCommand.Create(() => { ZoomPresetIndex = 0; });
+        Zoom50Command             = ReactiveCommand.Create(() => { ZoomPresetIndex = 1; });
+        Zoom75Command             = ReactiveCommand.Create(() => { ZoomPresetIndex = 2; });
+        Zoom100Command            = ReactiveCommand.Create(() => { ZoomPresetIndex = 3; });
+        ZoomInCommand             = ReactiveCommand.Create(() =>
+        {
+            int next = _zoomPresets.Length - 1;
+            for (int i = 0; i < _zoomPresets.Length - 1; i++)
+                if (_zoomPresets[i] <= _viewScale && _viewScale < _zoomPresets[i + 1]) { next = i + 1; break; }
+            if (_viewScale <= 0) next = 3; // jump to 100% from Fit
+            ZoomPresetIndex = Math.Min(next, _zoomPresets.Length - 1);
+        });
+        ZoomOutCommand            = ReactiveCommand.Create(() =>
+        {
+            if (_viewScale <= 0) return;
+            int prev = 0;
+            for (int i = 1; i < _zoomPresets.Length; i++)
+                if (_zoomPresets[i] < _viewScale || (_zoomPresets[i] <= _viewScale && i > 0)) { prev = i - 1; break; }
+            ZoomPresetIndex = Math.Max(prev, 0);
+        });
         SendClipboardCommand      = ReactiveCommand.CreateFromTask(SendClipboardAsync);
         ToggleChatCommand         = ReactiveCommand.Create(() => { ChatVisible = !ChatVisible; });
         SendChatCommand           = ReactiveCommand.Create(SendChatMessage);

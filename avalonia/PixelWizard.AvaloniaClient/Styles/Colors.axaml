@@ -1,0 +1,38 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="Brush.Primary"          Color="#2563EB"/>
+    <SolidColorBrush x:Key="Brush.Primary.Hover"    Color="#1D4ED8"/>
+    <SolidColorBrush x:Key="Brush.Primary.Pressed"  Color="#1E40AF"/>
+    <SolidColorBrush x:Key="Brush.Sidebar.Bg"       Color="#0F172A"/>
+    <SolidColorBrush x:Key="Brush.Sidebar.Surface"  Color="#1E293B"/>
+    <SolidColorBrush x:Key="Brush.App.Bg"           Color="#F8FAFC"/>
+    <SolidColorBrush x:Key="Brush.Surface"          Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Brush.Surface.Subtle"   Color="#F8FAFC"/>
+    <SolidColorBrush x:Key="Brush.Surface.Input"    Color="#F9FAFB"/>
+    <SolidColorBrush x:Key="Brush.Border"           Color="#E2E8F0"/>
+    <SolidColorBrush x:Key="Brush.Border.Focus"     Color="#2563EB"/>
+    <SolidColorBrush x:Key="Brush.Text.Primary"     Color="#0F172A"/>
+    <SolidColorBrush x:Key="Brush.Text.Secondary"   Color="#374151"/>
+    <SolidColorBrush x:Key="Brush.Text.Muted"       Color="#64748B"/>
+    <SolidColorBrush x:Key="Brush.Text.OnDark"      Color="#F1F5F9"/>
+    <SolidColorBrush x:Key="Brush.Text.OnDarkMuted" Color="#94A3B8"/>
+    <SolidColorBrush x:Key="Brush.Success"          Color="#16A34A"/>
+    <SolidColorBrush x:Key="Brush.Success.Bg"       Color="#F0FDF4"/>
+    <SolidColorBrush x:Key="Brush.Error"            Color="#DC2626"/>
+    <SolidColorBrush x:Key="Brush.Error.Bg"         Color="#FFF1F2"/>
+    <SolidColorBrush x:Key="Brush.Error.Border"     Color="#FECACA"/>
+    <SolidColorBrush x:Key="Brush.Warning"          Color="#D97706"/>
+    <SolidColorBrush x:Key="Brush.Warning.Bg"       Color="#FFFBEB"/>
+    <SolidColorBrush x:Key="Brush.Warning.Border"   Color="#FDE68A"/>
+    <SolidColorBrush x:Key="Brush.Toolbar.Bg"       Color="#0F172A"/>
+    <SolidColorBrush x:Key="Brush.Toolbar.Surface"  Color="#1E293B"/>
+    <SolidColorBrush x:Key="Brush.Toolbar.Hover"    Color="#334155"/>
+    <SolidColorBrush x:Key="Brush.Chat.Bg"          Color="#0F172A"/>
+    <SolidColorBrush x:Key="Brush.Neutral.200"      Color="#E2E8F0"/>
+    <SolidColorBrush x:Key="Brush.Neutral.300"      Color="#CBD5E1"/>
+    <SolidColorBrush x:Key="Brush.Neutral.400"      Color="#94A3B8"/>
+    <SolidColorBrush x:Key="Brush.Neutral.500"      Color="#64748B"/>
+    <SolidColorBrush x:Key="Brush.Neutral.600"      Color="#475569"/>
+
+</ResourceDictionary>

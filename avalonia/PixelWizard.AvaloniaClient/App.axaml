@@ -3,19 +3,42 @@
              x:Class="PixelWizard.AvaloniaClient.App"
              RequestedThemeVariant="Light">
 
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://PixelWizard.AvaloniaClient/Styles/Colors.axaml"/>
+                <ResourceInclude Source="avares://PixelWizard.AvaloniaClient/Styles/Radius.axaml"/>
+                <ResourceInclude Source="avares://PixelWizard.AvaloniaClient/Styles/Typography.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
+        <StyleInclude Source="avares://PixelWizard.AvaloniaClient/Styles/Buttons.axaml"/>
+        <StyleInclude Source="avares://PixelWizard.AvaloniaClient/Styles/Inputs.axaml"/>
+        <Style Selector="TextBlock">
+            <Setter Property="FontFamily" Value="{StaticResource Font.Sans}"/>
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="FontFamily" Value="{StaticResource Font.Sans}"/>
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="FontFamily" Value="{StaticResource Font.Sans}"/>
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="FontFamily" Value="{StaticResource Font.Sans}"/>
+        </Style>
     </Application.Styles>
 
-    <!-- Feature 7: System tray icon -->
     <TrayIcon.Icons>
         <TrayIcons>
             <TrayIcon ToolTipText="PixelWizard Connect">
                 <TrayIcon.Menu>
                     <NativeMenu>
-                        <NativeMenuItem Header="Show"/>
+                        <NativeMenuItem Header="Show"  Click="OnTrayShow"/>
                         <NativeMenuItemSeparator/>
-                        <NativeMenuItem Header="Quit"/>
+                        <NativeMenuItem Header="Quit"  Click="OnTrayQuit"/>
                     </NativeMenu>
                 </TrayIcon.Menu>
             </TrayIcon>

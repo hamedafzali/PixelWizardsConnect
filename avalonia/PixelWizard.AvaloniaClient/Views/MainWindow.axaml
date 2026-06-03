@@ -5,116 +5,25 @@
         Title="PixelWizard Connect"
         Width="880" Height="620"
         MinWidth="720" MinHeight="540"
-        Background="#F0F4F8"
+        Background="{StaticResource Brush.App.Bg}"
+        FontFamily="{StaticResource Font.Sans}"
         x:DataType="vm:MainViewModel"
         KeyDown="OnKeyDown"
         KeyUp="OnKeyUp">
 
-    <Window.Styles>
-        <Style Selector="Button.primary">
-            <Setter Property="Background"  Value="#2563EB"/>
-            <Setter Property="Foreground"  Value="White"/>
-            <Setter Property="CornerRadius" Value="8"/>
-            <Setter Property="Height"      Value="38"/>
-            <Setter Property="FontSize"    Value="13"/>
-            <Setter Property="FontWeight"  Value="SemiBold"/>
-            <Setter Property="Cursor"      Value="Hand"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-        </Style>
-        <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#1D4ED8"/>
-        </Style>
-        <Style Selector="Button.primary:disabled /template/ ContentPresenter">
-            <Setter Property="Opacity" Value="0.4"/>
-        </Style>
-
-        <Style Selector="Button.ghost">
-            <Setter Property="Background"         Value="Transparent"/>
-            <Setter Property="Foreground"         Value="#6B7280"/>
-            <Setter Property="BorderBrush"        Value="#E5E7EB"/>
-            <Setter Property="BorderThickness"    Value="1"/>
-            <Setter Property="CornerRadius"       Value="8"/>
-            <Setter Property="FontSize"           Value="12"/>
-            <Setter Property="Cursor"             Value="Hand"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-        </Style>
-        <Style Selector="Button.ghost:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#F9FAFB"/>
-        </Style>
-
-        <Style Selector="Button.danger">
-            <Setter Property="Background"         Value="#FEF2F2"/>
-            <Setter Property="Foreground"         Value="#EF4444"/>
-            <Setter Property="BorderBrush"        Value="#FECACA"/>
-            <Setter Property="BorderThickness"    Value="1"/>
-            <Setter Property="CornerRadius"       Value="8"/>
-            <Setter Property="FontSize"           Value="13"/>
-            <Setter Property="FontWeight"         Value="SemiBold"/>
-            <Setter Property="Cursor"             Value="Hand"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-        </Style>
-
-        <Style Selector="Button.toolbar-btn">
-            <Setter Property="Background"  Value="#1E293B"/>
-            <Setter Property="Foreground"  Value="#E2E8F0"/>
-            <Setter Property="CornerRadius" Value="6"/>
-            <Setter Property="Height"      Value="30"/>
-            <Setter Property="FontSize"    Value="12"/>
-            <Setter Property="Padding"     Value="12,0"/>
-            <Setter Property="Cursor"      Value="Hand"/>
-            <Setter Property="HorizontalContentAlignment" Value="Center"/>
-        </Style>
-        <Style Selector="Button.toolbar-btn:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#334155"/>
-        </Style>
-
-        <Style Selector="Button.card">
-            <Setter Property="Background"      Value="White"/>
-            <Setter Property="BorderBrush"     Value="#E5E7EB"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius"    Value="10"/>
-            <Setter Property="Padding"         Value="0"/>
-            <Setter Property="Cursor"          Value="Hand"/>
-        </Style>
-        <Style Selector="Button.card:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#FAFBFF"/>
-        </Style>
-
-        <Style Selector="TextBox">
-            <Setter Property="Background"         Value="#F9FAFB"/>
-            <Setter Property="BorderBrush"        Value="#E5E7EB"/>
-            <Setter Property="BorderThickness"    Value="1"/>
-            <Setter Property="CornerRadius"       Value="8"/>
-            <Setter Property="Padding"            Value="10,0"/>
-            <Setter Property="Height"             Value="38"/>
-            <Setter Property="FontSize"           Value="13"/>
-            <Setter Property="Foreground"         Value="#111827"/>
-            <Setter Property="VerticalContentAlignment" Value="Center"/>
-        </Style>
-        <Style Selector="TextBox:focus">
-            <Setter Property="BorderBrush" Value="#2563EB"/>
-            <Setter Property="Background"  Value="White"/>
-        </Style>
-    </Window.Styles>
-
     <Grid RowDefinitions="*,32">
 
         <!-- ════ Main layout ════ -->
-        <Grid Grid.Row="0" Margin="16">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="224"/>
-                <ColumnDefinition Width="14"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+        <Grid Grid.Row="0" Margin="16" ColumnDefinitions="224,*" ColumnSpacing="16">
 
             <!-- ══ Sidebar ══ -->
-            <Border Grid.Column="0" Background="#0F172A" CornerRadius="12">
+            <Border Grid.Column="0" Background="{StaticResource Brush.Sidebar.Bg}" CornerRadius="12">
                 <DockPanel Margin="20" LastChildFill="False">
 
                     <!-- Logo -->
                     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,0">
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                            <Border Width="30" Height="30" Background="#2563EB"
+                            <Border Width="30" Height="30" Background="{StaticResource Brush.Primary}"
                                     CornerRadius="8" Margin="0,0,10,0">
                                 <TextBlock Text="PW" FontSize="12" FontWeight="Bold"
                                            Foreground="White"
@@ -123,38 +32,45 @@
                             </Border>
                             <TextBlock Text="PixelWizard"
                                        FontSize="15" FontWeight="SemiBold"
-                                       Foreground="#F1F5F9" VerticalAlignment="Center"/>
+                                       Foreground="{StaticResource Brush.Text.OnDark}"
+                                       VerticalAlignment="Center"/>
                         </StackPanel>
                         <TextBlock Text="Connect" FontSize="11"
-                                   Foreground="#94A3B8" Margin="40,0,0,12"/>
+                                   Foreground="{StaticResource Brush.Text.OnDarkMuted}"
+                                   Margin="40,0,0,12"/>
                     </StackPanel>
 
                     <!-- Footer -->
                     <StackPanel DockPanel.Dock="Bottom" Spacing="8">
 
                         <!-- Session stats when viewing -->
-                        <Border Background="#1E293B" CornerRadius="8" Padding="14,12"
+                        <Border Background="{StaticResource Brush.Sidebar.Surface}" CornerRadius="8"
+                                Padding="16,12"
                                 IsVisible="{Binding ShowScreenDisplay}">
                             <StackPanel Spacing="0">
                                 <TextBlock Text="SESSION" FontSize="9" FontWeight="SemiBold"
-                                           Foreground="#475569" Margin="0,0,0,10"/>
-                                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                                           Foreground="{StaticResource Brush.Neutral.400}"
+                                           Margin="0,0,0,10"/>
+                                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
                                     <TextBlock Grid.Column="0" Text="FPS"
-                                               FontSize="12" Foreground="#94A3B8"/>
+                                               FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
                                     <TextBlock Grid.Column="1" Text="{Binding FpsText}"
-                                               FontSize="12" FontWeight="SemiBold" Foreground="#F1F5F9"/>
+                                               FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{StaticResource Brush.Text.OnDark}"/>
                                 </Grid>
-                                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,6">
+                                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
                                     <TextBlock Grid.Column="0" Text="Latency"
-                                               FontSize="12" Foreground="#94A3B8"/>
+                                               FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
                                     <TextBlock Grid.Column="1" Text="{Binding LatencyText}"
-                                               FontSize="12" FontWeight="SemiBold" Foreground="#F1F5F9"/>
+                                               FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{StaticResource Brush.Text.OnDark}"/>
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBlock Grid.Column="0" Text="Down"
-                                               FontSize="12" Foreground="#94A3B8"/>
+                                               FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
                                     <TextBlock Grid.Column="1" Text="{Binding BandwidthText}"
-                                               FontSize="12" FontWeight="SemiBold" Foreground="#F1F5F9"/>
+                                               FontSize="12" FontWeight="SemiBold"
+                                               Foreground="{StaticResource Brush.Text.OnDark}"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -162,7 +78,7 @@
                         <!-- Keyboard badge -->
                         <Border Background="#14532D" CornerRadius="6" Padding="10,7"
                                 IsVisible="{Binding KeyboardActive}">
-                            <StackPanel Orientation="Horizontal" Spacing="7">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Ellipse Width="6" Height="6" Fill="#10B981" VerticalAlignment="Center"/>
                                 <TextBlock Text="Keyboard captured"
                                            FontSize="11" Foreground="#6EE7B7" VerticalAlignment="Center"/>
@@ -170,38 +86,51 @@
                         </Border>
 
                         <!-- TLS badge -->
-                        <Border Background="#1E293B" CornerRadius="6" Padding="10,7">
-                            <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Border Background="{StaticResource Brush.Sidebar.Surface}" CornerRadius="6" Padding="10,7">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Ellipse Width="6" Height="6" Fill="#10B981" VerticalAlignment="Center"/>
                                 <TextBlock Text="TLS encrypted"
-                                           FontSize="11" Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                           FontSize="11"
+                                           Foreground="{StaticResource Brush.Text.OnDarkMuted}"
+                                           VerticalAlignment="Center"/>
                             </StackPanel>
                         </Border>
 
-                        <TextBlock Text="v0.1 · self-hosted" FontSize="10" Foreground="#334155"/>
+                        <TextBlock Text="v0.1 · self-hosted" FontSize="10"
+                                   Foreground="{StaticResource Brush.Neutral.500}"/>
                     </StackPanel>
 
                 </DockPanel>
             </Border>
 
             <!-- ══ Right panel ══ -->
-            <Border Grid.Column="2" Background="White" CornerRadius="12"
+            <Border Grid.Column="1" Background="{StaticResource Brush.Surface}" CornerRadius="12"
                     BoxShadow="0 0 0 1 #E5E7EB, 0 4 16 0 #18000000">
                 <Grid>
 
                     <!-- ─── MODE SELECTION ─── -->
                     <StackPanel IsVisible="{Binding ShowModeSelection}"
                                 VerticalAlignment="Center" Margin="40,0">
+                        <StackPanel.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="CubicEaseOut"/>
+                            </Transitions>
+                        </StackPanel.Transitions>
 
-                        <TextBlock Text="Welcome" FontSize="26" FontWeight="Bold"
-                                   Foreground="#111827" Margin="0,0,0,6"/>
+                        <TextBlock Text="Get started"
+                                   FontSize="26" FontWeight="Bold"
+                                   Foreground="{StaticResource Brush.Text.Primary}"
+                                   Margin="0,0,0,4"/>
                         <TextBlock Text="What would you like to do?"
-                                   FontSize="14" Foreground="#6B7280" Margin="0,0,0,32"/>
+                                   FontSize="14"
+                                   Foreground="{StaticResource Brush.Text.Muted}"
+                                   Margin="0,0,0,32"/>
 
                         <!-- HOST card -->
-                        <Button Classes="card" Margin="0,0,0,12"
+                        <Button Classes="Card" Margin="0,0,0,12"
                                 Command="{Binding GoHostCommand}"
-                                IsEnabled="{Binding CanHost}">
+                                IsEnabled="{Binding CanHost}"
+                                AutomationProperties.Name="Host this computer">
                             <Grid Margin="20,18">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -209,17 +138,21 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Width="44" Height="44"
-                                        Background="#ECFDF5" CornerRadius="10"
-                                        Margin="0,0,16,0">
-                                    <TextBlock Text="📡" FontSize="20"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"/>
+                                        Background="{StaticResource Brush.Success.Bg}"
+                                        CornerRadius="10" Margin="0,0,16,0"
+                                        BorderBrush="#2563EB" BorderThickness="3,0,0,0">
+                                    <Path Width="20" Height="20" Stretch="Uniform"
+                                          StrokeThickness="1.5" Stroke="#16A34A" Fill="Transparent"
+                                          Data="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12 20.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="Host this computer"
                                                FontSize="15" FontWeight="SemiBold"
-                                               Foreground="#111827"/>
-                                    <TextBlock FontSize="12" Foreground="#6B7280" Margin="0,3,0,0">
+                                               Foreground="{StaticResource Brush.Text.Primary}"/>
+                                    <TextBlock FontSize="12"
+                                               Foreground="{StaticResource Brush.Text.Muted}"
+                                               Margin="0,4,0,0">
                                         <TextBlock.Text>
                                             <Binding Path="CanHost"
                                                      StringFormat="{}Share your screen — {0:available on this device;host not available on this platform}"/>
@@ -227,13 +160,14 @@
                                     </TextBlock>
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" Text="›" FontSize="20"
-                                           Foreground="#D1D5DB" VerticalAlignment="Center"
-                                           Margin="12,0,0,0"/>
+                                           Foreground="{StaticResource Brush.Neutral.300}"
+                                           VerticalAlignment="Center" Margin="12,0,0,0"/>
                             </Grid>
                         </Button>
 
                         <!-- VIEWER card -->
-                        <Button Classes="card" Command="{Binding GoViewerCommand}">
+                        <Button Classes="Card" Command="{Binding GoViewerCommand}"
+                                AutomationProperties.Name="Connect to remote computer">
                             <Grid Margin="20,18">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -243,20 +177,23 @@
                                 <Border Grid.Column="0" Width="44" Height="44"
                                         Background="#EFF6FF" CornerRadius="10"
                                         Margin="0,0,16,0">
-                                    <TextBlock Text="🖥" FontSize="20"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"/>
+                                    <Path Width="20" Height="20" Stretch="Uniform"
+                                          StrokeThickness="1.5" Stroke="#2563EB" Fill="Transparent"
+                                          Data="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25z"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="Connect to remote"
                                                FontSize="15" FontWeight="SemiBold"
-                                               Foreground="#111827"/>
+                                               Foreground="{StaticResource Brush.Text.Primary}"/>
                                     <TextBlock Text="View and control another machine"
-                                               FontSize="12" Foreground="#6B7280" Margin="0,3,0,0"/>
+                                               FontSize="12"
+                                               Foreground="{StaticResource Brush.Text.Muted}"
+                                               Margin="0,4,0,0"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" Text="›" FontSize="20"
-                                           Foreground="#D1D5DB" VerticalAlignment="Center"
-                                           Margin="12,0,0,0"/>
+                                           Foreground="{StaticResource Brush.Neutral.300}"
+                                           VerticalAlignment="Center" Margin="12,0,0,0"/>
                             </Grid>
                         </Button>
 
@@ -266,69 +203,98 @@
                     <ScrollViewer IsVisible="{Binding ShowViewerPanel}"
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
-                        <StackPanel Margin="36,28" Spacing="0" MaxWidth="520">
+                        <StackPanel Margin="32,24" Spacing="0" MaxWidth="520">
 
                             <DockPanel Margin="0,0,0,24">
-                                <Button Classes="ghost" Content="← Back" Width="80" Height="32"
+                                <Button Classes="Ghost" Content="← Back" Width="80" Height="32"
                                         DockPanel.Dock="Left" Command="{Binding BackCommand}"/>
                                 <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="Connect to Remote"
-                                               FontSize="20" FontWeight="Bold" Foreground="#111827"/>
+                                               FontSize="20" FontWeight="Bold"
+                                               Foreground="{StaticResource Brush.Text.Primary}"/>
                                     <TextBlock Text="IP address or router connection code"
-                                               FontSize="12" Foreground="#6B7280" Margin="0,3,0,0"/>
+                                               FontSize="12"
+                                               Foreground="{StaticResource Brush.Text.Muted}"
+                                               Margin="0,4,0,0"/>
                                 </StackPanel>
                             </DockPanel>
 
+                            <!-- Loading indicator while connecting -->
+                            <ProgressBar IsIndeterminate="True" Height="2"
+                                         IsVisible="{Binding IsConnecting}"
+                                         Margin="0,0,0,8"/>
+
                             <!-- Direct IP -->
-                            <TextBlock Text="DIRECT IP" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF" Margin="0,0,0,10"/>
+                            <TextBlock Text="DIRECT IP" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.Text.Muted}"
+                                       Margin="0,0,0,10"/>
                             <TextBlock Text="Host IP Address" FontSize="12" FontWeight="SemiBold"
-                                       Foreground="#374151" Margin="0,0,0,6"/>
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
+                                       Margin="0,0,0,4"/>
                             <Grid ColumnDefinitions="*,10,120" Margin="0,0,0,28">
                                 <TextBox Grid.Column="0" Text="{Binding HostAddress}"
-                                         Watermark="192.168.1.10" IsEnabled="{Binding InputEnabled}"/>
-                                <Button Grid.Column="2" Classes="primary" Content="Connect"
+                                         Watermark="192.168.1.10" IsEnabled="{Binding InputEnabled}"
+                                         KeyDown="OnAddressKeyDown"
+                                         AutomationProperties.Name="Remote host IP address"/>
+                                <Button Grid.Column="2" Classes="Primary" Content="Connect"
                                         Command="{Binding ConnectDirectCommand}"
                                         IsEnabled="{Binding InputEnabled}"
-                                        HorizontalAlignment="Stretch"/>
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Connect via IP address"/>
                             </Grid>
 
                             <!-- Divider -->
                             <Grid ColumnDefinitions="*,Auto,*" Margin="0,0,0,28">
                                 <Separator Grid.Column="0" VerticalAlignment="Center"
-                                           Background="#E5E7EB" Height="1"/>
+                                           Background="{StaticResource Brush.Border}" Height="1"/>
                                 <TextBlock Grid.Column="1" Text="  or via code  "
-                                           FontSize="12" Foreground="#9CA3AF" VerticalAlignment="Center"/>
+                                           FontSize="12"
+                                           Foreground="{StaticResource Brush.Text.Muted}"
+                                           VerticalAlignment="Center"/>
                                 <Separator Grid.Column="2" VerticalAlignment="Center"
-                                           Background="#E5E7EB" Height="1"/>
+                                           Background="{StaticResource Brush.Border}" Height="1"/>
                             </Grid>
 
                             <!-- Router + Code -->
-                            <TextBlock Text="VIA ROUTER" FontSize="10" FontWeight="SemiBold"
-                                       Foreground="#9CA3AF" Margin="0,0,0,10"/>
+                            <TextBlock Text="VIA ROUTER" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.Text.Muted}"
+                                       Margin="0,0,0,10"/>
                             <TextBlock Text="Router Address" FontSize="12" FontWeight="SemiBold"
-                                       Foreground="#374151" Margin="0,0,0,6"/>
-                            <TextBox Text="{Binding RouterAddress}" Watermark="localhost:9000"
-                                     IsEnabled="{Binding InputEnabled}" Margin="0,0,0,14"/>
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
+                                       Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding RouterAddress}"
+                                     Watermark="router.example.com:9000"
+                                     IsEnabled="{Binding InputEnabled}"
+                                     Margin="0,0,0,14"
+                                     AutomationProperties.Name="Router address"/>
                             <TextBlock Text="Connection Code" FontSize="12" FontWeight="SemiBold"
-                                       Foreground="#374151" Margin="0,0,0,6"/>
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
+                                       Margin="0,0,0,4"/>
                             <Grid ColumnDefinitions="*,10,120" Margin="0,0,0,20">
                                 <TextBox Grid.Column="0" Text="{Binding ConnectionCode}"
                                          Watermark="AB12CD" IsEnabled="{Binding InputEnabled}"
-                                         FontSize="18" FontWeight="SemiBold"/>
-                                <Button Grid.Column="2" Classes="primary" Content="Connect"
+                                         FontSize="18" FontWeight="SemiBold"
+                                         KeyDown="OnCodeKeyDown"
+                                         AutomationProperties.Name="Connection code"/>
+                                <Button Grid.Column="2" Classes="Primary" Content="Connect"
                                         Command="{Binding ConnectViaCodeCommand}"
                                         IsEnabled="{Binding InputEnabled}"
-                                        HorizontalAlignment="Stretch"/>
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Connect via code"/>
                             </Grid>
 
-                            <CheckBox IsChecked="{Binding UseTls}" Margin="0,0,0,16">
-                                <TextBlock Text="Use TLS (recommended)" FontSize="12" Foreground="#6B7280"/>
-                            </CheckBox>
+                            <!-- Advanced expander with TLS -->
+                            <Expander Header="Advanced" Margin="0,0,0,16">
+                                <CheckBox IsChecked="{Binding UseTls}" Margin="0,8,0,0">
+                                    <TextBlock Text="Use TLS (recommended)" FontSize="12"
+                                               Foreground="{StaticResource Brush.Text.Muted}"/>
+                                </CheckBox>
+                            </Expander>
 
+                            <!-- Connecting status -->
                             <Border IsVisible="{Binding IsConnecting}"
                                     Background="#EFF6FF" BorderBrush="#BFDBFE"
-                                    BorderThickness="1" CornerRadius="8" Padding="14,11">
+                                    BorderThickness="1" CornerRadius="8" Padding="16,12">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <Ellipse Width="7" Height="7" Fill="#3B82F6" VerticalAlignment="Center"/>
                                     <TextBlock Text="Connecting…" FontSize="13" Foreground="#1D4ED8"
@@ -343,27 +309,32 @@
                     <ScrollViewer IsVisible="{Binding ShowHostPanel}"
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
-                        <StackPanel Margin="36,28" Spacing="0" MaxWidth="520">
+                        <StackPanel Margin="32,24" Spacing="0" MaxWidth="520">
 
                             <DockPanel Margin="0,0,0,24">
-                                <Button Classes="ghost" Content="← Back" Width="80" Height="32"
+                                <Button Classes="Ghost" Content="← Back" Width="80" Height="32"
                                         DockPanel.Dock="Left" Command="{Binding BackCommand}"/>
                                 <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="Host This Computer"
-                                               FontSize="20" FontWeight="Bold" Foreground="#111827"/>
+                                               FontSize="20" FontWeight="Bold"
+                                               Foreground="{StaticResource Brush.Text.Primary}"/>
                                     <TextBlock Text="Share your screen with an incoming viewer"
-                                               FontSize="12" Foreground="#6B7280" Margin="0,3,0,0"/>
+                                               FontSize="12"
+                                               Foreground="{StaticResource Brush.Text.Muted}"
+                                               Margin="0,4,0,0"/>
                                 </StackPanel>
                             </DockPanel>
 
                             <!-- Feature 2: Monitor dropdown -->
                             <TextBlock Text="Monitor" FontSize="12" FontWeight="SemiBold"
-                                       Foreground="#374151" Margin="0,0,0,6"/>
+                                       Foreground="{StaticResource Brush.Text.Secondary}"
+                                       Margin="0,0,0,4"/>
                             <ComboBox SelectedIndex="{Binding SelectedMonitorIndex}"
                                       ItemsSource="{Binding AvailableMonitors}"
                                       IsEnabled="{Binding !IsHostRunning}"
                                       Width="300" Height="36" FontSize="12"
-                                      Margin="0,0,0,16">
+                                      Margin="0,0,0,16"
+                                      AutomationProperties.Name="Select monitor to share">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate>
                                         <TextBlock Text="{Binding Name}"/>
@@ -390,9 +361,11 @@
                             <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,20">
                                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
                                     <TextBlock Text="Quality" FontSize="12" FontWeight="SemiBold"
-                                               Foreground="#374151" VerticalAlignment="Center"/>
+                                               Foreground="{StaticResource Brush.Text.Secondary}"
+                                               VerticalAlignment="Center"/>
                                     <ComboBox SelectedIndex="{Binding HostQualityIndex}" Width="148"
-                                              Height="36" FontSize="12">
+                                              Height="36" FontSize="12"
+                                              AutomationProperties.Name="Streaming quality">
                                         <ComboBoxItem Content="Low bandwidth"/>
                                         <ComboBoxItem Content="Balanced"/>
                                         <ComboBoxItem Content="High quality"/>
@@ -401,18 +374,20 @@
                                     </ComboBox>
                                 </StackPanel>
                                 <CheckBox Grid.Column="2" IsChecked="{Binding HostTlsEnabled}">
-                                    <TextBlock Text="TLS" FontSize="12" Foreground="#6B7280"/>
+                                    <TextBlock Text="TLS" FontSize="12"
+                                               Foreground="{StaticResource Brush.Text.Muted}"/>
                                 </CheckBox>
                             </Grid>
 
                             <!-- Direct port form -->
                             <StackPanel IsVisible="{Binding ShowDirectHostPanel}">
                                 <TextBlock Text="Port" FontSize="12" FontWeight="SemiBold"
-                                           Foreground="#374151" Margin="0,0,0,6"/>
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
+                                           Margin="0,0,0,4"/>
                                 <Grid ColumnDefinitions="110,10,Auto" Margin="0,0,0,0">
                                     <TextBox Grid.Column="0" Text="{Binding HostPort}"
                                              IsEnabled="{Binding !IsHostRunning}"/>
-                                    <Button Grid.Column="2" Classes="primary"
+                                    <Button Grid.Column="2" Classes="Primary"
                                             Content="Start hosting" Width="140"
                                             Command="{Binding StartDirectHostCommand}"
                                             IsEnabled="{Binding !IsHostRunning}"/>
@@ -422,12 +397,13 @@
                             <!-- Router form -->
                             <StackPanel IsVisible="{Binding ShowRouterHostPanel}">
                                 <TextBlock Text="Router Address" FontSize="12" FontWeight="SemiBold"
-                                           Foreground="#374151" Margin="0,0,0,6"/>
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
+                                           Margin="0,0,0,4"/>
                                 <Grid ColumnDefinitions="*,10,Auto">
                                     <TextBox Grid.Column="0" Text="{Binding HostRouterAddress}"
                                              IsEnabled="{Binding !IsHostRunning}"/>
-                                    <Button Grid.Column="2" Classes="primary"
-                                            Content="Register &amp; start" Width="148"
+                                    <Button Grid.Column="2" Classes="Primary"
+                                            Content="Get connection code" Width="164"
                                             Command="{Binding RegisterHostCommand}"
                                             IsEnabled="{Binding !IsHostRunning}"/>
                                 </Grid>
@@ -442,33 +418,37 @@
                                     <StackPanel Grid.Column="0">
                                         <TextBlock Text="SHARE THIS CODE"
                                                    FontSize="10" FontWeight="SemiBold"
-                                                   Foreground="#3B82F6" Margin="0,0,0,6"/>
+                                                   Foreground="#3B82F6" Margin="0,0,0,4"/>
                                         <TextBlock Text="{Binding HostConnectionCode}"
                                                    FontSize="32" FontWeight="Bold"
                                                    Foreground="#1E40AF"/>
                                     </StackPanel>
-                                    <Button Grid.Column="1" Classes="ghost"
+                                    <Button Grid.Column="1" Classes="Ghost"
                                             Content="Copy" Width="68" Height="34"
                                             FontSize="12" VerticalAlignment="Center"
                                             Command="{Binding CopyCodeCommand}"/>
                                 </Grid>
                             </Border>
+                            <TextBlock Text="One-time use · Valid for 30 minutes · Share this code with your viewer"
+                                       FontSize="11"
+                                       Foreground="{StaticResource Brush.Text.Muted}"
+                                       Margin="0,8,0,0"
+                                       IsVisible="{Binding ShowCodeCard}"/>
 
                             <!-- Web viewer hint -->
                             <Border IsVisible="{Binding ShowWebViewer}"
-                                    Background="#ECFDF5" BorderBrush="#A7F3D0"
+                                    Background="{StaticResource Brush.Success.Bg}" BorderBrush="#A7F3D0"
                                     BorderThickness="1" CornerRadius="8"
-                                    Padding="14,10" Margin="0,8,0,0">
+                                    Padding="16,8" Margin="0,8,0,0">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="🌐" FontSize="12" VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding WebViewerUrl}"
                                                FontSize="12" Foreground="#065F46"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
 
-                            <!-- Status + stop -->
-                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,14,0,0">
+                            <!-- Status row (no Stop button here — it's in the status bar) -->
+                            <Grid ColumnDefinitions="Auto,*" Margin="0,14,0,0">
                                 <Ellipse Grid.Column="0" Width="7" Height="7"
                                          Fill="#10B981"
                                          VerticalAlignment="Center" Margin="0,0,8,0"
@@ -478,17 +458,13 @@
                                          VerticalAlignment="Center" Margin="0,0,8,0"
                                          IsVisible="{Binding !IsHostRunning}"/>
                                 <TextBlock Grid.Column="1" Text="{Binding HostStatus}"
-                                           FontSize="12" Foreground="#6B7280"
+                                           FontSize="12"
+                                           Foreground="{StaticResource Brush.Text.Muted}"
                                            VerticalAlignment="Center"/>
-                                <Button Grid.Column="2" Classes="danger"
-                                        Content="Stop" Width="72" Height="32"
-                                        FontSize="12"
-                                        IsVisible="{Binding IsHostRunning}"
-                                        Command="{Binding StopHostCommand}"/>
                             </Grid>
 
                             <!-- Feature 6: Session notes toggle (only while running) -->
-                            <Button Classes="ghost" Content="📝 Session Notes"
+                            <Button Classes="Ghost" Content="Session Notes"
                                     Height="30" FontSize="12"
                                     HorizontalAlignment="Left"
                                     Margin="0,12,0,0"
@@ -496,15 +472,17 @@
                                     Command="{Binding ToggleSessionNotesCommand}"/>
 
                             <Border IsVisible="{Binding SessionNotesVisible}"
-                                    Background="#FFFBEB" BorderBrush="#FDE68A"
+                                    Background="{StaticResource Brush.Warning.Bg}"
+                                    BorderBrush="{StaticResource Brush.Warning.Border}"
                                     BorderThickness="1" CornerRadius="8"
-                                    Padding="12,10" Margin="0,6,0,0">
+                                    Padding="12,10" Margin="0,4,0,0">
                                 <TextBox Text="{Binding SessionNotes}"
                                          Watermark="Session notes (saved on disconnect)…"
                                          AcceptsReturn="True"
                                          Height="100"
                                          FontSize="12"
-                                         TextWrapping="Wrap"/>
+                                         TextWrapping="Wrap"
+                                         AutomationProperties.Name="Session notes"/>
                             </Border>
 
                         </StackPanel>
@@ -515,33 +493,41 @@
                           RowDefinitions="48,Auto,*,Auto">
 
                         <!-- Toolbar -->
-                        <Border Grid.Row="0" Background="#0F172A"
+                        <Border Grid.Row="0" Background="{StaticResource Brush.Toolbar.Bg}"
                                 CornerRadius="12,12,0,0" Padding="16,0">
                             <DockPanel VerticalAlignment="Center">
                                 <!-- Left: live indicator + stats -->
                                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Spacing="16">
-                                    <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
                                         <Ellipse Width="7" Height="7" Fill="#10B981" VerticalAlignment="Center"/>
-                                        <TextBlock Text="Live" Foreground="#F1F5F9"
+                                        <TextBlock Text="Live"
+                                                   Foreground="{StaticResource Brush.Text.OnDark}"
                                                    FontWeight="SemiBold" FontSize="12"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
                                     <TextBlock Text="{Binding FpsText}"
-                                               Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
+                                               Foreground="{StaticResource Brush.Text.OnDarkMuted}"
+                                               FontSize="12" VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding LatencyText}"
-                                               Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
+                                               Foreground="{StaticResource Brush.Text.OnDarkMuted}"
+                                               FontSize="12" VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding BandwidthText}"
-                                               Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
+                                               Foreground="{StaticResource Brush.Text.OnDarkMuted}"
+                                               FontSize="12" VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <!-- Right: zoom controls + feature buttons + disconnect -->
+
+                                <!-- Right: [Quality] [Clipboard] [Chat] [Zoom ComboBox] [+] [−] [Disconnect] -->
                                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"
                                             Spacing="4" VerticalAlignment="Center">
+
                                     <!-- Feature 9: Quality preset ComboBox -->
                                     <ComboBox SelectedIndex="{Binding ViewerQualityIndex}"
-                                              Height="30" FontSize="11"
+                                              Height="28" FontSize="11"
                                               Foreground="#E2E8F0" Background="#1E293B"
                                               Width="84"
-                                              VerticalAlignment="Center">
+                                              VerticalAlignment="Center"
+                                              ToolTip.Tip="Stream quality"
+                                              AutomationProperties.Name="Stream quality">
                                         <ComboBoxItem Content="Low"/>
                                         <ComboBoxItem Content="Balanced"/>
                                         <ComboBoxItem Content="High"/>
@@ -549,13 +535,17 @@
                                     </ComboBox>
 
                                     <!-- Feature 1: Clipboard -->
-                                    <Button Classes="toolbar-btn" Content="Clipboard"
-                                            Command="{Binding SendClipboardCommand}" Width="70"/>
+                                    <Button Classes="Toolbar" Content="Clipboard"
+                                            Command="{Binding SendClipboardCommand}" Width="70"
+                                            ToolTip.Tip="Sync clipboard with host"
+                                            AutomationProperties.Name="Sync clipboard with host"/>
 
                                     <!-- Feature 4: Chat toggle with unread badge -->
                                     <Panel>
-                                        <Button Classes="toolbar-btn" Content="Chat"
-                                                Command="{Binding ToggleChatCommand}" Width="44"/>
+                                        <Button Classes="Toolbar" Content="Chat"
+                                                Command="{Binding ToggleChatCommand}" Width="44"
+                                                ToolTip.Tip="Toggle chat panel"
+                                                AutomationProperties.Name="Toggle chat panel"/>
                                         <Border Background="#EF4444" CornerRadius="8"
                                                 Padding="4,1"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top"
@@ -567,23 +557,39 @@
                                         </Border>
                                     </Panel>
 
-                                    <Button Classes="toolbar-btn" Content="Fit"
-                                            Command="{Binding FitWindowCommand}" Width="36"/>
-                                    <Button Classes="toolbar-btn" Content="50%"
-                                            Command="{Binding Zoom50Command}"  Width="40"/>
-                                    <Button Classes="toolbar-btn" Content="75%"
-                                            Command="{Binding Zoom75Command}"  Width="40"/>
-                                    <Button Classes="toolbar-btn" Content="100%"
-                                            Command="{Binding Zoom100Command}" Width="44"/>
-                                    <Button Classes="toolbar-btn" Content="+"
-                                            Command="{Binding ZoomInCommand}"  Width="30"/>
-                                    <Button Classes="toolbar-btn" Content="−"
-                                            Command="{Binding ZoomOutCommand}" Width="30"/>
-                                    <TextBlock Text="{Binding ZoomLabel}"
-                                               Foreground="#64748B" FontSize="11"
-                                               VerticalAlignment="Center" Margin="4,0,8,0" MinWidth="32"/>
-                                    <Button Classes="toolbar-btn" Content="Disconnect"
-                                            Command="{Binding DisconnectCommand}"/>
+                                    <!-- Zoom ComboBox -->
+                                    <ComboBox SelectedIndex="{Binding ZoomPresetIndex}"
+                                              Height="28" Width="76" FontSize="11"
+                                              Foreground="#E2E8F0" Background="#1E293B"
+                                              VerticalAlignment="Center"
+                                              ToolTip.Tip="Zoom level"
+                                              AutomationProperties.Name="Zoom level">
+                                        <ComboBoxItem Content="Fit"/>
+                                        <ComboBoxItem Content="50%"/>
+                                        <ComboBoxItem Content="75%"/>
+                                        <ComboBoxItem Content="100%"/>
+                                        <ComboBoxItem Content="150%"/>
+                                        <ComboBoxItem Content="200%"/>
+                                    </ComboBox>
+
+                                    <!-- Zoom In -->
+                                    <Button Classes="Toolbar" Content="+"
+                                            Command="{Binding ZoomInCommand}" Width="28"
+                                            ToolTip.Tip="Zoom in"
+                                            AutomationProperties.Name="Zoom in"/>
+
+                                    <!-- Zoom Out -->
+                                    <Button Classes="Toolbar" Content="−"
+                                            Command="{Binding ZoomOutCommand}" Width="28"
+                                            ToolTip.Tip="Zoom out"
+                                            AutomationProperties.Name="Zoom out"/>
+
+                                    <!-- Disconnect -->
+                                    <Button Classes="Danger" Content="Disconnect"
+                                            Command="{Binding DisconnectCommand}"
+                                            Height="28" FontSize="11" Padding="10,0"
+                                            ToolTip.Tip="End session and disconnect"
+                                            AutomationProperties.Name="Disconnect from session"/>
                                 </StackPanel>
                             </DockPanel>
                         </Border>
@@ -591,10 +597,14 @@
                         <!-- Feature 3: No-frames warning banner -->
                         <Border Grid.Row="1"
                                 IsVisible="{Binding ShowNoFramesBanner}"
-                                Background="#FEF3C7" BorderBrush="#F59E0B"
+                                Background="{StaticResource Brush.Warning.Bg}"
+                                BorderBrush="#F59E0B"
                                 BorderThickness="0,0,0,1" Padding="16,8">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="⚠" FontSize="14" VerticalAlignment="Center"/>
+                                <Path Width="16" Height="16" Stretch="Uniform"
+                                      StrokeThickness="1.5" Stroke="#D97706" Fill="Transparent"
+                                      Data="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                                      VerticalAlignment="Center"/>
                                 <TextBlock Text="No frames received — check connection"
                                            FontSize="12" Foreground="#92400E"
                                            VerticalAlignment="Center"/>
@@ -605,15 +615,27 @@
                         <Grid Grid.Row="2">
                             <!-- Fit mode -->
                             <Border IsVisible="{Binding IsFitMode}" Background="#020617">
-                                <Image Stretch="Uniform"
-                                       Source="{Binding RemoteScreen}"
-                                       HorizontalAlignment="Stretch"
-                                       VerticalAlignment="Stretch"
-                                       Cursor="Cross"
-                                       PointerPressed="OnScreenPointerPressed"
-                                       PointerMoved="OnScreenPointerMoved"
-                                       PointerEntered="OnScreenPointerEntered"
-                                       PointerExited="OnScreenPointerExited"/>
+                                <Grid>
+                                    <Image Stretch="Uniform"
+                                           Source="{Binding RemoteScreen}"
+                                           HorizontalAlignment="Stretch"
+                                           VerticalAlignment="Stretch"
+                                           Cursor="Cross"
+                                           PointerPressed="OnScreenPointerPressed"
+                                           PointerMoved="OnScreenPointerMoved"
+                                           PointerEntered="OnScreenPointerEntered"
+                                           PointerExited="OnScreenPointerExited"/>
+                                    <!-- Empty state -->
+                                    <StackPanel IsVisible="{Binding RemoteScreen, Converter={x:Static ObjectConverters.IsNull}}"
+                                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="Waiting for screen…" FontSize="13"
+                                                   Foreground="#475569" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="The remote screen will appear here once the host starts streaming."
+                                                   FontSize="11" Foreground="#334155"
+                                                   TextAlignment="Center" TextWrapping="Wrap"
+                                                   MaxWidth="280" Margin="0,8,0,0"/>
+                                    </StackPanel>
+                                </Grid>
                             </Border>
 
                             <!-- Zoom mode -->
@@ -635,19 +657,31 @@
                             </ScrollViewer>
                         </Grid>
 
-                        <!-- Feature 4: Chat panel (collapsible) -->
-                        <Border Grid.Row="3"
+                        <!-- Feature 4: Chat panel (overlay at bottom) -->
+                        <Border Grid.Row="2"
                                 IsVisible="{Binding ChatVisible}"
-                                Background="#0F172A"
+                                Background="#CC0F172A"
                                 BorderBrush="#1E293B"
                                 BorderThickness="0,1,0,0"
-                                Height="180">
-                            <Grid RowDefinitions="*,44">
+                                MaxHeight="200"
+                                VerticalAlignment="Bottom">
+                            <Grid RowDefinitions="Auto,*,44">
+                                <!-- Chat header with close button -->
+                                <Grid Grid.Row="0" ColumnDefinitions="*,Auto"
+                                      Margin="12,6,12,4">
+                                    <TextBlock Grid.Column="0" Text="Chat"
+                                               FontSize="11" FontWeight="SemiBold"
+                                               Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Classes="Toolbar" Content="✕"
+                                            Width="22" Height="22" Padding="0"
+                                            Command="{Binding ToggleChatCommand}"
+                                            AutomationProperties.Name="Close chat panel"/>
+                                </Grid>
                                 <!-- Chat messages -->
-                                <ScrollViewer Grid.Row="0"
+                                <ScrollViewer Grid.Row="1"
                                               VerticalScrollBarVisibility="Auto"
                                               HorizontalScrollBarVisibility="Disabled"
-                                              Padding="12,8">
+                                              Padding="12,4">
                                     <ItemsControl ItemsSource="{Binding ChatMessages}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
@@ -661,7 +695,7 @@
                                     </ItemsControl>
                                 </ScrollViewer>
                                 <!-- Chat input -->
-                                <Grid Grid.Row="1" ColumnDefinitions="*,80" Margin="8,4,8,8">
+                                <Grid Grid.Row="2" ColumnDefinitions="*,80" Margin="8,4,8,8">
                                     <TextBox Grid.Column="0"
                                              Text="{Binding ChatInput}"
                                              Watermark="Type a message…"
@@ -670,11 +704,13 @@
                                              BorderBrush="#334155"
                                              Height="36"
                                              FontSize="12"
-                                             Margin="0,0,6,0"/>
-                                    <Button Grid.Column="1" Classes="primary"
+                                             Margin="0,0,4,0"
+                                             AutomationProperties.Name="Chat message"/>
+                                    <Button Grid.Column="1" Classes="Primary"
                                             Content="Send"
                                             Height="36"
-                                            Command="{Binding SendChatCommand}"/>
+                                            Command="{Binding SendChatCommand}"
+                                            AutomationProperties.Name="Send chat message"/>
                                 </Grid>
                             </Grid>
                         </Border>
@@ -687,16 +723,27 @@
         </Grid>
 
         <!-- ════ Status bar ════ -->
-        <Border Grid.Row="1" Background="White"
-                BorderBrush="#E5E7EB" BorderThickness="0,1,0,0">
+        <Border Grid.Row="1" Background="{StaticResource Brush.Surface}"
+                BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0">
             <DockPanel Margin="24,0" VerticalAlignment="Center">
+                <!-- Stop Hosting button — persistent, right side -->
+                <Button DockPanel.Dock="Right" Classes="Danger" Content="Stop hosting"
+                        Height="24" FontSize="11" Padding="12,0"
+                        IsVisible="{Binding IsHostRunning}"
+                        Command="{Binding StopHostCommand}"
+                        AutomationProperties.Name="Stop hosting session"
+                        Margin="0,0,0,0"/>
                 <TextBlock DockPanel.Dock="Right"
                            Text="Hover screen to capture keyboard"
-                           FontSize="11" Foreground="#D1D5DB"
+                           FontSize="11"
+                           Foreground="{StaticResource Brush.Neutral.300}"
                            IsVisible="{Binding ShowScreenDisplay}"
-                           VerticalAlignment="Center"/>
+                           VerticalAlignment="Center"
+                           Margin="0,0,16,0"/>
                 <TextBlock Text="{Binding Status}"
-                           FontSize="12" Foreground="#9CA3AF" VerticalAlignment="Center"/>
+                           FontSize="13"
+                           Foreground="{StaticResource Brush.Text.Secondary}"
+                           VerticalAlignment="Center"/>
             </DockPanel>
         </Border>
 

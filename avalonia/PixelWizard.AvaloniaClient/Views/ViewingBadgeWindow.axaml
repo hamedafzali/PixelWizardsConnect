@@ -10,9 +10,10 @@
         SystemDecorations="None"
         Topmost="True"
         Background="Transparent"
-        TransparencyLevelHint="Transparent">
+        TransparencyLevelHint="Transparent"
+        AutomationProperties.Name="Screen is being shared indicator">
 
-    <Border Background="#CC1F1F1F" CornerRadius="10" Padding="14,0">
+    <Border Background="#CC1F1F1F" CornerRadius="10" Padding="14,10">
         <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
             <Ellipse Width="9" Height="9" Fill="#EF4444" VerticalAlignment="Center"/>
             <TextBlock Text="Screen is being shared"
