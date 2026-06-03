@@ -52,17 +52,28 @@ namespace PixelWizard.Transport
                 {
                     var result  = await udp.ReceiveAsync(ct);
                     string msg  = Encoding.UTF8.GetString(result.Buffer);
-                    if (!msg.StartsWith(Prefix)) continue;
-                    var parts   = msg.Split('|');
-                    if (parts.Length < 3) continue;
-                    string ip   = result.RemoteEndPoint.Address.ToString();
-                    string port = parts[2];
-                    string key  = $"{ip}:{port}";
+                    string ipAddr = result.RemoteEndPoint.Address.ToString();
+                    var parsed = Parse(msg, ipAddr);
+                    if (parsed is not { } p) continue;
+                    string key  = $"{p.ip}:{p.port}";
                     if (seen.Add(key)) onHost(key);
                 }
                 catch (OperationCanceledException) { break; }
                 catch { /* ignore receive errors */ }
             }
+        }
+
+        /// <summary>
+        /// Parses a discovery announcement of the form "PIXELWIZARD|{hostname}|{port}".
+        /// Returns the sender's <paramref name="remoteIp"/> paired with the announced port,
+        /// or <c>null</c> if the message is not a well-formed announcement.
+        /// </summary>
+        internal static (string ip, string port)? Parse(string message, string remoteIp)
+        {
+            if (!message.StartsWith(Prefix)) return null;
+            var parts = message.Split('|');
+            if (parts.Length < 3) return null;
+            return (remoteIp, parts[2]);
         }
     }
 }
