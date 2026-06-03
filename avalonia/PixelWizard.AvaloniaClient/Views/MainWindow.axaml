@@ -482,6 +482,7 @@
                         <Border Grid.Row="0" Background="#0F172A"
                                 CornerRadius="12,12,0,0" Padding="16,0">
                             <DockPanel VerticalAlignment="Center">
+                                <!-- Left: live indicator + stats -->
                                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Spacing="16">
                                     <StackPanel Orientation="Horizontal" Spacing="7">
                                         <Ellipse Width="7" Height="7" Fill="#10B981" VerticalAlignment="Center"/>
@@ -496,20 +497,57 @@
                                     <TextBlock Text="{Binding BandwidthText}"
                                                Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"/>
                                 </StackPanel>
-                                <Button Classes="toolbar-btn" Content="Disconnect"
-                                        Command="{Binding DisconnectCommand}"
-                                        DockPanel.Dock="Right" VerticalAlignment="Center"/>
+                                <!-- Right: zoom controls + disconnect -->
+                                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"
+                                            Spacing="4" VerticalAlignment="Center">
+                                    <Button Classes="toolbar-btn" Content="Fit"
+                                            Command="{Binding FitWindowCommand}" Width="36"/>
+                                    <Button Classes="toolbar-btn" Content="50%"
+                                            Command="{Binding Zoom50Command}"  Width="40"/>
+                                    <Button Classes="toolbar-btn" Content="75%"
+                                            Command="{Binding Zoom75Command}"  Width="40"/>
+                                    <Button Classes="toolbar-btn" Content="100%"
+                                            Command="{Binding Zoom100Command}" Width="44"/>
+                                    <Button Classes="toolbar-btn" Content="+"
+                                            Command="{Binding ZoomInCommand}"  Width="30"/>
+                                    <Button Classes="toolbar-btn" Content="−"
+                                            Command="{Binding ZoomOutCommand}" Width="30"/>
+                                    <TextBlock Text="{Binding ZoomLabel}"
+                                               Foreground="#64748B" FontSize="11"
+                                               VerticalAlignment="Center" Margin="4,0,8,0" MinWidth="32"/>
+                                    <Button Classes="toolbar-btn" Content="Disconnect"
+                                            Command="{Binding DisconnectCommand}"/>
+                                </StackPanel>
                             </DockPanel>
                         </Border>
 
-                        <ScrollViewer Grid.Row="1" Background="#020617"
+                        <!-- Fit mode: Image fills the panel and Stretch=Uniform scales it down.
+                             The Image must NOT be inside a ScrollViewer here — ScrollViewer gives
+                             infinite space and prevents Stretch=Uniform from shrinking the image. -->
+                        <Border Grid.Row="1" IsVisible="{Binding IsFitMode}" Background="#020617">
+                            <Image Stretch="Uniform"
+                                   Source="{Binding RemoteScreen}"
+                                   HorizontalAlignment="Stretch"
+                                   VerticalAlignment="Stretch"
+                                   Cursor="Cross"
+                                   PointerPressed="OnScreenPointerPressed"
+                                   PointerMoved="OnScreenPointerMoved"
+                                   PointerEntered="OnScreenPointerEntered"
+                                   PointerExited="OnScreenPointerExited"/>
+                        </Border>
+
+                        <!-- Zoom mode: explicit pixel dimensions + scrollbars -->
+                        <ScrollViewer Grid.Row="1"
+                                      IsVisible="{Binding !IsFitMode}"
+                                      Background="#020617"
                                       HorizontalScrollBarVisibility="Auto"
                                       VerticalScrollBarVisibility="Auto">
-                            <Image x:Name="ScreenImage"
-                                   Source="{Binding RemoteScreen}"
-                                   Stretch="Uniform"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"
+                            <Image Source="{Binding RemoteScreen}"
+                                   Stretch="None"
+                                   Width="{Binding ScaledImageWidth}"
+                                   Height="{Binding ScaledImageHeight}"
+                                   HorizontalAlignment="Left"
+                                   VerticalAlignment="Top"
                                    Cursor="Cross"
                                    PointerPressed="OnScreenPointerPressed"
                                    PointerMoved="OnScreenPointerMoved"

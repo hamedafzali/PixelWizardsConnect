@@ -91,7 +91,36 @@ public class MainViewModel : ReactiveObject, IDisposable
     public bool InputEnabled     => !_isConnecting;
 
     private Bitmap? _remoteScreen;
-    public Bitmap? RemoteScreen { get => _remoteScreen; set => this.RaiseAndSetIfChanged(ref _remoteScreen, value); }
+    public Bitmap? RemoteScreen
+    {
+        get => _remoteScreen;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _remoteScreen, value);
+            this.RaisePropertyChanged(nameof(ScaledImageWidth));
+            this.RaisePropertyChanged(nameof(ScaledImageHeight));
+        }
+    }
+
+    // ── Zoom ──────────────────────────────────────────────────────────────────
+
+    private double _viewScale = 0;   // 0 = fit to window
+    public double ViewScale
+    {
+        get => _viewScale;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _viewScale, value);
+            this.RaisePropertyChanged(nameof(IsFitMode));
+            this.RaisePropertyChanged(nameof(ZoomLabel));
+            this.RaisePropertyChanged(nameof(ScaledImageWidth));
+            this.RaisePropertyChanged(nameof(ScaledImageHeight));
+        }
+    }
+    public bool   IsFitMode       => _viewScale <= 0;
+    public string ZoomLabel       => _viewScale <= 0 ? "Fit" : $"{(int)(_viewScale * 100)}%";
+    public double ScaledImageWidth  => _remoteScreen != null && _viewScale > 0 ? _remoteScreen.Size.Width  * _viewScale : 0;
+    public double ScaledImageHeight => _remoteScreen != null && _viewScale > 0 ? _remoteScreen.Size.Height * _viewScale : 0;
 
     private bool _keyboardActive;
     public bool KeyboardActive { get => _keyboardActive; set => this.RaiseAndSetIfChanged(ref _keyboardActive, value); }
@@ -165,6 +194,12 @@ public class MainViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> StopHostCommand        { get; }
     public ReactiveCommand<Unit, Unit> CopyCodeCommand        { get; }
     public ReactiveCommand<Unit, Unit> DisconnectCommand      { get; }
+    public ReactiveCommand<Unit, Unit> FitWindowCommand       { get; }
+    public ReactiveCommand<Unit, Unit> Zoom50Command          { get; }
+    public ReactiveCommand<Unit, Unit> Zoom75Command          { get; }
+    public ReactiveCommand<Unit, Unit> Zoom100Command         { get; }
+    public ReactiveCommand<Unit, Unit> ZoomInCommand          { get; }
+    public ReactiveCommand<Unit, Unit> ZoomOutCommand         { get; }
 
     // ── Internal state ────────────────────────────────────────────────────────
 
@@ -215,6 +250,12 @@ public class MainViewModel : ReactiveObject, IDisposable
         StopHostCommand        = ReactiveCommand.Create(StopHost);
         CopyCodeCommand        = ReactiveCommand.Create(CopyCode);
         DisconnectCommand      = ReactiveCommand.Create(DisconnectViewer);
+        FitWindowCommand       = ReactiveCommand.Create(() => { ViewScale = 0; });
+        Zoom50Command          = ReactiveCommand.Create(() => { ViewScale = 0.5; });
+        Zoom75Command          = ReactiveCommand.Create(() => { ViewScale = 0.75; });
+        Zoom100Command         = ReactiveCommand.Create(() => { ViewScale = 1.0; });
+        ZoomInCommand          = ReactiveCommand.Create(() => { ViewScale = _viewScale <= 0 ? 1.0 : Math.Min(_viewScale + 0.25, 4.0); });
+        ZoomOutCommand         = ReactiveCommand.Create(() => { if (_viewScale > 0) ViewScale = Math.Max(_viewScale - 0.25, 0.25); });
 
         StartMetricsTimer();
     }
@@ -303,6 +344,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         IsConnected  = false;
         IsConnecting = false;
         RemoteScreen = null;
+        ViewScale    = 0;
         _canvas?.Dispose(); _canvas = null;
         KeyboardActive = false;
         if (Screen == AppScreen.LiveScreen) Screen = AppScreen.Viewer;

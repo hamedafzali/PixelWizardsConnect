@@ -52,7 +52,14 @@ public sealed class MacScreenCapture : IScreenCapture
 
         try
         {
-            using var bitmap = CGImageToSKBitmap(cgImage);
+            // CGDisplayBounds returns logical (point) size; CGDisplayCreateImage returns
+            // physical pixels. On a 2× Retina display they differ by the backing scale factor.
+            // Scale the bitmap down to logical size so the viewer sees the correct dimensions.
+            var bounds   = CGDisplayBounds(displayId);
+            int logicalW = (int)bounds.Size.Width;
+            int logicalH = (int)bounds.Size.Height;
+
+            using var bitmap = CGImageToSKBitmap(cgImage, logicalW, logicalH);
             if (bitmap == null) return new List<ScreenDelta>();
 
             var deltas = _detector.DetectChanges(bitmap, force, jpegQuality);
@@ -65,11 +72,11 @@ public sealed class MacScreenCapture : IScreenCapture
         }
     }
 
-    private static unsafe SKBitmap? CGImageToSKBitmap(IntPtr cgImage)
+    private static unsafe SKBitmap? CGImageToSKBitmap(IntPtr cgImage, int logicalWidth, int logicalHeight)
     {
-        int width  = (int)CGImageGetWidth(cgImage);
-        int height = (int)CGImageGetHeight(cgImage);
-        int bpr    = (int)CGImageGetBytesPerRow(cgImage);
+        int physW = (int)CGImageGetWidth(cgImage);
+        int physH = (int)CGImageGetHeight(cgImage);
+        int bpr   = (int)CGImageGetBytesPerRow(cgImage);
 
         var provider = CGImageGetDataProvider(cgImage);
         var cfData   = CGDataProviderCopyData(provider);
@@ -81,14 +88,22 @@ public sealed class MacScreenCapture : IScreenCapture
 
             // macOS CGDisplayCreateImage returns kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst
             // which on little-endian Intel/Apple Silicon is BGRA in memory.
-            var info   = new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
-            var bitmap = new SKBitmap(info);
-            byte* dst  = (byte*)bitmap.GetPixels();
+            var info = new SKImageInfo(physW, physH, SKColorType.Bgra8888, SKAlphaType.Premul);
+            var raw  = new SKBitmap(info);
+            byte* dst = (byte*)raw.GetPixels();
 
-            for (int row = 0; row < height; row++)
-                Buffer.MemoryCopy(src + row * bpr, dst + row * width * 4, width * 4, width * 4);
+            for (int row = 0; row < physH; row++)
+                Buffer.MemoryCopy(src + row * bpr, dst + row * physW * 4, physW * 4, physW * 4);
 
-            return bitmap;
+            // Scale down to logical resolution when the display is HiDPI/Retina.
+            if (physW == logicalWidth && physH == logicalHeight)
+                return raw;
+
+            var scaled = raw.Resize(
+                new SKImageInfo(logicalWidth, logicalHeight, SKColorType.Bgra8888, SKAlphaType.Premul),
+                SKFilterQuality.Medium);
+            raw.Dispose();
+            return scaled;
         }
         finally
         {
