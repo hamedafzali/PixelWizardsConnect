@@ -54,3 +54,6 @@ Desktop.ini
 
 # Recycle Bin
 $RECYCLE.BIN/
+
+# Claude Code local worktrees/state
+.claude/

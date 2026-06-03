@@ -136,24 +136,31 @@ public class App : Application
         }
     }
 
-    /// <summary>Generates a 16×16 blue-square PNG WindowIcon using SkiaSharp.</summary>
+    /// <summary>Loads the bundled app icon for the tray (falls back to a drawn square).</summary>
     private static WindowIcon? MakeTrayIcon()
     {
         try
         {
-            using var bmp = new SKBitmap(16, 16);
-            using var canvas = new SKCanvas(bmp);
-            canvas.Clear(SKColors.Transparent);
-            using var paint = new SKPaint { Color = new SKColor(37, 99, 235), IsAntialias = true };
-            canvas.DrawRoundRect(1, 1, 14, 14, 3, 3, paint);
-            using var stream = new MemoryStream();
-            bmp.Encode(stream, SKEncodedImageFormat.Png, 100);
-            stream.Position = 0;
-            return new WindowIcon(stream);
+            var uri = new Uri("avares://PixelWizard.AvaloniaClient/Assets/app-icon.png");
+            using var asset = AssetLoader.Open(uri);
+            return new WindowIcon(asset);
         }
         catch
         {
-            return null;
+            // Fallback: draw a simple blue square so the tray still has an icon.
+            try
+            {
+                using var bmp = new SKBitmap(16, 16);
+                using var canvas = new SKCanvas(bmp);
+                canvas.Clear(SKColors.Transparent);
+                using var paint = new SKPaint { Color = new SKColor(37, 99, 235), IsAntialias = true };
+                canvas.DrawRoundRect(1, 1, 14, 14, 3, 3, paint);
+                using var stream = new MemoryStream();
+                bmp.Encode(stream, SKEncodedImageFormat.Png, 100);
+                stream.Position = 0;
+                return new WindowIcon(stream);
+            }
+            catch { return null; }
         }
     }
 }

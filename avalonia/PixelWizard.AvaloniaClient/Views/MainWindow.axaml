@@ -3,6 +3,7 @@
         xmlns:vm="using:PixelWizard.AvaloniaClient.ViewModels"
         x:Class="PixelWizard.AvaloniaClient.Views.MainWindow"
         Title="{Binding WindowTitle}"
+        Icon="/Assets/app-icon.png"
         Width="880" Height="620"
         MinWidth="720" MinHeight="540"
         Background="{StaticResource Brush.App.Bg}"
