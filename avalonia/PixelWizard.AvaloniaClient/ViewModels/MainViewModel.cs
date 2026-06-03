@@ -343,9 +343,13 @@ public class MainViewModel : ReactiveObject, IDisposable
         _transport   = null;
         IsConnected  = false;
         IsConnecting = false;
-        RemoteScreen = null;
+        RemoteScreen = null;          // clear display BEFORE disposing the bitmap
         ViewScale    = 0;
-        _canvas?.Dispose(); _canvas = null;
+        var toDispose = _canvas;
+        _canvas       = null;
+        _canvasWidth  = 0;
+        _canvasHeight = 0;
+        toDispose?.Dispose();
         KeyboardActive = false;
         if (Screen == AppScreen.LiveScreen) Screen = AppScreen.Viewer;
     }
@@ -670,14 +674,28 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void ApplyFullScreen(byte[] data)
     {
-        _canvas?.Dispose(); _canvas = null;
+        // Keep a reference to the canvas currently shown by the UI thread.
+        // Disposing it immediately would black-out the display until the Post below runs.
+        // Defer disposal to inside the Post so it only happens after RemoteScreen switches.
+        var toDispose = _canvas;
+        _canvas       = null;
+        _canvasWidth  = 0;
+        _canvasHeight = 0;
+
         using var ms = new MemoryStream(data);
         var decoded  = new Bitmap(ms);
         int w = (int)decoded.Size.Width, h = (int)decoded.Size.Height;
         EnsureCanvas(w, h);
         using var dc = _canvas!.CreateDrawingContext();
         dc.DrawImage(decoded, new Rect(0, 0, w, h));
-        Dispatcher.UIThread.Post(() => { RemoteScreen = _canvas; _renderedFrames++; });
+
+        var snapshot = _canvas;  // capture by value — not affected by later assignments
+        Dispatcher.UIThread.Post(() =>
+        {
+            RemoteScreen = snapshot;
+            _renderedFrames++;
+            toDispose?.Dispose();   // safe: UI has already switched to snapshot
+        });
     }
 
     private void ApplyDelta(ScreenDelta delta)
@@ -689,7 +707,9 @@ public class MainViewModel : ReactiveObject, IDisposable
         var patch    = new Bitmap(ms);
         using var dc = _canvas!.CreateDrawingContext();
         dc.DrawImage(patch, new Rect(delta.X, delta.Y, delta.Width, delta.Height));
-        Dispatcher.UIThread.Post(() => { RemoteScreen = _canvas; _renderedFrames++; });
+
+        var snapshot = _canvas;  // capture by value so a racing ApplyFullScreen can't change it
+        Dispatcher.UIThread.Post(() => { RemoteScreen = snapshot; _renderedFrames++; });
     }
 
     private void EnsureCanvas(int w, int h)
@@ -702,7 +722,9 @@ public class MainViewModel : ReactiveObject, IDisposable
         {
             using var dc = _canvas.CreateDrawingContext();
             dc.DrawImage(old, new Rect(0, 0, old.Size.Width, old.Size.Height));
-            old.Dispose();
+            // Do NOT dispose old here — it is still referenced by RemoteScreen on the
+            // UI thread. ApplyFullScreen disposes it inside the UI Post after switching.
+            // For delta-triggered resizes the old canvas is released to the GC naturally.
         }
     }
 
