@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -18,11 +19,15 @@ public class App : Application
             var vm     = new MainViewModel();
             var window = new MainWindow { DataContext = vm };
 
-            // Wire consent dialog — runs on UI thread via ShowDialog
+            // Show the consent dialog as an independent topmost window so the main
+            // app window is NOT pulled to the foreground when a viewer connects.
             vm.ConsentCallback = async endpoint =>
             {
+                var tcs    = new TaskCompletionSource<bool>();
                 var dialog = new ConsentDialog(endpoint);
-                return await dialog.ShowDialog<bool>(window);
+                dialog.Closed += (_, _) => tcs.TrySetResult(dialog.Result == true);
+                dialog.Show();
+                return await tcs.Task;
             };
 
             vm.ClipboardCallback = async text =>

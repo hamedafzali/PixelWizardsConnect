@@ -4,7 +4,8 @@
         Title="Incoming Connection"
         Width="400" Height="240"
         CanResize="False"
-        WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
         Background="#F0F4F8"
         ShowInTaskbar="False">
 
