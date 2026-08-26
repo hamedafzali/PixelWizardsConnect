@@ -73,6 +73,11 @@ var (
 
 // ── Rate limiter ─────────────────────────────────────────────────────────────
 
+// nowFunc is a seam so tests can control TTL/rate-limit-window elapsing
+// without sleeping through real windows. Production code always uses the
+// default (time.Now); only tests swap it.
+var nowFunc = time.Now
+
 type rateLimiter struct {
 	mu     sync.Mutex
 	counts map[string][]time.Time
@@ -85,7 +90,7 @@ func newRateLimiter() *rateLimiter {
 func (r *rateLimiter) Allow(ip string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	now := time.Now()
+	now := nowFunc()
 	prev := r.counts[ip]
 	valid := prev[:0]
 	for _, t := range prev {
@@ -155,7 +160,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		reg.HostEndpoint = fmt.Sprintf("%s:8888", clientIP(r))
 	}
 	reg.SessionSecret = secret
-	reg.RegisteredAt  = time.Now()
+	reg.RegisteredAt  = nowFunc()
 
 	// Generate a unique code and store — all under a single lock to avoid TOCTOU races.
 	hostsMutex.Lock()
@@ -286,7 +291,7 @@ func cleanupExpiredHosts() {
 	defer ticker.Stop()
 	for range ticker.C {
 		hostsMutex.Lock()
-		now := time.Now()
+		now := nowFunc()
 		for id, host := range hosts {
 			if now.Sub(host.RegisteredAt) > codeTTL {
 				delete(hosts, id)
