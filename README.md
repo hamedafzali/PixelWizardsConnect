@@ -35,7 +35,7 @@ router-server/            — Go HTTP relay server
 - **Auto-reconnect** — host re-listens after a viewer disconnects without needing to restart
 - **Screen delta streaming** — only changed 32×32 pixel tiles are sent each frame
 - **Mouse and keyboard input** — forwarded over the encrypted TCP channel
-- **TLS** — self-signed certificate generated on first run; trust-on-first-use for LAN deployments
+- **TLS** — self-signed certificate generated on first run; the viewer pins each host's certificate fingerprint on first connect and refuses any later connection presenting a different one (see [Security notes](#security-notes))
 - **WebSocket viewer** — built-in local WebSocket server lets a browser watch the session on port 9001
 - **LAN host discovery** — the viewer's **Scan network** button finds PixelWizard hosts on the local network without typing an IP
 
@@ -104,8 +104,18 @@ After pulling new changes, a stale build can cause unexpected errors. If the app
 - Connection codes are **one-time use** — they are deleted from the router the moment a viewer claims them
 - Each code is paired with a per-session secret; the viewer must present the exact secret before the host shows the consent dialog
 - Direct-IP connections (no router) skip the secret check and rely on network-level access control
-- TLS uses a self-signed certificate stored in the app data folder (`PixelWizardConnect/transport.pfx`); the client accepts any server certificate on first connect
 - The router is plain HTTP — put it behind Caddy, Traefik, or nginx with TLS for internet-facing deployments
+
+### TLS certificate pinning (trust-on-first-use)
+
+Each host generates a self-signed certificate on first run, stored at `PixelWizardConnect/transport.pfx` in the app data folder. The viewer does **not** trust it blindly:
+
+- **First connection to a given `host:port`**: the presented certificate's SHA-256 fingerprint is recorded to a local pin store (`PixelWizardConnect/known_hosts.json`).
+- **Every later connection to that same `host:port`**: the fingerprint must match exactly, or the connection is refused with a distinct `CertificatePinMismatchException` — never silently accepted.
+- **What this defends against**: a network attacker who is *not* present at the very first connection cannot silently swap in their own certificate on a later session — the mismatch is detected and the connection is refused, rather than the app trusting a new certificate every time (which was the previous behavior).
+- **What this does not defend against**: an attacker who *is* on-path during the very first connection to a host is trusted permanently from that point on. TOFU has no prior trust anchor to check the first certificate against — this is a fundamental limitation of the model, not a bug. Pin the host over a channel you trust (e.g. LAN you control) the first time.
+- **If a host legitimately reinstalls or regenerates its certificate**, the viewer will refuse to connect until the old pin is forgotten. Use `TcpTransport.ForgetPin(host, port)` (or delete the corresponding entry from `known_hosts.json`) to re-trust it. There is no UI for this yet — see `docs/BACKLOG.md`.
+- **If `known_hosts.json` is missing**, it is treated as an empty pin set (normal on first install). If it **exists but is empty, unparsable, or contains a malformed fingerprint**, the store is treated as corrupted and every connection is refused until it is fixed or removed — it never silently falls back to accepting all certificates.
 
 ## Building for release
 

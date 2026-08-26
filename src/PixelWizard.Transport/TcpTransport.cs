@@ -18,6 +18,23 @@ namespace PixelWizard.Transport
         private Stream? _stream;
         private CancellationTokenSource? _cts;
         private bool _isConnected;
+        private readonly CertificatePinStore _pinStore;
+
+        internal static readonly CertificatePinStore SharedPinStore = new();
+
+        public TcpTransport() : this(SharedPinStore) { }
+
+        internal TcpTransport(CertificatePinStore pinStore)
+        {
+            _pinStore = pinStore;
+        }
+
+        /// <summary>
+        /// Forgets a previously pinned certificate fingerprint for host:port, so the next
+        /// connection re-pins instead of refusing. Needed because legitimate hosts reinstall
+        /// and regenerate certificates — without this the product bricks itself against them.
+        /// </summary>
+        public static bool ForgetPin(string host, int port) => SharedPinStore.Forget($"{host}:{port}");
 
         public event Action<NetworkMessage>? MessageReceived;
         public event Action? Connected;
@@ -38,8 +55,21 @@ namespace PixelWizard.Transport
 
                 if (useTls)
                 {
-                    var ssl = new SslStream(stream, false, AcceptAnyCertificate);
-                    await ssl.AuthenticateAsClientAsync(host);
+                    string pinKey = $"{host}:{port}";
+                    Exception? pinningFailure = null;
+
+                    var ssl = new SslStream(stream, false,
+                        (sender, cert, chain, errors) => ValidatePin(pinKey, cert, out pinningFailure));
+
+                    try
+                    {
+                        await ssl.AuthenticateAsClientAsync(host);
+                    }
+                    catch when (pinningFailure != null)
+                    {
+                        throw pinningFailure;
+                    }
+
                     stream = ssl;
                 }
 
@@ -163,8 +193,50 @@ namespace PixelWizard.Transport
             return true;
         }
 
-        // Accept all certs on the client side — trust-on-first-use for self-hosted deployments.
-        private static bool AcceptAnyCertificate(object s, X509Certificate? c, X509Chain? ch, SslPolicyErrors e) => true;
+        // Trust-on-first-use: pin the leaf cert's SHA-256 fingerprint on first connection to a
+        // given host:port, then require an exact match on every later connection. Chain/name
+        // errors from the (self-signed) server cert are deliberately ignored — the fingerprint
+        // comparison against the pin store is the only trust decision made here.
+        private bool ValidatePin(string key, X509Certificate? certificate, out Exception? failure)
+        {
+            failure = null;
+
+            if (certificate == null)
+            {
+                failure = new CertificateMissingException(key, $"No certificate was presented by '{key}'.");
+                return false;
+            }
+
+            string fingerprint = Convert.ToHexString(SHA256.HashData(certificate.GetRawCertData()));
+
+            string? pinned;
+            try
+            {
+                pinned = _pinStore.TryGetPin(key);
+            }
+            catch (CertificatePinStoreCorruptedException ex)
+            {
+                failure = ex;
+                return false;
+            }
+
+            if (pinned == null)
+            {
+                _pinStore.Pin(key, fingerprint);
+                return true;
+            }
+
+            if (!string.Equals(pinned, fingerprint, StringComparison.OrdinalIgnoreCase))
+            {
+                failure = new CertificatePinMismatchException(key, pinned, fingerprint,
+                    $"Certificate fingerprint for '{key}' does not match the pinned value. " +
+                    "This may indicate a MITM attack, or the host legitimately reinstalled/regenerated " +
+                    $"its certificate — use {nameof(TcpTransport)}.{nameof(ForgetPin)} to re-trust it.");
+                return false;
+            }
+
+            return true;
+        }
 
         private static readonly string CertPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
