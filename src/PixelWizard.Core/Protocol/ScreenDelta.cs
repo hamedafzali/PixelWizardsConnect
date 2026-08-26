@@ -28,13 +28,28 @@ namespace PixelWizard.Core.Protocol
         {
             using var ms = new MemoryStream(buffer);
             using var reader = new BinaryReader(ms);
+            int x = reader.ReadInt32();
+            int y = reader.ReadInt32();
+            int width = reader.ReadInt32();
+            int height = reader.ReadInt32();
+            int length = reader.ReadInt32();
+
+            // See NetworkMessage.Deserialize: BinaryReader.ReadBytes silently returns fewer
+            // bytes than requested when the stream runs out early instead of throwing, so a
+            // forged/corrupt length field would otherwise produce a truncated ImageData with
+            // no error. Reject that case explicitly rather than letting it misparse.
+            long remaining = ms.Length - ms.Position;
+            if (length < 0 || length > remaining)
+                throw new InvalidDataException(
+                    $"ScreenDelta declared image length {length}, but only {remaining} byte(s) remain in the buffer.");
+
             return new ScreenDelta
             {
-                X = reader.ReadInt32(),
-                Y = reader.ReadInt32(),
-                Width = reader.ReadInt32(),
-                Height = reader.ReadInt32(),
-                ImageData = reader.ReadBytes(reader.ReadInt32())
+                X = x,
+                Y = y,
+                Width = width,
+                Height = height,
+                ImageData = reader.ReadBytes(length)
             };
         }
     }
