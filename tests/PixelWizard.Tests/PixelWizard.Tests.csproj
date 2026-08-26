@@ -1,29 +1,48 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <!--
+      Multi-targeted so the System.Drawing (Windows) detector suite can be compiled
+      and run in the SAME project/assembly as the Skia suite, with a runtime
+      SkippableFact skip rather than being split into an unreachable separate
+      project. net9.0-windows binaries run fine on non-Windows OSes as long as no
+      Windows-only API is actually invoked (see SkipIfNotWindows in
+      SystemDrawingScreenChangeDetectorTests) — `dotnet test` runs both TFMs here.
+    -->
+    <TargetFrameworks>net9.0;net9.0-windows</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Allows cross-compiling (and, per the note above, running) the net9.0-windows TFM from macOS. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
     <PackageReference Include="SkiaSharp" Version="2.88.9" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\PixelWizard.Core\PixelWizard.Core.csproj" />
     <ProjectReference Include="..\..\src\PixelWizard.Transport\PixelWizard.Transport.csproj" />
-    <!-- Linux/Mac SkiaScreenChangeDetector copies (T2). PixelWizard.WindowsHost cannot be
-         referenced here: it targets net9.0-windows, which this net9.0 project is not
-         permitted to reference (NU1201), and System.Drawing.Common does not run on
-         non-Windows under .NET 9 regardless. Its detector is covered separately by
-         PixelWizard.Tests.Windows, buildable/runnable only on Windows (see T4 CI). -->
+    <!-- internal sealed; SkiaDetectorHarness reaches it via reflection instead of
+         InternalsVisibleTo, to keep this task's changes inside tests/. -->
     <ProjectReference Include="..\..\src\PixelWizard.LinuxHost\PixelWizard.LinuxHost.csproj" />
-    <ProjectReference Include="..\..\avalonia\PixelWizard.AvaloniaClient\PixelWizard.AvaloniaClient.csproj" />
+  </ItemGroup>
+  <!-- WindowsHost (System.Drawing) is only compilable from the net9.0-windows TFM: a
+       net9.0 project cannot reference a net9.0-windows project (NU1201). -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0-windows'">
+    <ProjectReference Include="..\..\src\PixelWizard.WindowsHost\PixelWizard.WindowsHost.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net9.0-windows'">
+    <Compile Remove="ScreenChangeDetector\SystemDrawingDetectorHarness.cs" />
+    <Compile Remove="ScreenChangeDetector\SystemDrawingScreenChangeDetectorTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Fixtures\**\*.bin" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Fixtures\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\fixtures\ScreenChangeDetector\*.png"
+          Link="Fixtures\ScreenChangeDetector\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

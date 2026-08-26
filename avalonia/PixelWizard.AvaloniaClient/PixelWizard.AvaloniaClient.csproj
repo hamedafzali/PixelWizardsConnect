@@ -59,8 +59,4 @@
     <ProjectReference Include="..\..\src\PixelWizard.LinuxHost\PixelWizard.LinuxHost.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <InternalsVisibleTo Include="PixelWizard.Tests" />
-  </ItemGroup>
-
 </Project>
