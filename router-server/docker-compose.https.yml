@@ -16,6 +16,10 @@ services:
       - "9000"          # internal only — Caddy proxies inbound HTTPS to here
     environment:
       ROUTER_ADDR: ":9000"
+      # Caddy reaches the router over this compose network's default bridge
+      # subnet. Confirm your actual range with `docker network inspect` and
+      # narrow this if it differs — it must cover Caddy's container IP.
+      TRUSTED_PROXY_CIDRS: "172.16.0.0/12"
 
   caddy:
     image: caddy:2-alpine

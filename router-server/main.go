@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -22,6 +23,11 @@ var (
 	cleanupInterval time.Duration
 	rateLimitWindow time.Duration
 	rateLimitMax    int
+
+	// trustedProxyCIDRs is empty by default: no proxy is trusted, so
+	// X-Forwarded-For is always ignored and the raw socket peer is used as
+	// the client identity. Secure by default for direct-exposure deployments.
+	trustedProxyCIDRs []*net.IPNet
 )
 
 func initConfig() {
@@ -30,6 +36,50 @@ func initConfig() {
 	cleanupInterval = getDurationEnv("CLEANUP_INTERVAL", 5*time.Minute)
 	rateLimitWindow = getDurationEnv("RATE_LIMIT_WINDOW", time.Minute)
 	rateLimitMax    = getIntEnv("RATE_LIMIT_MAX", 10)
+
+	cidrs, err := parseTrustedProxyCIDRs(getEnv("TRUSTED_PROXY_CIDRS", ""))
+	if err != nil {
+		log.Fatalf("invalid TRUSTED_PROXY_CIDRS: %v", err)
+	}
+	trustedProxyCIDRs = cidrs
+}
+
+// parseTrustedProxyCIDRs parses a comma-separated CIDR list. An empty string
+// yields no trusted proxies (nil, not an error) — that is the secure default.
+// Any entry that fails to parse as a CIDR is a hard error: a typo'd CIDR
+// silently disabling proxy trust (and thus the rate limiter) is worse than
+// refusing to start.
+func parseTrustedProxyCIDRs(raw string) ([]*net.IPNet, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	entries := strings.Split(raw, ",")
+	nets := make([]*net.IPNet, 0, len(entries))
+	for _, entry := range entries {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		_, ipNet, err := net.ParseCIDR(entry)
+		if err != nil {
+			return nil, fmt.Errorf("%q is not a valid CIDR: %w", entry, err)
+		}
+		nets = append(nets, ipNet)
+	}
+	return nets, nil
+}
+
+func isTrustedProxy(ip net.IP) bool {
+	if ip == nil {
+		return false
+	}
+	for _, ipNet := range trustedProxyCIDRs {
+		if ipNet.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // ── Data types ───────────────────────────────────────────────────────────────
@@ -276,14 +326,29 @@ func generateSecret() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
+// clientIP resolves the caller's identity for rate limiting. X-Forwarded-For
+// is honoured only when the direct socket peer is a configured trusted
+// proxy; otherwise it is ignored entirely and the socket peer is used,
+// regardless of what the header claims. This is a single-hop trust model:
+// when trusted, the RIGHTMOST X-Forwarded-For entry is taken, since that is
+// the value the trusted proxy itself observed on its inbound connection
+// (each proxy appends the peer it sees to the right of the header as it
+// forwards the request) — everything to its left is whatever the client
+// or an upstream (untrusted, from our point of view) hop claimed.
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		return strings.TrimSpace(strings.SplitN(xff, ",", 2)[0])
+	peer := r.RemoteAddr
+	if idx := strings.LastIndex(peer, ":"); idx >= 0 {
+		peer = peer[:idx]
 	}
-	if idx := strings.LastIndex(r.RemoteAddr, ":"); idx >= 0 {
-		return r.RemoteAddr[:idx]
+
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" && isTrustedProxy(net.ParseIP(peer)) {
+		parts := strings.Split(xff, ",")
+		if rightmost := strings.TrimSpace(parts[len(parts)-1]); rightmost != "" {
+			return rightmost
+		}
 	}
-	return r.RemoteAddr
+
+	return peer
 }
 
 func cleanupExpiredHosts() {

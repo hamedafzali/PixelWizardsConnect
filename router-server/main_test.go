@@ -53,42 +53,108 @@ func TestClientIP_RemoteAddr(t *testing.T) {
 	}
 }
 
-func TestClientIP_ForwardedFor(t *testing.T) {
-	r := &http.Request{RemoteAddr: "1.2.3.4:5678", Header: http.Header{}}
-	r.Header.Set("X-Forwarded-For", "9.9.9.9, 1.1.1.1")
-	if got := clientIP(r); got != "9.9.9.9" {
-		t.Fatalf("expected 9.9.9.9, got %q", got)
+// ── T6 (C1): clientIP / TRUSTED_PROXY_CIDRS ─────────────────────────────────
+//
+// T3 pinned the old behaviour — clientIP trusted X-Forwarded-For
+// unconditionally, from any peer, taking the leftmost entry, with no IP
+// syntax validation. T6 replaces all of that with trusted-proxy gating.
+// The following four T3 baseline tests are DELETED, not silently rewritten,
+// because their assertions describe the exact vulnerability C1 closes:
+//   - TestClientIP_ForwardedFor (leftmost entry, "9.9.9.9" from "9.9.9.9, 1.1.1.1")
+//   - TestClientIP_ForwardedFor_TrustedUnconditionally_Baseline (any peer trusted)
+//   - TestClientIP_ForwardedFor_MultipleValues_LeftmostWins (leftmost wins)
+//   - TestClientIP_ForwardedFor_InvalidIPValue_PassedThroughUnvalidated (no gating at all)
+// Replaced below by tests asserting the new, secure-by-default behaviour.
+
+func resetTrustedProxies(cidrs ...string) {
+	nets, err := parseTrustedProxyCIDRs(strings.Join(cidrs, ","))
+	if err != nil {
+		panic(err) // test setup only; a bad literal here is a test bug
 	}
+	trustedProxyCIDRs = nets
 }
 
-// Pinned baseline for T6: clientIP trusts X-Forwarded-For unconditionally —
-// no allow-list of trusted proxies, no validation that the value is even a
-// real IP address. T6 deliberately replaces this with TRUSTED_PROXY_CIDRS
-// gating. Do not "fix" this here; these tests exist to freeze the current
-// behaviour so T6 has a baseline to diff against.
-func TestClientIP_ForwardedFor_TrustedUnconditionally_Baseline(t *testing.T) {
+// This is the security assertion C1 exists for: with no trusted proxy
+// configured (the default), a spoofed X-Forwarded-For header is completely
+// ignored and the real socket peer is used instead.
+func TestClientIP_SpoofedForwardedFor_IgnoredWhenNoTrustedProxyConfigured(t *testing.T) {
+	resetTrustedProxies()
 	r := &http.Request{RemoteAddr: "1.2.3.4:5678", Header: http.Header{}}
 	r.Header.Set("X-Forwarded-For", "203.0.113.7")
+	if got := clientIP(r); got != "1.2.3.4" {
+		t.Fatalf("expected spoofed XFF to be ignored in favour of the real peer 1.2.3.4, got %q", got)
+	}
+}
+
+func TestClientIP_ForwardedFor_HonouredWhenPeerIsTrustedProxy(t *testing.T) {
+	resetTrustedProxies("10.0.0.0/8")
+	r := &http.Request{RemoteAddr: "10.1.2.3:5678", Header: http.Header{}}
+	r.Header.Set("X-Forwarded-For", "203.0.113.7")
 	if got := clientIP(r); got != "203.0.113.7" {
-		t.Fatalf("expected the XFF value to be trusted as-is, got %q", got)
+		t.Fatalf("expected XFF from a trusted peer to be honoured, got %q", got)
 	}
 }
 
-func TestClientIP_ForwardedFor_MultipleValues_LeftmostWins(t *testing.T) {
-	r := &http.Request{RemoteAddr: "1.2.3.4:5678", Header: http.Header{}}
-	r.Header.Set("X-Forwarded-For", "10.10.10.10, 20.20.20.20, 30.30.30.30")
+// Rightmost-untrusted: with a single-hop trust model (one flat list of
+// trusted proxies, no per-hop chain-of-custody), the rightmost XFF entry is
+// the one the trusted proxy itself appended for the connection it directly
+// observed. Entries to its left are whatever an untrusted upstream claimed.
+func TestClientIP_ForwardedFor_MultipleValues_RightmostWins_WhenTrusted(t *testing.T) {
+	resetTrustedProxies("10.0.0.0/8")
+	r := &http.Request{RemoteAddr: "10.1.2.3:5678", Header: http.Header{}}
+	r.Header.Set("X-Forwarded-For", "30.30.30.30, 20.20.20.20, 10.10.10.10")
 	if got := clientIP(r); got != "10.10.10.10" {
-		t.Fatalf("expected leftmost XFF value, got %q", got)
+		t.Fatalf("expected rightmost XFF value 10.10.10.10, got %q", got)
 	}
 }
 
-// Documents actual behaviour, not a requirement: clientIP performs no IP
-// syntax validation at all, so a garbage XFF value passes through unchanged.
-func TestClientIP_ForwardedFor_InvalidIPValue_PassedThroughUnvalidated(t *testing.T) {
+func TestClientIP_ForwardedFor_MultipleValues_IgnoredWhenNotTrusted(t *testing.T) {
+	resetTrustedProxies()
 	r := &http.Request{RemoteAddr: "1.2.3.4:5678", Header: http.Header{}}
+	r.Header.Set("X-Forwarded-For", "30.30.30.30, 20.20.20.20, 10.10.10.10")
+	if got := clientIP(r); got != "1.2.3.4" {
+		t.Fatalf("expected real peer 1.2.3.4 regardless of XFF contents, got %q", got)
+	}
+}
+
+// Documents an intentional scope limit: once a proxy is trusted, C1 gates
+// only on the peer's identity — it does not additionally validate that the
+// chosen XFF segment is a syntactically valid IP address.
+func TestClientIP_ForwardedFor_InvalidValue_PassedThroughUnvalidated_WhenTrusted(t *testing.T) {
+	resetTrustedProxies("10.0.0.0/8")
+	r := &http.Request{RemoteAddr: "10.1.2.3:5678", Header: http.Header{}}
 	r.Header.Set("X-Forwarded-For", "not-an-ip")
 	if got := clientIP(r); got != "not-an-ip" {
 		t.Fatalf("expected unvalidated passthrough of %q, got %q", "not-an-ip", got)
+	}
+}
+
+func TestParseTrustedProxyCIDRs_Empty_YieldsNoTrust(t *testing.T) {
+	nets, err := parseTrustedProxyCIDRs("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(nets) != 0 {
+		t.Fatalf("expected no trusted proxies for empty config, got %d", len(nets))
+	}
+}
+
+func TestParseTrustedProxyCIDRs_ValidList_Parses(t *testing.T) {
+	nets, err := parseTrustedProxyCIDRs(" 10.0.0.0/8 , 172.16.0.0/12 ")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(nets) != 2 {
+		t.Fatalf("expected 2 parsed CIDRs, got %d", len(nets))
+	}
+}
+
+// The startup-safety requirement: a malformed CIDR must fail loudly (the
+// caller, initConfig, turns this error into log.Fatal) rather than silently
+// disabling proxy trust or silently ignoring the bad entry.
+func TestParseTrustedProxyCIDRs_Malformed_ReturnsError(t *testing.T) {
+	if _, err := parseTrustedProxyCIDRs("10.0.0.0/8, not-a-cidr"); err == nil {
+		t.Fatal("expected an error for a malformed CIDR entry, got nil")
 	}
 }
 
@@ -131,11 +197,19 @@ func resetGlobalState() {
 	rateLimitWindow = time.Minute
 	rateLimitMax = 10
 	codeTTL = 30 * time.Minute
+	trustedProxyCIDRs = nil // secure default: no trusted proxies
 }
 
 func postJSON(handler http.HandlerFunc, path, body string, xff string) *httptest.ResponseRecorder {
+	return postJSONFrom(handler, path, body, "127.0.0.1:1234", xff)
+}
+
+// postJSONFrom lets a test vary the simulated socket peer, needed for any
+// test exercising trusted-proxy XFF gating or per-peer rate limiting under
+// the no-trusted-proxy (default) configuration.
+func postJSONFrom(handler http.HandlerFunc, path, body, remoteAddr, xff string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
-	req.RemoteAddr = "127.0.0.1:1234"
+	req.RemoteAddr = remoteAddr
 	if xff != "" {
 		req.Header.Set("X-Forwarded-For", xff)
 	}
@@ -443,48 +517,98 @@ func TestHandleHealth(t *testing.T) {
 
 // ── Rate limiter (handler-level) ─────────────────────────────────────────────
 
+// T6 (C1) note: this test previously differentiated "different IPs" via
+// X-Forwarded-For while every request shared the same socket peer. Now that
+// XFF is ignored by default (no trusted proxy configured — the secure
+// default), that no longer simulates two different clients; it would
+// collapse onto one rate-limit bucket and the "different IP" assertion
+// would fail. Rewritten to differentiate by socket peer instead, which is
+// the correct way to simulate distinct real clients hitting the limiter
+// directly (the deployment this default is for).
 func TestRateLimiting_Register_PerIP_BoundaryAndStatusCode(t *testing.T) {
 	resetGlobalState()
 	rateLimitMax = 3
 	rateLimitWindow = time.Minute
 
 	for i := 0; i < rateLimitMax; i++ {
-		rec := postJSON(handleRegister, "/register", fmt.Sprintf(`{"hostId":"h%d","hostName":"h"}`, i), "1.1.1.1")
+		rec := postJSONFrom(handleRegister, "/register", fmt.Sprintf(`{"hostId":"h%d","hostName":"h"}`, i), "1.1.1.1:1", "")
 		if rec.Code != http.StatusOK {
 			t.Fatalf("call %d: expected 200, got %d", i+1, rec.Code)
 		}
 	}
-	over := postJSON(handleRegister, "/register", `{"hostId":"hN","hostName":"h"}`, "1.1.1.1")
+	over := postJSONFrom(handleRegister, "/register", `{"hostId":"hN","hostName":"h"}`, "1.1.1.1:1", "")
 	if over.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 once over limit, got %d", over.Code)
 	}
 
-	// A different source IP has an independent budget.
-	other := postJSON(handleRegister, "/register", `{"hostId":"hOther","hostName":"h"}`, "2.2.2.2")
+	// A different source peer has an independent budget.
+	other := postJSONFrom(handleRegister, "/register", `{"hostId":"hOther","hostName":"h"}`, "2.2.2.2:1", "")
 	if other.Code != http.StatusOK {
-		t.Fatalf("expected different IP to be unaffected, got %d", other.Code)
+		t.Fatalf("expected different peer IP to be unaffected, got %d", other.Code)
 	}
 }
 
+// See note on TestRateLimiting_Register_PerIP_BoundaryAndStatusCode above —
+// same rewrite, same reason.
 func TestRateLimiting_Connect_PerIP(t *testing.T) {
 	resetGlobalState()
 	rateLimitMax = 2
 	rateLimitWindow = time.Minute
 
 	for i := 0; i < rateLimitMax; i++ {
-		rec := postJSON(handleConnect, "/connect", `{"connectionCode":"NOPE00","clientId":"c"}`, "3.3.3.3")
+		rec := postJSONFrom(handleConnect, "/connect", `{"connectionCode":"NOPE00","clientId":"c"}`, "3.3.3.3:1", "")
 		if rec.Code != http.StatusNotFound {
 			t.Fatalf("call %d: expected 404 (unknown code, not yet rate-limited), got %d", i+1, rec.Code)
 		}
 	}
-	over := postJSON(handleConnect, "/connect", `{"connectionCode":"NOPE00","clientId":"c"}`, "3.3.3.3")
+	over := postJSONFrom(handleConnect, "/connect", `{"connectionCode":"NOPE00","clientId":"c"}`, "3.3.3.3:1", "")
 	if over.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429 once over limit, got %d", over.Code)
 	}
 
-	other := postJSON(handleConnect, "/connect", `{"connectionCode":"NOPE00","clientId":"c"}`, "4.4.4.4")
+	other := postJSONFrom(handleConnect, "/connect", `{"connectionCode":"NOPE00","clientId":"c"}`, "4.4.4.4:1", "")
 	if other.Code != http.StatusNotFound {
-		t.Fatalf("expected different IP to be unaffected (404, not 429), got %d", other.Code)
+		t.Fatalf("expected different peer IP to be unaffected (404, not 429), got %d", other.Code)
+	}
+}
+
+// Explicit spec requirement: rate limiting keys off the resolved IP in both
+// TRUSTED_PROXY_CIDRS configurations.
+func TestRateLimiting_KeysOffPeer_WhenNoTrustedProxyConfigured(t *testing.T) {
+	resetGlobalState()
+	rateLimitMax = 1
+	rateLimitWindow = time.Minute
+
+	// Same peer, different (spoofed) XFF values: since no proxy is trusted,
+	// XFF must be ignored, so the second call shares the first's budget.
+	first := postJSONFrom(handleRegister, "/register", `{"hostId":"h1","hostName":"h"}`, "9.9.9.9:1", "1.1.1.1")
+	if first.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", first.Code)
+	}
+	second := postJSONFrom(handleRegister, "/register", `{"hostId":"h2","hostName":"h"}`, "9.9.9.9:1", "2.2.2.2")
+	if second.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429: spoofed differing XFF must not grant a separate budget, got %d", second.Code)
+	}
+}
+
+func TestRateLimiting_KeysOffForwardedFor_WhenPeerIsTrustedProxy(t *testing.T) {
+	resetGlobalState()
+	resetTrustedProxies("9.9.9.9/32")
+	rateLimitMax = 1
+	rateLimitWindow = time.Minute
+
+	// Same (trusted) peer, different XFF: each XFF value gets its own budget.
+	first := postJSONFrom(handleRegister, "/register", `{"hostId":"h1","hostName":"h"}`, "9.9.9.9:1", "1.1.1.1")
+	if first.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", first.Code)
+	}
+	second := postJSONFrom(handleRegister, "/register", `{"hostId":"h2","hostName":"h"}`, "9.9.9.9:1", "1.1.1.1")
+	if second.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429: same resolved XFF IP should share the budget, got %d", second.Code)
+	}
+	other := postJSONFrom(handleRegister, "/register", `{"hostId":"h3","hostName":"h"}`, "9.9.9.9:1", "2.2.2.2")
+	if other.Code != http.StatusOK {
+		t.Fatalf("expected 200: a different XFF IP behind the trusted proxy has its own budget, got %d", other.Code)
 	}
 }
 

@@ -59,6 +59,14 @@ The server starts on port 9000. Available env vars:
 | `CLEANUP_INTERVAL` | `5m` | Expired-code cleanup frequency |
 | `RATE_LIMIT_WINDOW` | `1m` | Rate-limit sliding window |
 | `RATE_LIMIT_MAX` | `10` | Max requests per IP per window |
+| `TRUSTED_PROXY_CIDRS` | *(empty)* | Comma-separated CIDR list. See below. |
+
+**`TRUSTED_PROXY_CIDRS`** controls whether `X-Forwarded-For` is trusted for rate-limiting identity:
+
+- **Left empty (default)**: `X-Forwarded-For` is always ignored, regardless of its value — the rate limiter keys off the raw socket peer. Correct and secure for direct exposure (no reverse proxy in front).
+- **Set to your reverse proxy's address range** (e.g. `172.16.0.0/12` for a typical Docker bridge network, or your load balancer's subnet): `X-Forwarded-For` is honoured **only** when the direct TCP peer is inside one of the listed CIDRs. If multiple values are present in the header, the **rightmost** one is used — that is the value the trusted proxy itself observed, since each hop appends to the right as it forwards the request.
+- A malformed CIDR in this list fails the server at startup with a clear error — it will not silently start with proxy trust disabled.
+- Never set this to `0.0.0.0/0` (or any range broader than your actual proxy) on a directly-exposed deployment — that re-opens the exact spoofing gap this setting exists to close.
 
 ### 2. Client application
 

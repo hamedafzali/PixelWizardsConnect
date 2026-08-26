@@ -139,6 +139,11 @@ Go was chosen for this router server because:
 - For production use, add:
   - TLS/HTTPS support
   - Authentication tokens
-  - Rate limiting
   - IP whitelisting
-  - Input validation
+- **Rate limiting** is built in (see `RATE_LIMIT_WINDOW`/`RATE_LIMIT_MAX` in the top-level
+  [README](../README.md#1-router-server)), keyed by client IP
+- **`TRUSTED_PROXY_CIDRS`** (empty by default) controls whether `X-Forwarded-For` is
+  trusted for that IP. Leave it empty for direct exposure (the default, and the secure
+  choice with no reverse proxy). Only set it — to your reverse proxy's actual address
+  range — when this server sits behind one; see the top-level README for details and the
+  rightmost-value rule used when multiple hops are present.

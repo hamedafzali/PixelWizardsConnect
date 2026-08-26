@@ -8,3 +8,7 @@ services:
     restart: unless-stopped
     ports:
       - "9000:9000"
+    # This compose file exposes the router directly (no reverse proxy), so
+    # TRUSTED_PROXY_CIDRS is deliberately left unset — the default (empty)
+    # is correct here. Do not set it unless you put something in front of
+    # this container. See docker-compose.https.yml for the reverse-proxy setup.
