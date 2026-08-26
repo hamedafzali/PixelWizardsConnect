@@ -147,3 +147,6 @@ Go was chosen for this router server because:
   choice with no reverse proxy). Only set it — to your reverse proxy's actual address
   range — when this server sits behind one; see the top-level README for details and the
   rightmost-value rule used when multiple hops are present.
+- **`/register` validates its fields**: `hostId` and `hostName` are required (non-empty
+  after trimming whitespace) and, like `hostEndpoint`, capped at 256 characters. Invalid
+  requests get a `400` with a message naming the offending field.

@@ -280,25 +280,81 @@ func TestHandleRegister_MalformedJSON(t *testing.T) {
 	}
 }
 
-// Documents actual behaviour: handleRegister performs no validation of
-// required fields. An empty hostId is accepted and stored under the ""
-// key in the hosts map. This is a real gap, not an assumption — see
-// docs/BACKLOG.md.
-func TestHandleRegister_EmptyFields_AcceptedWithoutValidation(t *testing.T) {
+// T6 (C3) baseline flip: TestHandleRegister_EmptyFields_AcceptedWithoutValidation
+// previously pinned that handleRegister performed no validation and accepted
+// empty hostId/hostName at 200. C3 adds presence/length validation, so this
+// now asserts the opposite: empty required fields are rejected at 400, and
+// nothing is stored.
+func TestHandleRegister_EmptyRequiredFields_Rejected(t *testing.T) {
 	resetGlobalState()
 	rec := postJSON(handleRegister, "/register", `{"hostId":"","hostName":"","hostEndpoint":""}`, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected empty hostId/hostName to be rejected with 400, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	hostsMutex.Lock()
+	n := len(hosts)
+	hostsMutex.Unlock()
+	if n != 0 {
+		t.Fatalf("expected no host to be stored after a rejected registration, got %d", n)
+	}
+}
+
+func TestHandleRegister_MissingRequiredFields_Rejected(t *testing.T) {
+	resetGlobalState()
+	rec := postJSON(handleRegister, "/register", `{"hostEndpoint":"1.2.3.4:8888"}`, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected missing hostId/hostName to be rejected with 400, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleRegister_WhitespaceOnlyFields_Rejected(t *testing.T) {
+	resetGlobalState()
+	rec := postJSON(handleRegister, "/register", `{"hostId":"   ","hostName":"h"}`, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected whitespace-only hostId to be rejected with 400, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandleRegister_OversizedFields_Rejected(t *testing.T) {
+	resetGlobalState()
+	oversized := strings.Repeat("a", maxHostIDLength+1)
+	body := fmt.Sprintf(`{"hostId":%q,"hostName":"h"}`, oversized)
+	rec := postJSON(handleRegister, "/register", body, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected oversized hostId to be rejected with 400, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	resetGlobalState()
+	oversizedName := strings.Repeat("b", maxHostNameLength+1)
+	body = fmt.Sprintf(`{"hostId":"h1","hostName":%q}`, oversizedName)
+	rec = postJSON(handleRegister, "/register", body, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected oversized hostName to be rejected with 400, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	resetGlobalState()
+	oversizedEndpoint := strings.Repeat("c", maxHostEndpointLength+1)
+	body = fmt.Sprintf(`{"hostId":"h1","hostName":"h","hostEndpoint":%q}`, oversizedEndpoint)
+	rec = postJSON(handleRegister, "/register", body, "")
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected oversized hostEndpoint to be rejected with 400, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+// hostEndpoint remains optional: empty is a legitimate "use the socket peer
+// as the default" signal, not a validation failure.
+func TestHandleRegister_ValidRegistration_StillSucceeds(t *testing.T) {
+	resetGlobalState()
+	rec := postJSON(handleRegister, "/register", `{"hostId":"h1","hostName":"My Computer","hostEndpoint":"192.168.1.100:8888"}`, "")
 	if rec.Code != http.StatusOK {
-		t.Fatalf("current behaviour accepts empty fields; expected 200, got %d (%s)", rec.Code, rec.Body.String())
+		t.Fatalf("expected valid registration to succeed, got %d (%s)", rec.Code, rec.Body.String())
 	}
 	var resp RegistrationResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("bad response JSON: %v", err)
 	}
-	if resp.HostID != "" {
-		t.Fatalf("expected empty hostId to round-trip as empty, got %q", resp.HostID)
-	}
-	if len(resp.ConnectionCode) != 6 {
-		t.Fatalf("expected a code to still be issued, got %q", resp.ConnectionCode)
+	if resp.HostID != "h1" || len(resp.ConnectionCode) != 6 {
+		t.Fatalf("unexpected response: %+v", resp)
 	}
 }
 

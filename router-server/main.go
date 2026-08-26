@@ -31,11 +31,11 @@ var (
 )
 
 func initConfig() {
-	serverPort      = getEnv("PORT", "9000")
-	codeTTL         = getDurationEnv("CODE_TTL", 30*time.Minute)
+	serverPort = getEnv("PORT", "9000")
+	codeTTL = getDurationEnv("CODE_TTL", 30*time.Minute)
 	cleanupInterval = getDurationEnv("CLEANUP_INTERVAL", 5*time.Minute)
 	rateLimitWindow = getDurationEnv("RATE_LIMIT_WINDOW", time.Minute)
-	rateLimitMax    = getIntEnv("RATE_LIMIT_MAX", 10)
+	rateLimitMax = getIntEnv("RATE_LIMIT_MAX", 10)
 
 	cidrs, err := parseTrustedProxyCIDRs(getEnv("TRUSTED_PROXY_CIDRS", ""))
 	if err != nil {
@@ -91,6 +91,42 @@ type HostRegistration struct {
 	ConnectionCode string    `json:"connectionCode"`
 	SessionSecret  string    `json:"sessionSecret"`
 	RegisteredAt   time.Time `json:"registeredAt"`
+}
+
+// Length bounds on caller-supplied /register fields. hostId and hostName are
+// required (non-empty after trimming whitespace); hostEndpoint may be empty
+// (handleRegister defaults it from the socket peer) but is still bounded
+// since it is stored for up to codeTTL. 256 comfortably covers legitimate
+// values (UUIDs, hostnames, "host:port" pairs) while capping the per-entry
+// memory a malicious or buggy caller can force onto the hosts map.
+const (
+	maxHostIDLength       = 256
+	maxHostNameLength     = 256
+	maxHostEndpointLength = 256
+)
+
+// validateRegistration checks presence and length bounds on the fields a
+// caller supplies to /register. connectionCode, sessionSecret, and
+// registeredAt are excluded: handleRegister overwrites all three itself
+// after decoding, so any client-supplied values are discarded before being
+// persisted and need no validation here.
+func validateRegistration(reg *HostRegistration) error {
+	if strings.TrimSpace(reg.HostID) == "" {
+		return fmt.Errorf("hostId is required")
+	}
+	if len(reg.HostID) > maxHostIDLength {
+		return fmt.Errorf("hostId exceeds maximum length of %d", maxHostIDLength)
+	}
+	if strings.TrimSpace(reg.HostName) == "" {
+		return fmt.Errorf("hostName is required")
+	}
+	if len(reg.HostName) > maxHostNameLength {
+		return fmt.Errorf("hostName exceeds maximum length of %d", maxHostNameLength)
+	}
+	if len(reg.HostEndpoint) > maxHostEndpointLength {
+		return fmt.Errorf("hostEndpoint exceeds maximum length of %d", maxHostEndpointLength)
+	}
+	return nil
 }
 
 type ConnectionRequest struct {
@@ -200,6 +236,11 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateRegistration(&reg); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	secret, err := generateSecret()
 	if err != nil {
 		http.Error(w, "Internal error", http.StatusInternalServerError)
@@ -210,15 +251,15 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		reg.HostEndpoint = fmt.Sprintf("%s:8888", clientIP(r))
 	}
 	reg.SessionSecret = secret
-	reg.RegisteredAt  = nowFunc()
+	reg.RegisteredAt = nowFunc()
 
 	// Generate a unique code and store — all under a single lock to avoid TOCTOU races.
 	hostsMutex.Lock()
 	code, codeErr := generateUniqueCodeLocked()
 	if codeErr == nil {
 		reg.ConnectionCode = code
-		hosts[reg.HostID]  = &reg
-		hostsByCode[code]  = &reg
+		hosts[reg.HostID] = &reg
+		hostsByCode[code] = &reg
 	}
 	hostsMutex.Unlock()
 
