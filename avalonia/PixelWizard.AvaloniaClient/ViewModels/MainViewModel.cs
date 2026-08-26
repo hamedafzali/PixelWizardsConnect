@@ -1018,6 +1018,12 @@ public class MainViewModel : ReactiveObject, IDisposable
         }
 
         string secret = Encoding.UTF8.GetString(msg.Data);
+        // For a direct (non-router) connection, _expectedSessionSecret is never set and
+        // stays "", matching the "" the host sends for the same reason — there is no
+        // channel to share a secret out-of-band when a user just types an IP address, so
+        // this check is a deliberate no-op on that path, not a bug. The consent dialog is
+        // the sole gate for direct connections. See README "Security" for the full trust
+        // model of both connection paths.
         if (secret != _expectedSessionSecret)
         {
             _ = _hostTransport?.SendMessageAsync(new NetworkMessage { Type = MessageType.HandshakeFailed });
