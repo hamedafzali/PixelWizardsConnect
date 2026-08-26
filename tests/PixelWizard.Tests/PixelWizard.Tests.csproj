@@ -9,12 +9,21 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\PixelWizard.Core\PixelWizard.Core.csproj" />
     <ProjectReference Include="..\..\src\PixelWizard.Transport\PixelWizard.Transport.csproj" />
+    <!-- Linux/Mac SkiaScreenChangeDetector copies (T2). PixelWizard.WindowsHost cannot be
+         referenced here: it targets net9.0-windows, which this net9.0 project is not
+         permitted to reference (NU1201), and System.Drawing.Common does not run on
+         non-Windows under .NET 9 regardless. Its detector is covered separately by
+         PixelWizard.Tests.Windows, buildable/runnable only on Windows (see T4 CI). -->
+    <ProjectReference Include="..\..\src\PixelWizard.LinuxHost\PixelWizard.LinuxHost.csproj" />
+    <ProjectReference Include="..\..\avalonia\PixelWizard.AvaloniaClient\PixelWizard.AvaloniaClient.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Fixtures\**\*.bin" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\**\*.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

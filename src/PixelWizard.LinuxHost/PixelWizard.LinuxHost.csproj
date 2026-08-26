@@ -12,4 +12,8 @@
     <ProjectReference Include="..\PixelWizard.Core\PixelWizard.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="PixelWizard.Tests" />
+  </ItemGroup>
+
 </Project>

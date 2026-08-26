@@ -21,6 +21,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PixelWizard.Tests", "tests\PixelWizard.Tests\PixelWizard.Tests.csproj", "{441E7323-B909-43CC-A17D-C58B89057128}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PixelWizard.Tests.Windows", "tests\PixelWizard.Tests.Windows\PixelWizard.Tests.Windows.csproj", "{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -103,6 +105,18 @@ Global
 		{441E7323-B909-43CC-A17D-C58B89057128}.Release|x64.Build.0 = Release|Any CPU
 		{441E7323-B909-43CC-A17D-C58B89057128}.Release|x86.ActiveCfg = Release|Any CPU
 		{441E7323-B909-43CC-A17D-C58B89057128}.Release|x86.Build.0 = Release|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Debug|x64.Build.0 = Debug|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Debug|x86.Build.0 = Debug|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Release|x64.ActiveCfg = Release|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Release|x64.Build.0 = Release|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Release|x86.ActiveCfg = Release|Any CPU
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -114,5 +128,6 @@ Global
 		{2F8E4B7A-1C3D-4F56-89AB-0C1D2E3F4A5B} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{DEA235A1-2B72-4659-8A93-D77B1B91B28A} = {DA5C3214-5362-D53D-7EE1-7B72DB27BE75}
 		{441E7323-B909-43CC-A17D-C58B89057128} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{86AE4B5E-E9C0-4090-BE98-E4A61B5B572D} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
