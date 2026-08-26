@@ -14,4 +14,7 @@
     <ProjectReference Include="..\..\src\PixelWizard.Core\PixelWizard.Core.csproj" />
     <ProjectReference Include="..\..\src\PixelWizard.Transport\PixelWizard.Transport.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Fixtures\**\*.bin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -24,11 +24,24 @@ namespace PixelWizard.Core.Protocol
         {
             using var ms = new MemoryStream(buffer);
             using var reader = new BinaryReader(ms);
+            var type = (MessageType)reader.ReadByte();
+            long timestamp = reader.ReadInt64();
+            int length = reader.ReadInt32();
+
+            // BinaryReader.ReadBytes silently returns fewer bytes than requested when the
+            // stream runs out early instead of throwing, so a forged/corrupt length field
+            // would otherwise produce a message with truncated data and no error. Reject
+            // that case explicitly rather than letting it misparse.
+            long remaining = ms.Length - ms.Position;
+            if (length < 0 || length > remaining)
+                throw new InvalidDataException(
+                    $"NetworkMessage declared payload length {length}, but only {remaining} byte(s) remain in the buffer.");
+
             return new NetworkMessage
             {
-                Type = (MessageType)reader.ReadByte(),
-                Timestamp = reader.ReadInt64(),
-                Data = reader.ReadBytes(reader.ReadInt32())
+                Type = type,
+                Timestamp = timestamp,
+                Data = reader.ReadBytes(length)
             };
         }
     }
