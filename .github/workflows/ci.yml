@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: "9.0.304"
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+
+jobs:
+  dotnet:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore PixelWizardsConnect.sln
+
+      - name: Build
+        run: dotnet build PixelWizardsConnect.sln --no-restore -c Release
+
+      # Cross-platform suite (Skia detector, protocol/golden tests, etc). Runs
+      # identically on both runners.
+      - name: Test (net9.0)
+        run: >
+          dotnet test tests/PixelWizard.Tests/PixelWizard.Tests.csproj
+          --no-build -c Release -f net9.0
+          --logger "console;verbosity=normal"
+
+      # The System.Drawing (WinForms) detector suite only builds/executes on
+      # the net9.0-windows TFM. On Windows it must actually run — this is the
+      # path that has never executed before T4. Counted via TRX, not eyeballed:
+      # a suite that silently skips everything must fail the job, not pass it.
+      - name: Test (net9.0-windows — System.Drawing suite)
+        if: runner.os == 'Windows'
+        run: >
+          dotnet test tests/PixelWizard.Tests/PixelWizard.Tests.csproj
+          --no-build -c Release -f net9.0-windows
+          --filter "FullyQualifiedName~ScreenChangeDetector.SystemDrawingScreenChangeDetectorTests"
+          --logger "trx;LogFileName=systemdrawing.trx"
+          --results-directory TestResults
+
+      - name: Assert System.Drawing suite actually executed (not silently skipped)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # 13 = number of [SkippableFact] cases in SystemDrawingScreenChangeDetectorTests.cs.
+          # Update this count deliberately if cases are added/removed — it exists
+          # specifically to catch the suite silently reporting 0 executed as green.
+          $expected = 13
+
+          [xml]$trx = Get-Content TestResults/systemdrawing.trx
+          $results = @($trx.TestRun.Results.UnitTestResult)
+          $executed = $results.Count
+          $passed = @($results | Where-Object { $_.outcome -eq 'Passed' })
+          $notPassed = @($results | Where-Object { $_.outcome -ne 'Passed' })
+
+          Write-Host "System.Drawing suite: executed=$executed passed=$($passed.Count) other=$($notPassed.Count)"
+
+          if ($executed -ne $expected) {
+            Write-Error "Expected exactly $expected SystemDrawing tests to execute on windows-latest, got $executed. A suite that skips on every platform must not report green."
+            exit 1
+          }
+          if ($notPassed.Count -gt 0) {
+            $names = ($notPassed | ForEach-Object { "$($_.testName): $($_.outcome)" }) -join "; "
+            Write-Error "SystemDrawing suite executed but did not all pass: $names"
+            exit 1
+          }
+          Write-Host "::notice::SystemDrawingScreenChangeDetectorTests: $expected/$expected executed and passed on windows-latest."
+
+      # On macOS there is no graceful in-process skip available: the net9.0-windows
+      # TFM pulls in Microsoft.WindowsDesktop.App (via UseWindowsForms on the
+      # referenced WindowsHost project), which has no macOS build. hostfxr refuses
+      # to launch the test host at all, before any xUnit/SkippableFact code runs —
+      # confirmed locally (exit code 1, "No frameworks were found"). So instead of
+      # asserting a graceful skip that cannot exist, this step asserts the launch
+      # fails for exactly that known, expected reason — any other failure mode, or
+      # an unexpected success, fails the job loud rather than passing silently.
+      - name: Verify System.Drawing suite is loudly unexecutable on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set +e
+          output=$(dotnet test tests/PixelWizard.Tests/PixelWizard.Tests.csproj \
+            --no-build -c Release -f net9.0-windows \
+            --filter "FullyQualifiedName~ScreenChangeDetector.SystemDrawingScreenChangeDetectorTests" 2>&1)
+          code=$?
+          echo "$output"
+
+          if [ $code -eq 0 ]; then
+            echo "::error::net9.0-windows test host launched and returned success on macOS. This was expected to be impossible (no Microsoft.WindowsDesktop.App runtime for macOS) — either that has changed or the suite silently reported green. Investigate before trusting this run."
+            exit 1
+          fi
+          if ! echo "$output" | grep -q "Microsoft.WindowsDesktop.App"; then
+            echo "::error::net9.0-windows test host failed on macOS for an UNEXPECTED reason (not the known Microsoft.WindowsDesktop.App absence). Investigate before treating this as an expected skip."
+            exit 1
+          fi
+          echo "::notice::SystemDrawingScreenChangeDetectorTests explicitly SKIPPED on macos-latest: net9.0-windows test host cannot launch (Microsoft.WindowsDesktop.App has no macOS build). Confirmed expected, not silently ignored."
+
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: router-server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.12"
+          cache: false
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ hashFiles('router-server/go.mod', 'router-server/go.sum') }}
+          restore-keys: |
+            go-${{ runner.os }}-
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (race)
+        run: go test -race ./...
