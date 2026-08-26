@@ -255,9 +255,18 @@ func handleConnect(w http.ResponseWriter, r *http.Request) {
 	hostsMutex.Lock()
 	host, exists := hostsByCode[req.ConnectionCode]
 	if exists {
-		// One-time use: delete immediately so the code cannot be reused.
+		// One-time use: delete immediately so the code cannot be reused,
+		// whether or not it turns out to be expired below.
 		delete(hostsByCode, req.ConnectionCode)
 		delete(hosts, host.HostID)
+		if nowFunc().Sub(host.RegisteredAt) > codeTTL {
+			// Expired but not yet swept by cleanupExpiredHosts. Treat
+			// identically to "never existed": exists=false and no
+			// reference to `host` below, so the caller gets the exact
+			// same response as an unknown code and cannot distinguish
+			// "valid then expired" from "never issued".
+			exists = false
+		}
 	}
 	hostsMutex.Unlock()
 

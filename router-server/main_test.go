@@ -382,13 +382,13 @@ func TestHandleConnect_UnknownCode(t *testing.T) {
 	}
 }
 
-// Finding (pinned as current behaviour, not fixed here — see docs/BACKLOG.md):
-// handleConnect never checks codeTTL itself. Expiry is enforced only by the
-// background cleanupExpiredHosts sweep. A code registered far enough in the
-// past to be "expired" per codeTTL, but not yet swept, still connects
-// successfully. This is the T6 baseline for expiry, established via the
-// nowFunc seam — no real waiting involved.
-func TestHandleConnect_ExpiredCode_NotEnforcedAtConnectTime(t *testing.T) {
+// T6 (C2) baseline flip: TestHandleConnect_ExpiredCode_NotEnforcedAtConnectTime
+// previously pinned that handleConnect never checked codeTTL itself, relying
+// solely on the background sweep. C2 adds an expiry check directly in
+// handleConnect, so this now asserts the opposite: an unswept but expired
+// code is rejected at connect time, using the same nowFunc seam (no real
+// waiting) that the old baseline test used.
+func TestHandleConnect_ExpiredCode_EnforcedAtConnectTime_WithoutWaitingForSweep(t *testing.T) {
 	resetGlobalState()
 	codeTTL = 30 * time.Minute
 	t0 := time.Now()
@@ -397,12 +397,53 @@ func TestHandleConnect_ExpiredCode_NotEnforcedAtConnectTime(t *testing.T) {
 	reg := registerHost(t, "h1", "")
 
 	// Advance well past codeTTL. cleanupExpiredHosts is not running in this
-	// test, so nothing has swept the entry yet.
+	// test, so nothing has swept the entry yet — enforcement must come from
+	// handleConnect itself, not the sweep.
 	nowFunc = func() time.Time { return t0.Add(codeTTL + time.Hour) }
 
 	rec := postJSON(handleConnect, "/connect", fmt.Sprintf(`{"connectionCode":%q,"clientId":"c1"}`, reg.ConnectionCode), "")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected an expired-but-unswept code to be rejected at connect time (404), got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+// Required: the caller must not be able to distinguish "was valid, now
+// expired" from "never existed" — same status code and same response body.
+func TestHandleConnect_ExpiredCode_IndistinguishableFromUnknownCode(t *testing.T) {
+	resetGlobalState()
+	codeTTL = 30 * time.Minute
+	t0 := time.Now()
+	nowFunc = func() time.Time { return t0 }
+	reg := registerHost(t, "h1", "")
+	nowFunc = func() time.Time { return t0.Add(codeTTL + time.Hour) }
+
+	expired := postJSON(handleConnect, "/connect", fmt.Sprintf(`{"connectionCode":%q,"clientId":"c1"}`, reg.ConnectionCode), "")
+	unknown := postJSON(handleConnect, "/connect", `{"connectionCode":"ZZZZZZ","clientId":"c1"}`, "")
+
+	if expired.Code != unknown.Code {
+		t.Fatalf("status codes differ: expired=%d unknown=%d", expired.Code, unknown.Code)
+	}
+	if expired.Body.String() != unknown.Body.String() {
+		t.Fatalf("response bodies differ, callers could enumerate expired vs unknown codes:\nexpired: %s\nunknown: %s",
+			expired.Body.String(), unknown.Body.String())
+	}
+}
+
+// A code registered exactly at the TTL boundary (not yet strictly over it)
+// must still connect — codeTTL is an inclusive "valid through" duration, not
+// an off-by-one trap. Matches cleanupExpiredHosts' own `>` comparison.
+func TestHandleConnect_CodeAtExactTTLBoundary_StillValid(t *testing.T) {
+	resetGlobalState()
+	codeTTL = 30 * time.Minute
+	t0 := time.Now()
+	nowFunc = func() time.Time { return t0 }
+	reg := registerHost(t, "h1", "")
+
+	nowFunc = func() time.Time { return t0.Add(codeTTL) }
+
+	rec := postJSON(handleConnect, "/connect", fmt.Sprintf(`{"connectionCode":%q,"clientId":"c1"}`, reg.ConnectionCode), "")
 	if rec.Code != http.StatusOK {
-		t.Fatalf("current behaviour: connect on an unswept expired code still succeeds; expected 200, got %d (%s)", rec.Code, rec.Body.String())
+		t.Fatalf("expected a code exactly at the TTL boundary to still be valid, got %d (%s)", rec.Code, rec.Body.String())
 	}
 }
 
