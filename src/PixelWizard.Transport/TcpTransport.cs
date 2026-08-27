@@ -43,6 +43,14 @@ namespace PixelWizard.Transport
         public event Action<int>? BytesReceived;
         public event Action<int>? BytesSent;
 
+        /// <summary>
+        /// A frame with valid framing and length arrived with a <see cref="MessageType"/> byte
+        /// this build doesn't recognize (e.g. a newer peer). The payload is discarded and the
+        /// session continues — this is the mechanism that lets peers upgrade independently
+        /// instead of every version needing to match exactly.
+        /// </summary>
+        public event Action<byte>? UnknownMessageTypeSkipped;
+
         public bool IsConnected => _isConnected && _tcpClient?.Connected == true;
 
         public async Task ConnectAsync(string host, int port, bool useTls = true)
@@ -166,13 +174,26 @@ namespace PixelWizard.Transport
                 {
                     if (!await ReadExact(lenBuf, 4, token)) break;
                     int len = BitConverter.ToInt32(lenBuf, 0);
-                    if (len <= 0) break;
+                    if (len <= 0)
+                    {
+                        Error?.Invoke(new FramingException(len,
+                            $"Outer frame length was {len}; stream sync is lost, disconnecting."));
+                        break;
+                    }
 
                     byte[] msgBuf = new byte[len];
                     if (!await ReadExact(msgBuf, len, token)) break;
 
                     BytesReceived?.Invoke(4 + len);
-                    MessageReceived?.Invoke(NetworkMessage.Deserialize(msgBuf));
+                    var message = NetworkMessage.Deserialize(msgBuf);
+
+                    if (!Enum.IsDefined(typeof(MessageType), message.Type))
+                    {
+                        UnknownMessageTypeSkipped?.Invoke((byte)message.Type);
+                        continue;
+                    }
+
+                    MessageReceived?.Invoke(message);
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex) { Error?.Invoke(ex); break; }
