@@ -171,6 +171,18 @@ gathering finishes, improving time-to-first-frame versus waiting for a full gath
 splice workaround built for this spike should **not** be carried into Phase 3 — it was a
 same-process expedient for a throwaway spike, not a design worth replicating.
 
+**Update from the Windows CI addendum (see "Windows — partial" below):** with a single host
+candidate on loopback (no TURN, no relay policy), SIPSorcery *did* embed the gathered candidate
+into `localDescription.sdp` on its own. That's the opposite of what's described above, and it
+means the "never merges" framing here is not a safe blanket statement — it's not yet clear whether
+the real variable is candidate type (host vs. relay), gathering latency relative to this spike's
+fixed 2500ms read delay, or something else. This wasn't re-tested on macOS with a proper
+gathering-complete wait rather than a fixed delay, so the finding above stands as an accurate
+description of what was observed here, but should be read as **not fully explained** rather than
+as a confirmed SIPSorcery defect — see the Windows section for the concrete evidence and the
+resulting Phase 3 action item (wait for gathering-complete and check before splicing, don't splice
+unconditionally).
+
 ### 5. coturn default-denies loopback/cross-interface peers (environment, not SIPSorcery)
 
 Even after fix #4, connections still failed with `CREATE_PERMISSION processed, error 403:
@@ -278,17 +290,40 @@ below.
   question is likely already answered **no** — it's already there in a stock BtbN build — pending
   confirmation that the custom minimal build (LGPL-only, codecs stripped) also carries `--enable-libvpl`
   by default rather than needing to add it explicitly.
-- **Findings #3/#4 reproduction:** **#3 reproduces as fixed, not as broken** — the explicit fmtp
-  construction (`level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f`) that fixes
-  finding #3 on macOS was carried over unchanged in `Program.cs`, and the resulting Windows-built
-  offer was accepted by real Chrome (headless `channel: 'chrome'` via Playwright, same as macOS):
-  Chrome answered with a matching H.264 fmtp line and `ontrack video` fired. **#4 is inconclusive in
-  this run, not confirmed clean:** the offer had zero `a=candidate` lines, consistent with #4's
-  claim that SIPSorcery's `localDescription` never gains gathered candidates on its own — but
-  because TURN was also unreachable this run (below), there were zero candidates gathered in the
-  first place to test whether they'd have been merged. This run cannot distinguish "SIPSorcery
-  never merges" from "there was nothing to merge" on Windows; #4 should be treated as *not yet
-  independently re-confirmed* on this platform, only on macOS.
+- **Finding #3 reproduction: fixed, not broken.** The explicit fmtp construction
+  (`level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f`) that fixes finding #3
+  on macOS was carried over unchanged in `Program.cs`, and the resulting Windows-built offer was
+  accepted by real Chrome (headless `channel: 'chrome'` via Playwright, same as macOS): Chrome
+  answered with a matching H.264 fmtp line and `ontrack video` fired.
+- **Finding #4: result in, and it complicates the original claim rather than confirming it.** The
+  first Windows run used relay-only policy with no TURN reachable (see below) — zero candidates
+  gathered, zero to test. A follow-up run (`SPIKE_ICE_TRANSPORT_POLICY=all`, no relay-only
+  restriction, no TURN server needed — host candidates gather with no TURN server involved, which
+  the original relay-only test on this platform wrongly conflated with the merge question) removed
+  that ambiguity: `onicecandidate` fired with a single host candidate
+  (`10.1.0.153:56444 typ host`), and the written offer **does** contain that candidate —
+  `a=candidate` appears **twice**, once positioned natively right after `a=setup:actpass` (SDP's
+  conventional candidate position, before `a=mid:0`), and a second identical copy appended by this
+  spike's own manual-splice workaround, which fires unconditionally and had no way to know
+  SIPSorcery had already embedded it. The result is a malformed offer with a duplicate candidate
+  line in the same `m=` section.
+
+  This means finding #4's original framing — "SIPSorcery's `localDescription` never gains gathered
+  candidates" — does not hold as a blanket claim. It held on macOS with TURN-relay candidates read
+  back after a fixed 2500ms delay; it did not hold here, where a single host candidate resolved
+  fast enough (well under 2500ms — the "local candidate" log line appears before "wrote offer" in
+  `dotnet-hostcand.log`) to already be embedded by the time `Program.cs` read `localDescription`.
+  The likely real explanation is **timing, not a hard defect**: `Program.cs` reads
+  `localDescription` after a fixed delay instead of waiting for `RTCIceGatheringState.complete` (the
+  browser and Flutter sides of this project's other spikes both wait for gathering-complete before
+  reading it back, for exactly this reason). A TURN allocation round-trip plausibly took longer
+  than 2500ms on macOS, so gathering may not have finished by read-time there — this was not
+  re-verified on macOS with a gathering-complete wait, so it's a strong candidate explanation, not
+  a confirmed retraction of the macOS result. **Action for Phase 3:** don't manually splice
+  candidates unconditionally; wait for ICE-gathering-complete before reading `localDescription`,
+  check whether candidates are already present, and only splice if they're genuinely missing — the
+  current spike workaround is not safe to carry into production signaling as-is, since it can
+  corrupt an SDP that SIPSorcery already populated correctly.
 - **TURN/ICE connectivity: not established, and here's exactly why.** The spike's coturn setup is a
   Docker container (`spikes/webrtc-desktop/coturn/docker-compose.yml`), and `docker compose up`
   failed immediately: `no matching manifest for windows(10.0.26100)/amd64` — coturn has no Windows
