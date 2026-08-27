@@ -13,13 +13,20 @@ crude one. None of the problems were "SIPSorcery fundamentally can't do WebRTC" 
 "SIPSorcery's SDP/ICE output doesn't match what a standard non-trickle exchange with Chrome
 needs," which is fixable but is real, uncosted Phase 3/4 engineering work.
 
-**Windows is still an open question, not a closed one.** This machine is macOS-only, and per this
-spike's hard rule, Windows was not tested on a cloud VM as a substitute — a VM has no hardware
-encoder, falls back to software x264, and would answer the wrong question. Testing is pending
-access to real Windows hardware; nothing below should be extrapolated to Windows behavior. **The
-Option B recommendation cannot be fully closed out until that happens** — if Windows turns out to
-have no reachable hardware encoder, or CPU cost there is materially worse than the ~6% seen here,
-that changes the Phase 4 estimate materially. See "Item 2 — Windows" below.
+**Windows: half-answered.** A GitHub Actions `windows-latest` CI run (workflow_dispatch-only,
+`.github/workflows/spike-t8-windows.yml`, not part of the gating build) answered the "does it work
+at all" half: `FFmpeg.AutoGen` loads cleanly against a downloaded Windows FFmpeg build, the fmtp
+workaround from finding #3 still produces an offer real Chrome accepts, and — a genuinely
+surprising result — Intel Quick Sync (`h264_qsv`/`hevc_qsv` via `libvpl`) **is** compiled into the
+readily-available Windows FFmpeg builds, in both the GPL and LGPL variants, unlike the VideoToolbox
+situation on macOS which needed no separate codec library at all. The GPL/LGPL licensing tension
+found on macOS (finding present in "Also checked" below) reproduces identically on Windows: the
+LGPL-clean build drops `libx264`/`libx265` but keeps every hardware-vendor encoder path (QSV,
+NVENC, AMF, Media Foundation). **What's still open is the actual cost**: `windows-latest` has no
+GPU, so it cannot exercise Quick Sync — the CPU number that half needs is still unmeasured, and
+remains pending real Windows hardware. See "Windows — partial" and the narrowed "Item 2" below for
+the full breakdown and what wasn't answerable in CI (in particular, TURN/ICE connectivity end-to-end
+was not established in this run — see below).
 
 ## What was built
 
@@ -240,39 +247,101 @@ log kept for the entire run.
   window. This corroborates the "no disconnects" finding above from the relay's own vantage point,
   not just the two peers' self-reported state.
 
-## Item 2 — Windows: pending
+## Windows — partial
 
-**Not run. This is a status report of a gap, not a result.** Per this spike's explicit hard rule,
-Windows testing must be on real hardware — a cloud VM has no hardware encoder, falls back to
-software x264, and would produce a number that answers the wrong question (software-encode CPU
-cost, not the hardware-encode cost Option B actually depends on). No real Windows machine was
-available in this environment to run against directly.
+**Scope: only "does it work at all" — DLL loading, version skew, whether findings #3/#4 reproduce,
+negotiation, packaging size/licensing. None of this needs a GPU.** Run via a manually-triggered,
+`workflow_dispatch`-only GitHub Actions workflow (`.github/workflows/spike-t8-windows.yml`) on
+`windows-latest`, reusing `spikes/webrtc-desktop/` as-is except for two small cross-platform changes
+to `Program.cs`: the FFmpeg lib path became an env var (`SPIKE_FFMPEG_LIB_PATH`, still defaulting to
+the original Homebrew path on macOS), and the VideoToolbox hardware-encoder attempt is skipped
+outright on non-macOS hosts rather than attempted-then-caught, since `windows-latest` has no GPU at
+all. `ci.yml` was not touched.
 
-The user has separate Windows hardware but access details (remote/SSH access, or a plan for
-someone to run the spike there and report results back) had not been finalized as of this
-writing. **This section will be filled in once that access exists**, and should report, repeating
-the macOS spike:
+**`windows-latest` has no hardware encoder and falls back to software x264 — any CPU number this
+run produced would be meaningless as an answer to "what does hardware encode cost," and none was
+reported for that purpose.** That question is still fully open; see the narrowed pending section
+below.
 
-- Whether `FFmpeg.AutoGen` loads on Windows, and against which native FFmpeg version — establishing
-  whether Windows hits the same "8.x is unobtainable" problem found on macOS (finding #1) or a
-  different one.
-- Which hardware encoder is actually reachable through `SIPSorceryMedia.FFmpeg`: NVENC, QSV, AMF,
-  or D3D11VA — naming the one used and the GPU it ran on. **If only software encode is reachable on
-  Windows, that is the headline finding of the Windows half of this spike**, and would materially
-  change the Option B recommendation regardless of how clean the macOS results are.
+- **FFmpeg.AutoGen loading and version:** Loaded cleanly. Two Windows FFmpeg builds were downloaded
+  from BtbN/FFmpeg-Builds' `latest` release (`gpl-shared` and `lgpl-shared`, both
+  `N-126277-ga8c7afa7d7-20260826`, `libavcodec 63.8.101`) — a clearly GPL/LGPL-labeled source,
+  unlike gyan.dev's builds, chosen specifically so the licensing question below has an unambiguous
+  answer. Windows does **not** appear to have macOS's "FFmpeg 8.x is unobtainable" problem (finding
+  #1) — BtbN publishes current builds routinely; the constraint on macOS was Homebrew-specific.
+- **Encoders enumerable:** As expected, only software encoders actually ran (`libx264` in the GPL
+  build; `h264_mf`/Media Foundation, `h264_qsv`, `h264_nvenc`, `h264_amf` all present in both
+  variants but **not exercised** — no GPU on this runner to back them). The surprising result: `ffmpeg
+  -hwaccels` and `-encoders` show `qsv` (Intel Quick Sync via `libvpl`/oneVPL) compiled into **both**
+  the GPL and LGPL Windows builds out of the box, alongside `d3d11va`/`d3d12va`/`nvenc`/`amf`/`vaapi`.
+  This means the Phase 4 "does the minimal custom build need Quick Sync compiled in specially"
+  question is likely already answered **no** — it's already there in a stock BtbN build — pending
+  confirmation that the custom minimal build (LGPL-only, codecs stripped) also carries `--enable-libvpl`
+  by default rather than needing to add it explicitly.
+- **Findings #3/#4 reproduction:** **#3 reproduces as fixed, not as broken** — the explicit fmtp
+  construction (`level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f`) that fixes
+  finding #3 on macOS was carried over unchanged in `Program.cs`, and the resulting Windows-built
+  offer was accepted by real Chrome (headless `channel: 'chrome'` via Playwright, same as macOS):
+  Chrome answered with a matching H.264 fmtp line and `ontrack video` fired. **#4 is inconclusive in
+  this run, not confirmed clean:** the offer had zero `a=candidate` lines, consistent with #4's
+  claim that SIPSorcery's `localDescription` never gains gathered candidates on its own — but
+  because TURN was also unreachable this run (below), there were zero candidates gathered in the
+  first place to test whether they'd have been merged. This run cannot distinguish "SIPSorcery
+  never merges" from "there was nothing to merge" on Windows; #4 should be treated as *not yet
+  independently re-confirmed* on this platform, only on macOS.
+- **TURN/ICE connectivity: not established, and here's exactly why.** The spike's coturn setup is a
+  Docker container (`spikes/webrtc-desktop/coturn/docker-compose.yml`), and `docker compose up`
+  failed immediately: `no matching manifest for windows(10.0.26100)/amd64` — coturn has no Windows
+  container image, and GitHub's `windows-latest` runner's Docker only runs Windows containers, not
+  Linux ones. With `iceTransportPolicy: 'relay'` hardcoded on both sides and no TURN server reachable,
+  ICE never left the `new` state for either peer during the 30-second observation window. This is a
+  CI-environment limitation, not a Windows-the-OS limitation — a real Windows desktop build wouldn't
+  run coturn locally anyway — but it means **end-to-end connection establishment was not exercised
+  on Windows in this run**, only SDP-level offer/answer negotiation (which does not require ICE).
+- **DLL bundling and licensing:** GPL build: 7 DLLs, ~164MB total (`avcodec-63.dll` alone is
+  ~94MB). LGPL build: same 7 DLLs, ~131MB total (`avcodec-63.dll` ~68MB — smaller by exactly the
+  `libx264`/`libx265` removal). Confirmed via `-buildconf`: the LGPL variant is built with
+  `--disable-libx264 --disable-libx265` (alongside `--disable-avisynth`, `--disable-libdavs2`, and a
+  few other GPL-only pieces) while otherwise carrying the same feature set, including every
+  hardware-vendor encoder path. **The GPL-x264/x265 licensing problem found on macOS (see "Also
+  checked" below) is not macOS-specific — it reproduces identically on Windows**, confirming the
+  LGPL-minimal-build requirement is a genuine cross-platform Phase 4 requirement, not something tied
+  to Homebrew's packaging choices specifically. Each build ships a single top-level `LICENSE.txt`,
+  not one per DLL — its exact text wasn't captured in this run's artifacts, but BtbN's variant
+  naming (`gpl-shared` vs `lgpl-shared`) is itself the authoritative signal for which license regime
+  applies to a given download, which is why that build source was chosen over gyan.dev's.
+- **What could not run headless in CI, stated plainly:** coturn (no Windows/Linux-container path on
+  this runner, as above). Everything else — dotnet build, FFmpeg download/inspection/enumeration,
+  the dotnet peer itself, and headless Chrome via Playwright — ran without workaround.
+- Full logs and raw findings (`ffmpeg -version`/`-buildconf`/`-encoders`/`-hwaccels` output, DLL
+  listings, offer/answer SDP, Playwright driver log) are in the `t8-windows-partial-findings`
+  artifact on run `33045044593`.
+
+## Item 2 — Windows: pending (hardware-encode cost only)
+
+**Everything about "does it work at all" is now answered above. What remains open is narrower:
+what does real Quick Sync hardware encode actually cost on Windows.** No GPU-backed run has
+happened yet; the CPU/memory numbers below still need real Intel Quick Sync (or NVENC/AMF) hardware,
+not a cloud VM — a VM with no hardware encoder would fall back to software x264 and answer the
+wrong question, exactly as `windows-latest` did above.
+
+- Which hardware encoder is actually reachable through `SIPSorceryMedia.FFmpeg` on real hardware:
+  QSV, NVENC, AMF, or D3D11VA — naming the one used and the GPU it ran on. Given the CI finding above
+  that `libvpl`/QSV is already compiled into the stock Windows FFmpeg build, this is now mostly a
+  question of whether `SIPSorceryMedia.FFmpeg`'s encoder construction actually reaches it correctly,
+  not whether the codec library exists.
 - CPU during 1080p encode at a stated achieved framerate (not just the requested one — see the
   macOS framerate note above for why that distinction matters).
 - Memory over a 10-minute run.
-- Connection setup time and data channel behavior.
-- Whether findings #3 (missing fmtp) and #4 (trickle-ICE requirement) reproduce identically —
-  expected, since both are SIPSorcery library behavior rather than platform-specific, but this
-  should be confirmed rather than assumed.
-- FFmpeg DLL bundling on Windows: which DLLs, total size, and whether any carry GPL licensing
-  (parallel to the macOS x264/x265 finding above) that would require the same LGPL-minimal-build
-  treatment.
+- Real end-to-end connection setup time and data channel behavior through an actual reachable TURN
+  server (coturn on Windows itself, or a Linux box acting as the TURN server for a Windows dotnet
+  peer) — the Docker/Linux-container gap found in CI above means this still needs to be solved for a
+  real Windows run, e.g. by running coturn on a separate Linux host/VM rather than via
+  Docker-on-Windows.
 
-**Until this is filled in, the verdict below should be read as macOS-only-validated, Windows
-still open** — see Verdict at the top of this document.
+**Until this is filled in, the verdict at the top of this document should be read as: SDP-level
+negotiation and packaging/licensing confirmed on Windows via CI, hardware-encode cost and full
+end-to-end connectivity still open.**
 
 ## Also checked
 
