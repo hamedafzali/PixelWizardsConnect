@@ -132,7 +132,7 @@ one-line fix once diagnosed, but it means SIPSorcery's default `VideoFormat` con
 H.264 is not browser-interop-ready out of the box — anyone doing this integration needs to know
 to supply fmtp explicitly. Minor but real Phase 3 documentation/wrapper cost.
 
-### 4. SIPSorcery requires trickle ICE — it does not support blob-exchange signaling (real SIPSorcery defect)
+### 4. SIPSorcery does not merge relay/TURN candidates into `localDescription.sdp` — host candidates only (real SIPSorcery defect)
 
 This is the load-bearing finding of the spike. After fix #3, codec negotiation succeeded
 (`setRemoteDescription result: OK`) but ICE never progressed past `checking` → `failed` on the
@@ -144,14 +144,17 @@ event but does not merge those candidates into `localDescription.sdp` — unlike
 embed them once gathering completes even when the caller is using a "wait then send the whole
 blob" pattern rather than true per-candidate trickling.
 
-**Consequence:** this is not an edge case to work around — it means **SIPSorcery requires real
-per-candidate trickle ICE signaling and does not support the "gather everything, then send one
-final SDP blob" pattern** that browsers support natively and that the spec's own crude
-file-drop signaling instruction models. Any Phase 3 signaling design that assumes a single
-final offer/answer exchange will silently produce an unusable SIPSorcery offer with no
-candidates at all, and nothing about the failure (`VideoIncompatible`-free, ICE just sits at
-`new`/`checking`→`failed`) points directly at "the offer has no candidates." This cost the most
-diagnosis time in the whole spike.
+**Consequence:** confirmed by a later macOS re-test (see the update below) to be a genuine,
+candidate-type-dependent behavior, not a timing artifact: SIPSorcery merges gathered **host**
+candidates into `localDescription.sdp` on its own, but never merges **relay (TURN)** candidates,
+no matter how long gathering is given to finish. For a relay-based exchange like this one, that
+means **SIPSorcery requires real per-candidate trickle ICE signaling and does not support the
+"gather everything, then send one final SDP blob" pattern** that browsers support natively and
+that the spec's own crude file-drop signaling instruction models. Any Phase 3 signaling design
+that assumes a single final offer/answer exchange will silently produce an unusable SIPSorcery
+offer with no relay candidates at all, and nothing about the failure (`VideoIncompatible`-free,
+ICE just sits at `new`/`checking`→`failed`) points directly at "the offer has no candidates."
+This cost the most diagnosis time in the whole spike.
 
 **What this spike did instead (throwaway only, do not carry forward):** manually collected
 `onicecandidate` events into a list and spliced `a=candidate` lines into the SDP text before
@@ -171,17 +174,40 @@ gathering finishes, improving time-to-first-frame versus waiting for a full gath
 splice workaround built for this spike should **not** be carried into Phase 3 — it was a
 same-process expedient for a throwaway spike, not a design worth replicating.
 
-**Update from the Windows CI addendum (see "Windows — partial" below):** with a single host
-candidate on loopback (no TURN, no relay policy), SIPSorcery *did* embed the gathered candidate
-into `localDescription.sdp` on its own. That's the opposite of what's described above, and it
-means the "never merges" framing here is not a safe blanket statement — it's not yet clear whether
-the real variable is candidate type (host vs. relay), gathering latency relative to this spike's
-fixed 2500ms read delay, or something else. This wasn't re-tested on macOS with a proper
-gathering-complete wait rather than a fixed delay, so the finding above stands as an accurate
-description of what was observed here, but should be read as **not fully explained** rather than
-as a confirmed SIPSorcery defect — see the Windows section for the concrete evidence and the
-resulting Phase 3 action item (wait for gathering-complete and check before splicing, don't splice
-unconditionally).
+**Update — macOS re-test with the fixed delay removed (resolved):** the Windows CI addendum (see
+"Windows — partial" below) showed SIPSorcery embedding a single gathered *host* candidate into
+`localDescription.sdp` on its own, the opposite of what's described above, and raised a real
+question: was the original macOS result above a fixed-delay artifact (2500ms not being long enough
+for TURN allocation), or a genuine difference tied to candidate type? This was re-tested on macOS
+against the same relay/TURN setup, with two changes: (1) the fixed `Task.Delay(2500)` was replaced
+with a real wait on `onicegatheringstatechange` reaching `RTCIceGatheringState.complete`, and (2)
+the manual splice was disabled entirely so nothing could mask the native SDP.
+
+Result: **not a harness bug.** ICE gathering completed in **30ms** — nowhere close to the 2500ms
+the original fixed delay allowed — and the offer still had **zero `a=candidate` lines**, even
+though `onicecandidate` had already fired with a `typ relay` candidate. So this is **genuine
+SIPSorcery behavior, and it is not timing-dependent either**: the variable isn't how long you wait,
+it's **candidate type**. SIPSorcery merges gathered **host** candidates into `localDescription.sdp`
+on its own (per the Windows addendum) but does **not** merge **relay** (TURN) candidates, no matter
+how long gathering is given to finish. The "never merges" framing in the finding above is therefore
+wrong as a blanket statement — replace it with: *SIPSorcery does not merge relay/TURN candidates
+into `localDescription.sdp`; host candidates are merged natively.*
+
+The end-to-end check confirms the practical consequence: with the splice disabled, the .NET side's
+ICE state went `checking` → `failed`, and Chrome (driven via `drive.mjs`, unmodified `index.html`)
+never left `ice: new` / `conn: new` for the full run — it received an offer with no candidates and
+had nothing to check against. No connection, no workaround. The manual splice this spike built is
+still required for any relay-based (TURN) blob-exchange signaling; it is not required for
+loopback/host-only signaling.
+
+**Phase 3 impact:** remove the "SIPSorcery requires trickle ICE for all candidate types" framing —
+it doesn't; host candidates are fine without it. What actually needs trickle ICE (or an
+equivalent post-gathering append step) is specifically **relay/TURN candidates**, which is exactly
+the case a real deployment cares about (LAN-only host candidates won't traverse NAT). The durable
+lesson from this whole investigation stands regardless of the candidate-type finding above: **never
+read `localDescription` after a fixed delay — wait for the real gathering-complete signal (or do
+true per-candidate trickle) before treating an offer/answer as final.** A fixed delay is what made
+this finding look inconclusive in the first place; it should never appear in Phase 3 signaling code.
 
 ### 5. coturn default-denies loopback/cross-interface peers (environment, not SIPSorcery)
 
@@ -309,21 +335,20 @@ below.
   line in the same `m=` section.
 
   This means finding #4's original framing — "SIPSorcery's `localDescription` never gains gathered
-  candidates" — does not hold as a blanket claim. It held on macOS with TURN-relay candidates read
-  back after a fixed 2500ms delay; it did not hold here, where a single host candidate resolved
-  fast enough (well under 2500ms — the "local candidate" log line appears before "wrote offer" in
-  `dotnet-hostcand.log`) to already be embedded by the time `Program.cs` read `localDescription`.
-  The likely real explanation is **timing, not a hard defect**: `Program.cs` reads
-  `localDescription` after a fixed delay instead of waiting for `RTCIceGatheringState.complete` (the
-  browser and Flutter sides of this project's other spikes both wait for gathering-complete before
-  reading it back, for exactly this reason). A TURN allocation round-trip plausibly took longer
-  than 2500ms on macOS, so gathering may not have finished by read-time there — this was not
-  re-verified on macOS with a gathering-complete wait, so it's a strong candidate explanation, not
-  a confirmed retraction of the macOS result. **Action for Phase 3:** don't manually splice
-  candidates unconditionally; wait for ICE-gathering-complete before reading `localDescription`,
-  check whether candidates are already present, and only splice if they're genuinely missing — the
-  current spike workaround is not safe to carry into production signaling as-is, since it can
-  corrupt an SDP that SIPSorcery already populated correctly.
+  candidates" — does not hold as a blanket claim. It held on macOS with TURN-relay candidates; it
+  did not hold here, where a single host candidate was embedded natively. The leading hypothesis at
+  the time this Windows run was captured was **timing** — that the macOS read happened after a fixed
+  2500ms delay rather than a real gathering-complete wait, and that TURN allocation might simply
+  take longer than that. **This was re-tested on macOS directly (see finding #4 below) and ruled
+  out**: gathering completed in 30ms with the fixed delay removed and the manual splice fully
+  disabled, and the offer still had zero candidates. The real variable is **candidate type, not
+  timing** — SIPSorcery merges host candidates into `localDescription.sdp` on its own but does not
+  merge relay/TURN candidates, regardless of how long gathering is given. **Action for Phase 3:**
+  don't manually splice candidates unconditionally; check whether candidates are already present
+  before splicing (host candidates will already be there; relay candidates won't be), and — as a
+  general signaling-layer rule independent of this finding — always wait for ICE-gathering-complete
+  before reading `localDescription`, never a fixed delay, since a fixed delay is exactly what made
+  this finding look ambiguous in the first place.
 - **TURN/ICE connectivity: not established, and here's exactly why.** The spike's coturn setup is a
   Docker container (`spikes/webrtc-desktop/coturn/docker-compose.yml`), and `docker compose up`
   failed immediately: `no matching manifest for windows(10.0.26100)/amd64` — coturn has no Windows
@@ -417,12 +442,16 @@ end-to-end connectivity still open.**
 ## What would change the Phase 4 estimate in ADR-001
 
 1. **Budget explicit engineering time to implement real trickle ICE in the signaling layer**
-   (finding #4). SIPSorcery requires it — a "gather then send one blob" design will not work, full
-   stop, so this is not optional Phase 3 scope. This is not a one-line fix like the fmtp issue: it
-   means sending each `onicecandidate` event as its own signaling message on both sides, plus a
-   test that would have caught this (an assertion that ICE actually reaches `connected`, not just
-   that an SDP exchange completed) so it doesn't regress silently. The upside: real trickle is also
-   faster to first frame than waiting for full gathering, so this isn't pure added cost.
+   (finding #4). A real deployment relies on NAT traversal, which means relay/TURN candidates —
+   and SIPSorcery does not merge those into `localDescription.sdp` no matter how long gathering is
+   given (confirmed genuine, not a timing artifact; host candidates alone are fine without this, but
+   host-only won't traverse NAT in the field). So a "gather then send one blob" design will not work
+   for the case that matters, and this is not optional Phase 3 scope. This is not a one-line fix like
+   the fmtp issue: it means sending each `onicecandidate` event as its own signaling message on both
+   sides, plus a test that would have caught this (an assertion that ICE actually reaches
+   `connected`, not just that an SDP exchange completed) so it doesn't regress silently. The upside:
+   real trickle is also faster to first frame than waiting for full gathering, so this isn't pure
+   added cost.
 2. **Budget for a custom minimal FFmpeg build and its per-platform signing pipeline**, not "bundle
    whatever Homebrew has." The gap between "works on my dev machine with brew" and "ships signed
    and notarized" is real, unbudgeted work.

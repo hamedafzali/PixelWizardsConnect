@@ -125,13 +125,44 @@ pc.OnRtpPacketReceived += (ep, media, pkt) => { };
 var offer = pc.createOffer();
 await pc.setLocalDescription(offer);
 while (pc.signalingState != RTCSignalingState.have_local_offer) { await Task.Delay(50); }
-await Task.Delay(2500); // crude: let candidates gather instead of proper ICE-complete signalling / trickle
-// Workaround: pc.localDescription.sdp never gains the trickled candidates from
-// onicecandidate (confirmed by inspecting the written offer -- zero a=candidate
-// lines even after gathering finished), so a non-trickle blob exchange sends
-// Chrome an offer it can never pair against. Append them manually.
+
+// Finding #4 addendum: the original fixed Task.Delay(2500) here was the bug,
+// not SIPSorcery -- a Windows re-run with host candidates (no TURN, resolves
+// near-instantly) showed SIPSorcery DOES embed gathered candidates into
+// localDescription.sdp on its own; TURN allocation on this macOS run may
+// simply take longer than a fixed guess. Wait for the real gathering-complete
+// signal instead, with a generous cap only as a safety net, and log how long
+// it actually took so a fixed-delay assumption can never silently reappear.
+var gatherComplete = new TaskCompletionSource();
+pc.onicegatheringstatechange += state =>
+{
+    Console.WriteLine("[dotnet] ice gathering state -> " + state);
+    if (state == RTCIceGatheringState.complete) gatherComplete.TrySetResult();
+};
+var gatherSw = Stopwatch.StartNew();
+if (pc.iceGatheringState == RTCIceGatheringState.complete) gatherComplete.TrySetResult();
+var gatherTimeoutTask = Task.Delay(15000);
+var completedTask = await Task.WhenAny(gatherComplete.Task, gatherTimeoutTask);
+bool gatherTimedOut = completedTask == gatherTimeoutTask;
+Console.WriteLine($"[dotnet] ICE gathering {(gatherTimedOut ? "TIMED OUT after" : "completed in")} {gatherSw.ElapsedMilliseconds}ms (candidates seen so far: {gatheredCandidates.Count})");
+
 string offerSdpText = pc.localDescription.sdp.ToString();
-if (gatheredCandidates.Count > 0)
+int nativeCandidateCount = System.Text.RegularExpressions.Regex.Matches(offerSdpText, "a=candidate:").Count;
+Console.WriteLine($"[dotnet] localDescription.sdp already contains {nativeCandidateCount} a=candidate line(s) natively, before any splice");
+
+// Diagnostic-only: disables the manual splice entirely so the native
+// SIPSorcery output can be inspected with nothing masking it. Never set
+// this outside of this specific finding #4 re-test.
+bool spliceDisabled = Environment.GetEnvironmentVariable("SPIKE_DISABLE_SPLICE") == "1";
+if (spliceDisabled)
+{
+    Console.WriteLine("[dotnet] SPIKE_DISABLE_SPLICE=1 -- manual candidate splice skipped entirely for this diagnostic run");
+}
+else if (nativeCandidateCount > 0)
+{
+    Console.WriteLine("[dotnet] localDescription already has candidates natively -- skipping splice to avoid duplicating them");
+}
+else if (gatheredCandidates.Count > 0)
 {
     // Insert right after the first m= section's own lines (before the next
     // "m=" line), not appended at the end of the whole SDP -- appending at
