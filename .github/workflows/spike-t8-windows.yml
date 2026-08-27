@@ -115,6 +115,36 @@ jobs:
           Write-Host "--- dotnet.err.log ---"
           Get-Content dotnet.err.log -ErrorAction SilentlyContinue
 
+      - name: Finding #4 addendum -- host candidates, no TURN (SPIKE_ICE_TRANSPORT_POLICY=all)
+        shell: pwsh
+        continue-on-error: true
+        env:
+          SPIKE_FFMPEG_LIB_PATH: ${{ env.LGPL_BIN }}
+          SPIKE_ICE_TRANSPORT_POLICY: all
+        run: |
+          # Finding #4 is "does SIPSorcery merge gathered candidates into
+          # localDescription.sdp" -- library behaviour independent of
+          # candidate type. Host candidates gather with no TURN server
+          # involved, so this checks it directly on loopback instead of via
+          # relay (relay traversal is already proven on macOS and is not
+          # what this checks -- not attempted here).
+          New-Item -ItemType Directory -Force -Path sig-hostcand | Out-Null
+          $proc = Start-Process -FilePath "dotnet" `
+            -ArgumentList "run --project spikes/webrtc-desktop/dotnet-peer/WebrtcSpike/WebrtcSpike.csproj -c Release -- $PWD\sig-hostcand 60" `
+            -NoNewWindow -PassThru -RedirectStandardOutput dotnet-hostcand.log -RedirectStandardError dotnet-hostcand.err.log
+          Start-Sleep -Seconds 20
+          Write-Host "--- dotnet-hostcand.log ---"
+          Get-Content dotnet-hostcand.log -ErrorAction SilentlyContinue
+          if (Test-Path sig-hostcand\offer.json) {
+            Write-Host "--- offer.json a=candidate line count (finding #4 addendum) ---"
+            (Select-String -Path sig-hostcand\offer.json -Pattern "a=candidate").Count
+            Write-Host "--- offer.json a=candidate lines ---"
+            Select-String -Path sig-hostcand\offer.json -Pattern "a=candidate"
+          } else {
+            Write-Host "offer.json was not written within 20s"
+          }
+          Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+
       - name: Playwright Chrome negotiation attempt (best-effort)
         shell: pwsh
         continue-on-error: true
@@ -132,7 +162,10 @@ jobs:
           path: |
             findings/**
             sig/**
+            sig-hostcand/**
             dotnet.log
             dotnet.err.log
+            dotnet-hostcand.log
+            dotnet-hostcand.err.log
             web-driver.log
           if-no-files-found: warn

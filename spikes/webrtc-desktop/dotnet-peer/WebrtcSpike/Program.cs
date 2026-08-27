@@ -21,13 +21,24 @@ string answerPath = Path.Combine(sigDir, "answer.json");
 File.Delete(offerPath);
 File.Delete(answerPath);
 
+// T8 Windows-partial (finding #4 addendum): relay-only is right for the real
+// relay-traversal test (proven on macOS), but the "does SIPSorcery merge
+// gathered candidates into localDescription.sdp" question is library
+// behaviour independent of candidate type -- host candidates gather with no
+// TURN server involved. SPIKE_ICE_TRANSPORT_POLICY lets that check run with
+// policy=all (host candidates on loopback) without touching the default
+// relay-only path everything else here uses.
+var icePolicy = Environment.GetEnvironmentVariable("SPIKE_ICE_TRANSPORT_POLICY") == "all"
+    ? RTCIceTransportPolicy.all
+    : RTCIceTransportPolicy.relay;
 var pc = new RTCPeerConnection(new RTCConfiguration
 {
     iceServers = new System.Collections.Generic.List<RTCIceServer> {
         new RTCIceServer { urls = "turn:127.0.0.1:3478", username = "spike", credential = "spikepass" }
     },
-    iceTransportPolicy = RTCIceTransportPolicy.relay,
+    iceTransportPolicy = icePolicy,
 });
+Console.WriteLine("[dotnet] iceTransportPolicy=" + icePolicy);
 
 var gatheredCandidates = new List<string>();
 pc.onicecandidate += c => { Console.WriteLine($"[dotnet] local candidate: {c?.candidate}"); if (c?.candidate != null) gatheredCandidates.Add(c.candidate); };
