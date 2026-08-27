@@ -130,6 +130,24 @@ public class HelloTests
         Assert.Equal(expected, role.AcceptsInput());
     }
 
+    [Fact]
+    public void LooksLikeV1Peer_Handshake_ReturnsTrue()
+    {
+        Assert.True(HelloCompatibility.LooksLikeV1Peer(MessageType.Handshake));
+    }
+
+    [Theory]
+    [InlineData(MessageType.Hello)]
+    [InlineData(MessageType.Ping)]
+    [InlineData(MessageType.ScreenDelta)]
+    [InlineData(MessageType.HandshakeOk)]
+    [InlineData(MessageType.HandshakeFailed)]
+    [InlineData(MessageType.ChatMessage)]
+    public void LooksLikeV1Peer_AnyOtherType_ReturnsFalse(MessageType type)
+    {
+        Assert.False(HelloCompatibility.LooksLikeV1Peer(type));
+    }
+
     private static byte[] BuildRejectedFrame(byte reason, int declaredLength, byte[] actualData)
     {
         using var ms = new MemoryStream();

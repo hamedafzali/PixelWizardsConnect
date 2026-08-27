@@ -144,4 +144,22 @@ namespace PixelWizard.Core.Protocol
             return null;
         }
     }
+
+    /// <summary>
+    /// Detects the one positive, wire-level signal that a peer predates Hello negotiation
+    /// entirely, factored out as a pure function for the same reason as
+    /// <see cref="HelloNegotiator"/>: unit-testable without a socket or UI dispatcher.
+    /// </summary>
+    /// <remarks>
+    /// A v1 peer's very first message is always <see cref="MessageType.Handshake"/> -- v1 has
+    /// no concept of Hello at all, so it never sends one. Receiving exactly that type where
+    /// Hello was expected is a specific, positive identification of "this peer is v1", distinct
+    /// from an arbitrary malformed/unrecognized first message (which stays a generic bad-hello
+    /// failure -- not every wrong first message means "v1", only this one does).
+    /// </remarks>
+    public static class HelloCompatibility
+    {
+        public static bool LooksLikeV1Peer(MessageType firstMessageReceived) =>
+            firstMessageReceived == MessageType.Handshake;
+    }
 }

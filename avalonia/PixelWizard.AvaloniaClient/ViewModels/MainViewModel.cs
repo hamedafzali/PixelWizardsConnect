@@ -435,6 +435,10 @@ public class MainViewModel : ReactiveObject, IDisposable
     private bool   _hostHelloComplete;
     private int    _activeHostPort = 8888;
 
+    // Viewer-side heuristic for detecting a v1 host (see BuildViewerTransport): true from the
+    // moment Hello is sent until either any reply arrives or the connection drops.
+    private bool _awaitingHelloResponse;
+
     // Advertised by whichever host this instance is viewing, learned from HelloAck. Desktop
     // hosts always advertise Full (IInputInjector is always present here); ShareOnly is for a
     // future share-only peer (e.g. a phone with no mouse/keyboard) that nothing in this
@@ -562,6 +566,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         var t = new TcpTransport();
         t.Connected += async () =>
         {
+            _awaitingHelloResponse = true;
             await t.SendMessageAsync(new NetworkMessage
             {
                 Type = MessageType.Hello,
@@ -574,7 +579,17 @@ public class MainViewModel : ReactiveObject, IDisposable
             IsConnected  = false;
             IsConnecting = false;
             Screen       = AppScreen.Viewer;
-            Status       = "Disconnected";
+            // A v1 host has no concept of Hello: its own strict pre-handshake gate sees an
+            // unrecognized message type and disconnects immediately with zero bytes sent back
+            // (nothing like HelloAck/HelloRejected is possible from a build that predates
+            // them). So "we sent Hello and the connection closed before any reply arrived" is
+            // the only observable signal from this side -- unlike the host-side detection
+            // above, it isn't a positive identification (an ordinary network drop in that same
+            // narrow window looks identical), so the wording below is deliberately hedged.
+            Status = _awaitingHelloResponse
+                ? "Disconnected — the host may be running an older, incompatible version"
+                : "Disconnected";
+            _awaitingHelloResponse = false;
             _pingTimer?.Stop();
             KeyboardActive = false;
         });
@@ -923,6 +938,11 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void OnViewerMessage(NetworkMessage msg)
     {
+        // Any reply at all -- even one we don't otherwise act on -- proves the host is
+        // Hello-aware, so the v1-host heuristic in the Disconnected handler above no longer
+        // applies to this connection.
+        _awaitingHelloResponse = false;
+
         switch (msg.Type)
         {
             case MessageType.FullScreen:
@@ -1051,6 +1071,20 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void HandleHello(NetworkMessage msg)
     {
+        if (HelloCompatibility.LooksLikeV1Peer(msg.Type))
+        {
+            // A v1 viewer has no concept of Hello -- its first message is always Handshake.
+            // This is a distinct, positively-identified case, not a generic bad-hello failure:
+            // the peer isn't malformed, it's just too old to negotiate at all.
+            Dispatcher.UIThread.Post(() =>
+            {
+                HostStatus = "Viewer is running an older, incompatible version — please update it";
+                Status     = "Incompatible viewer version";
+            });
+            _hostTransport?.Disconnect();
+            return;
+        }
+
         if (msg.Type != MessageType.Hello)
         {
             Dispatcher.UIThread.Post(() => { HostStatus = "Bad hello — disconnecting"; Status = "Bad hello"; });

@@ -112,13 +112,38 @@ in this protocol (declared length must not exceed remaining buffer, and must not
   a specific rejection reason surfaced through `Status`/`HostStatus`, not a bare dropped
   connection.
 - **v1 peers (pre-Hello builds) cannot interoperate with v2 at all**, and this is by design,
-  not an oversight. A v1 viewer's first message is `Handshake`, sent immediately on connect.
-  A v2 host now requires `Hello` first and disconnects on anything else arriving before
-  negotiation completes — so a v1 viewer meeting a v2 host gets "Bad hello" and a disconnect,
-  never reaching the old `HandshakeFailed` path. No real v1 peers are deployed (this is a
-  pre-1.0 solo prototype), so this was judged acceptable rather than something to preserve
-  compatibility for. If that ever changes, bridging it would need a v1-shaped fallback path
-  that isn't built here.
+  not an oversight. No real v1 peers are deployed today (this is a pre-1.0 solo prototype), so
+  restoring interop was judged not worth building. What matters from Phase 6 onward — once a
+  Flutter client ships to app stores and users can be running old versions for months — is that
+  this boundary **fails comprehensibly instead of opaquely**. A future client implementer needs
+  to know exactly how "the other peer is just old" is recognized and what the user is told,
+  because that is a real, supportable state, not a bug to chase.
+
+  This is a **third, distinct failure case** — not an unknown message type (the type is
+  perfectly well-formed and recognized), and not a framing error (the frame is intact). It is a
+  version-boundary violation, detected and reported as its own thing:
+
+  - **v2 host meeting a v1 viewer (detected, symmetric confidence: definitive).** A v1 viewer's
+    first message is always `Handshake`, sent immediately on connect — v1 has no concept of
+    `Hello` at all, so it never sends one. A v2 host receiving exactly `Handshake` where `Hello`
+    was expected treats this as a positive identification of "this peer is v1", handled in
+    `PixelWizard.Core.Protocol.HelloCompatibility.LooksLikeV1Peer` and surfaced through
+    `HostStatus`/`Status` as *"Viewer is running an older, incompatible version — please update
+    it"* — not the generic "Bad hello" text used for any other unexpected first message. The
+    connection is closed the same way any other pre-negotiation violation is (immediate
+    disconnect, no reply sent) — only the message shown to the user differs.
+  - **v2 viewer meeting a v1 host (best-effort only, not definitive).** This direction cannot be
+    positively detected with today's structure. A v1 host's own pre-Hello dispatch gate sees the
+    viewer's `Hello` as an unrecognized type and disconnects immediately with **zero bytes sent
+    back** — there is no v1-shaped reply for the viewer to identify, because replying at all
+    would require the v1 host to understand `Hello`, which is exactly what it doesn't. The
+    viewer can only observe "I sent `Hello`, and the connection closed before anything came
+    back" — a state that an ordinary mid-connect network failure produces identically, so this
+    is a heuristic, not a proof. The viewer surfaces it with deliberately hedged wording,
+    *"Disconnected — the host may be running an older, incompatible version"*, only when no
+    reply of any kind arrived between sending `Hello` and the disconnect firing. Reaching a
+    definitive signal here would need v1 itself to change (not possible — it isn't being
+    updated) or richer failure signaling from the transport layer, which is Phase 2/4 scope.
 
 ## Message types
 
