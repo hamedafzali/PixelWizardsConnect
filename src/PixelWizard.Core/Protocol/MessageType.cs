@@ -37,6 +37,9 @@ namespace PixelWizard.Core.Protocol
         ClipboardText = 50,
 
         // Chat
-        ChatMessage = 60
+        ChatMessage = 60,
+
+        // Protocol v2: identified stream frame (screen/camera/overlay)
+        StreamFrame = 80
     }
 }
