@@ -1,0 +1,138 @@
+# Throwaway spike workflow (T8 Windows-partial). Manually triggered only --
+# must never gate the main build, so this is deliberately NOT added to
+# ci.yml's push/pull_request triggers and never touches that file.
+#
+# Scope: only "does it work at all" on Windows -- DLL loading, version skew,
+# whether T8's findings #3/#4 reproduce, negotiation, packaging/licensing.
+# windows-latest has no GPU/Quick Sync hardware, so it falls back to software
+# x264. Any CPU number this run produces is meaningless for the "what does
+# hardware encode cost" question -- that half stays open, pending hardware.
+name: "[Spike] T8 Windows-partial"
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  windows-partial:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.304"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download Windows FFmpeg builds (gpl-shared and lgpl-shared)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path ffmpeg-gpl, ffmpeg-lgpl | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip" -OutFile gpl.zip
+          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl-shared.zip" -OutFile lgpl.zip
+          Expand-Archive gpl.zip -DestinationPath ffmpeg-gpl
+          Expand-Archive lgpl.zip -DestinationPath ffmpeg-lgpl
+
+      - name: Inspect FFmpeg builds (version, encoders, licensing)
+        shell: pwsh
+        run: |
+          $gplRoot = Get-ChildItem ffmpeg-gpl | Select-Object -First 1
+          $lgplRoot = Get-ChildItem ffmpeg-lgpl | Select-Object -First 1
+          "GPL_BIN=$($gplRoot.FullName)\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "LGPL_BIN=$($lgplRoot.FullName)\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          New-Item -ItemType Directory -Force -Path findings | Out-Null
+
+          foreach ($pair in @(@{name='gpl'; root=$gplRoot.FullName}, @{name='lgpl'; root=$lgplRoot.FullName})) {
+            $name = $pair.name
+            $ffmpegExe = Join-Path $pair.root "bin\ffmpeg.exe"
+            "=== $name : ffmpeg -version ===" | Tee-Object -FilePath "findings\$name-version.txt"
+            & $ffmpegExe -version 2>&1 | Tee-Object -FilePath "findings\$name-version.txt" -Append
+            "=== $name : ffmpeg -buildconf ===" | Tee-Object -FilePath "findings\$name-buildconf.txt"
+            & $ffmpegExe -buildconf 2>&1 | Tee-Object -FilePath "findings\$name-buildconf.txt" -Append
+            "=== $name : ffmpeg -encoders ===" | Tee-Object -FilePath "findings\$name-encoders.txt"
+            & $ffmpegExe -encoders 2>&1 | Tee-Object -FilePath "findings\$name-encoders.txt" -Append
+            "=== $name : hwaccels ===" | Tee-Object -FilePath "findings\$name-hwaccels.txt"
+            & $ffmpegExe -hwaccels 2>&1 | Tee-Object -FilePath "findings\$name-hwaccels.txt" -Append
+
+            "=== $name : DLLs and sizes ===" | Tee-Object -FilePath "findings\$name-dlls.txt"
+            Get-ChildItem (Join-Path $pair.root "bin") -Filter *.dll |
+              Select-Object Name, @{N='SizeKB';E={[math]::Round($_.Length/1KB,1)}} |
+              Format-Table -AutoSize | Out-String | Tee-Object -FilePath "findings\$name-dlls.txt" -Append
+
+            "=== $name : bundled license/README files ===" | Tee-Object -FilePath "findings\$name-license-files.txt"
+            Get-ChildItem $pair.root -Recurse -Include LICENSE*, README*, COPYING* |
+              ForEach-Object { $_.FullName } | Tee-Object -FilePath "findings\$name-license-files.txt" -Append
+          }
+
+      - name: Report Quick Sync / oneVPL presence
+        shell: pwsh
+        run: |
+          Write-Host "--- gpl hwaccels ---"
+          Get-Content findings\gpl-hwaccels.txt
+          Write-Host "--- lgpl hwaccels ---"
+          Get-Content findings\lgpl-hwaccels.txt
+          Write-Host "--- grep for qsv/mfx/oneVPL in buildconf ---"
+          Select-String -Path findings\gpl-buildconf.txt, findings\lgpl-buildconf.txt -Pattern "qsv|mfx|onevpl" -SimpleMatch:$false
+
+      - name: dotnet build WebrtcSpike
+        run: dotnet build spikes/webrtc-desktop/dotnet-peer/WebrtcSpike/WebrtcSpike.csproj -c Release
+
+      - name: Best-effort coturn via Docker (Linux container -- windows-latest may not support this)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          docker compose -f spikes/webrtc-desktop/coturn/docker-compose.yml up -d
+          Start-Sleep -Seconds 5
+          docker ps
+
+      - name: Run dotnet WebrtcSpike peer against LGPL-shared FFmpeg (short run)
+        shell: pwsh
+        continue-on-error: true
+        env:
+          SPIKE_FFMPEG_LIB_PATH: ${{ env.LGPL_BIN }}
+        run: |
+          New-Item -ItemType Directory -Force -Path sig | Out-Null
+          $proc = Start-Process -FilePath "dotnet" `
+            -ArgumentList "run --project spikes/webrtc-desktop/dotnet-peer/WebrtcSpike/WebrtcSpike.csproj -c Release -- $PWD\sig 60" `
+            -NoNewWindow -PassThru -RedirectStandardOutput dotnet.log -RedirectStandardError dotnet.err.log
+          Start-Sleep -Seconds 20
+          Write-Host "--- dotnet.log (partial, offer should exist by now) ---"
+          Get-Content dotnet.log -ErrorAction SilentlyContinue
+          if (Test-Path sig\offer.json) {
+            Write-Host "--- offer.json a=candidate line count (finding #4 check) ---"
+            (Select-String -Path sig\offer.json -Pattern "a=candidate").Count
+            Write-Host "--- offer.json fmtp lines (finding #3 check) ---"
+            Select-String -Path sig\offer.json -Pattern "a=fmtp"
+          } else {
+            Write-Host "offer.json was not written within 20s"
+          }
+          Wait-Process -Id $proc.Id -Timeout 70 -ErrorAction SilentlyContinue
+          Write-Host "--- dotnet.log (full) ---"
+          Get-Content dotnet.log -ErrorAction SilentlyContinue
+          Write-Host "--- dotnet.err.log ---"
+          Get-Content dotnet.err.log -ErrorAction SilentlyContinue
+
+      - name: Playwright Chrome negotiation attempt (best-effort)
+        shell: pwsh
+        continue-on-error: true
+        working-directory: spikes/webrtc-desktop/web-peer
+        run: |
+          npm ci
+          npx playwright install chrome --with-deps
+          node drive.mjs "$PWD\..\..\..\sig" 30 2>&1 | Tee-Object -FilePath ..\..\..\web-driver.log
+
+      - name: Upload findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: t8-windows-partial-findings
+          path: |
+            findings/**
+            sig/**
+            dotnet.log
+            dotnet.err.log
+            web-driver.log
+          if-no-files-found: warn
