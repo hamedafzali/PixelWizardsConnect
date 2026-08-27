@@ -179,6 +179,49 @@ built on top of the assumption. Phase 1's protocol work carries over either way.
 Running this gate now rather than at Phase 4 is the difference between a two-week correction and
 a six-month one.
 
+## Gate outcome — 2026-08-27
+
+**Option B confirmed.** Evidence: `docs/spikes/T8-sipsorcery.md`.
+
+| Risk the gate tested | Result |
+|---|---|
+| SIPSorcery browser interop | Passed — H.264 both directions plus data channel, real Chrome |
+| TURN relay traversal | Passed — confirmed at coturn, not inferred from ICE state |
+| Hardware encode reachable | Passed — VideoToolbox macOS (~0.5 core); Quick Sync already in stock BtbN Windows builds |
+| Stability | Passed — 600s, memory flat 85–150MB, 1196/1196 data-channel messages each way |
+| Packaging and licensing | Understood, not blocking — minimal LGPL FFmpeg build required |
+
+### Carried to Phase 4, not gate items
+
+- **Windows hardware-encode CPU.** Needs a Quick Sync machine. A poor result is a
+  degraded-mode problem (lower resolution or framerate without a hardware encoder), not an
+  architecture problem — Flutter via libwebrtc faces the identical constraint, so it cannot
+  favour Option C.
+- **T9 mobile interop.** Blocked on device access. Low risk: `flutter_webrtc` wraps real
+  libwebrtc against a now-proven desktop peer.
+
+### Findings that change Phase 3 and Phase 4
+
+- **SIPSorcery does not merge relay/TURN candidates into `localDescription.sdp`**, though it
+  does merge host candidates. Signaling must trickle relay candidates from `onicecandidate`
+  rather than sending a final SDP blob. Host-only paths unaffected. Candidate for an
+  upstream issue; if fixed, the workaround disappears.
+- **Never read `localDescription` after a fixed delay** — wait for gathering-complete.
+- **Any splice-style workaround must check for candidates already present**, or it produces
+  duplicate-candidate SDP.
+- **Minimal LGPL FFmpeg build is a licensing requirement**, not a size optimization —
+  standard distributions link GPL x264/x265.
+- **Vendor a specific tested FFmpeg build.** macOS 8.x was unobtainable and needed a
+  version-skew override; Windows depends on BtbN, one volunteer's build server.
+- **Feed the existing `IScreenCapture` implementations into `FFmpegVideoEncoder`** rather
+  than SIPSorcery's own capture sources — keeps platform code the project already owns.
+
+### Process note
+
+Finding #4 was reported three times with three different explanations before resolving
+correctly, and only because Windows contradicted macOS. Treat single-platform conclusions
+in the spike report with corresponding caution.
+
 ---
 
 ## Implementation phases
