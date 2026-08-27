@@ -432,7 +432,22 @@ public class MainViewModel : ReactiveObject, IDisposable
     private string _sessionSecret         = "";
     private string _expectedSessionSecret = "";
     private bool   _hostHandshakeComplete;
+    private bool   _hostHelloComplete;
     private int    _activeHostPort = 8888;
+
+    // Advertised by whichever host this instance is viewing, learned from HelloAck. Desktop
+    // hosts always advertise Full (IInputInjector is always present here); ShareOnly is for a
+    // future share-only peer (e.g. a phone with no mouse/keyboard) that nothing in this
+    // codebase produces yet -- see PixelWizard.Core.Protocol.PeerRole.
+    private PeerRole _hostPeerRole = PeerRole.Full;
+
+    private static readonly HelloMessage OurHello = new()
+    {
+        ProtocolVersion = ProtocolVersions.Current,
+        Role = PeerRole.Full,
+        Codecs = SupportedCodecs.Jpeg,
+        MaxConcurrentStreams = 1
+    };
 
     public Func<string, Task<bool>>? ConsentCallback     { get; set; }
     public Func<string, Task>?       ClipboardCallback   { get; set; }
@@ -549,19 +564,8 @@ public class MainViewModel : ReactiveObject, IDisposable
         {
             await t.SendMessageAsync(new NetworkMessage
             {
-                Type = MessageType.Handshake,
-                Data = Encoding.UTF8.GetBytes(_sessionSecret)
-            });
-            Dispatcher.UIThread.Post(() =>
-            {
-                IsConnected  = true;
-                IsConnecting = false;
-                Screen       = AppScreen.LiveScreen;
-                Status       = "Connected";
-                RememberHost(HostAddress.Trim());
-                UpdateWindowTitle();
-                _pingTimer?.Start();
-                StartFrameTimeoutTimer();
+                Type = MessageType.Hello,
+                Data = OurHello.Serialize()
             });
         };
         t.Disconnected += () => Dispatcher.UIThread.Post(() =>
@@ -717,6 +721,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         var t = new TcpTransport();
         t.Connected += () =>
         {
+            _hostHelloComplete     = false;
             _hostHandshakeComplete = false;
             Dispatcher.UIThread.Post(() =>
             {
@@ -727,6 +732,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         t.Disconnected += () => Dispatcher.UIThread.Post(async () =>
         {
             _sessionWatchdog?.Stop();
+            _hostHelloComplete     = false;
             _hostHandshakeComplete = false;
             HideViewingBadgeCallback?.Invoke();
             TrayTooltip = "Hosting — waiting for viewer";
@@ -791,6 +797,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         _capture               = null;
         _input                 = null;
         _wsServer              = null;
+        _hostHelloComplete     = false;
         _hostHandshakeComplete = false;
         IsHostRunning  = false;
         ShowCodeCard   = false;
@@ -926,6 +933,34 @@ public class MainViewModel : ReactiveObject, IDisposable
                 ApplyDelta(ScreenDelta.Deserialize(msg.Data));
                 ResetFrameTimeoutTimer();
                 break;
+            case MessageType.HelloAck:
+                var hostHello = HelloMessage.Deserialize(msg.Data);
+                _hostPeerRole = hostHello.Role;
+                _ = _transport?.SendMessageAsync(new NetworkMessage
+                {
+                    Type = MessageType.Handshake,
+                    Data = Encoding.UTF8.GetBytes(_sessionSecret)
+                });
+                Dispatcher.UIThread.Post(() =>
+                {
+                    IsConnected  = true;
+                    IsConnecting = false;
+                    Screen       = AppScreen.LiveScreen;
+                    Status       = "Connected";
+                    RememberHost(HostAddress.Trim());
+                    UpdateWindowTitle();
+                    _pingTimer?.Start();
+                    StartFrameTimeoutTimer();
+                });
+                break;
+            case MessageType.HelloRejected:
+                var rejected = HelloRejectedMessage.Deserialize(msg.Data);
+                Dispatcher.UIThread.Post(() =>
+                {
+                    Status = $"Host rejected connection: {rejected.Message}";
+                    DisconnectViewer();
+                });
+                break;
             case MessageType.HandshakeOk:
                 break;
             case MessageType.HandshakeFailed:
@@ -955,6 +990,12 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void OnHostMessage(NetworkMessage msg)
     {
+        if (!_hostHelloComplete)
+        {
+            HandleHello(msg);
+            return;
+        }
+
         if (!_hostHandshakeComplete)
         {
             HandleHandshake(msg);
@@ -1006,6 +1047,51 @@ public class MainViewModel : ReactiveObject, IDisposable
                 Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: false, text: chat));
                 break;
         }
+    }
+
+    private void HandleHello(NetworkMessage msg)
+    {
+        if (msg.Type != MessageType.Hello)
+        {
+            Dispatcher.UIThread.Post(() => { HostStatus = "Bad hello — disconnecting"; Status = "Bad hello"; });
+            _hostTransport?.Disconnect();
+            return;
+        }
+
+        HelloMessage remoteHello;
+        try
+        {
+            remoteHello = HelloMessage.Deserialize(msg.Data);
+        }
+        catch (Exception)
+        {
+            Dispatcher.UIThread.Post(() => { HostStatus = "Malformed hello — disconnecting"; Status = "Malformed hello"; });
+            _hostTransport?.Disconnect();
+            return;
+        }
+
+        var rejectReason = HelloNegotiator.Evaluate(OurHello, remoteHello);
+        if (rejectReason != null)
+        {
+            string reasonText = rejectReason == HelloRejectReason.VersionMismatch
+                ? $"viewer protocol v{remoteHello.ProtocolVersion} is incompatible with this host's v{ProtocolVersions.Current}"
+                : "viewer and host share no compatible codec";
+            _ = _hostTransport?.SendMessageAsync(new NetworkMessage
+            {
+                Type = MessageType.HelloRejected,
+                Data = new HelloRejectedMessage { Reason = rejectReason.Value, Message = reasonText }.Serialize()
+            });
+            Dispatcher.UIThread.Post(() => { HostStatus = $"Rejected viewer: {reasonText}"; Status = "Rejected: " + reasonText; });
+            _hostTransport?.Disconnect();
+            return;
+        }
+
+        _hostHelloComplete = true;
+        _ = _hostTransport?.SendMessageAsync(new NetworkMessage
+        {
+            Type = MessageType.HelloAck,
+            Data = OurHello.Serialize()
+        });
     }
 
     private void HandleHandshake(NetworkMessage msg)
@@ -1181,7 +1267,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public async void SendMouseMove(int rx, int ry)
     {
-        if (_transport?.IsConnected != true) return;
+        if (_transport?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
         if (Math.Abs(rx - _lastMousePos.x) < 1 && Math.Abs(ry - _lastMousePos.y) < 1) return;
         _lastMousePos = (rx, ry);
         await _transport.SendMessageAsync(new NetworkMessage
@@ -1193,7 +1279,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public async void SendMouseClick(int rx, int ry, bool leftButton)
     {
-        if (_transport?.IsConnected != true) return;
+        if (_transport?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
         await _transport.SendMessageAsync(new NetworkMessage
         {
             Type = MessageType.MouseClick,
@@ -1203,7 +1289,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public async void SendMouseDown(int rx, int ry, bool leftButton)
     {
-        if (_transport?.IsConnected != true) return;
+        if (_transport?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
         await _transport.SendMessageAsync(new NetworkMessage
         {
             Type = MessageType.MouseButtonDown,
@@ -1213,7 +1299,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public async void SendMouseUp(int rx, int ry, bool leftButton)
     {
-        if (_transport?.IsConnected != true) return;
+        if (_transport?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
         await _transport.SendMessageAsync(new NetworkMessage
         {
             Type = MessageType.MouseButtonUp,
@@ -1223,7 +1309,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public async void SendKey(int vk, bool isDown)
     {
-        if (_transport?.IsConnected != true || vk == 0) return;
+        if (_transport?.IsConnected != true || vk == 0 || !_hostPeerRole.AcceptsInput()) return;
         await _transport.SendMessageAsync(new NetworkMessage
         {
             Type = isDown ? MessageType.KeyPress : MessageType.KeyRelease,
