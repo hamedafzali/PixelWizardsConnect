@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 
-namespace PixelWizard.Core.Protocol
+namespace PixelWizard.Protocol
 {
     /// <summary>
     /// What a StreamFrame's pixels represent. Distinct streams (e.g. a screen share plus a

@@ -1,6 +1,6 @@
 using System;
 using System.Threading.Tasks;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 
 namespace PixelWizard.Core.Interfaces
 {

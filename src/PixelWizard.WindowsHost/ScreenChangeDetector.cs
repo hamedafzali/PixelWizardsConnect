@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 
 namespace PixelWizard.WindowsHost
 {

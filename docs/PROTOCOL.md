@@ -127,7 +127,7 @@ in this protocol (declared length must not exceed remaining buffer, and must not
     first message is always `Handshake`, sent immediately on connect — v1 has no concept of
     `Hello` at all, so it never sends one. A v2 host receiving exactly `Handshake` where `Hello`
     was expected treats this as a positive identification of "this peer is v1", handled in
-    `PixelWizard.Core.Protocol.HelloCompatibility.LooksLikeV1Peer` and surfaced through
+    `PixelWizard.Protocol.HelloCompatibility.LooksLikeV1Peer` and surfaced through
     `HostStatus`/`Status` as *"Viewer is running an older, incompatible version — please update
     it"* — not the generic "Bad hello" text used for any other unexpected first message. The
     connection is closed the same way any other pre-negotiation violation is (immediate
@@ -209,7 +209,7 @@ Field-width reasoning:
   capture; a 16-bit counter would wrap in a little over an hour at a modest 15fps, which a
   real support session could plausibly exceed. The extra two bytes over a `ushort` are
   negligible next to JPEG-sized payloads. Comparisons should use wraparound-safe arithmetic
-  (`PixelWizard.Core.Protocol.SequenceNumbers.Gap`) as defense in depth even though the wrap
+  (`PixelWizard.Protocol.SequenceNumbers.Gap`) as defense in depth even though the wrap
   case is not expected to be reached in practice.
 - **CaptureTimestampTicks** (int64): the same `DateTime.Ticks` epoch (`0001-01-01` UTC, 100ns
   resolution) `NetworkMessage.Timestamp` already uses, so the wire protocol has one timestamp

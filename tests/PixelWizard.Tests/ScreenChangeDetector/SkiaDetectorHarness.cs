@@ -1,5 +1,5 @@
 using System.Reflection;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 using SkiaSharp;
 
 namespace PixelWizard.Tests.ScreenChangeDetector;

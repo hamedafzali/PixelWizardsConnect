@@ -1,6 +1,6 @@
 using System.IO;
 
-namespace PixelWizard.Core.Protocol
+namespace PixelWizard.Protocol
 {
     public class MouseMoveMessage
     {

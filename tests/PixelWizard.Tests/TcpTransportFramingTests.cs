@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 using PixelWizard.Transport;
 using Xunit;
 

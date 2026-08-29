@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 
 namespace PixelWizard.Transport
 {

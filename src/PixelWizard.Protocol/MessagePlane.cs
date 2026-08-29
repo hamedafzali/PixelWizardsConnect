@@ -1,6 +1,6 @@
 using System;
 
-namespace PixelWizard.Core.Protocol
+namespace PixelWizard.Protocol
 {
     /// <summary>
     /// Reliable/ordered vs droppable. In Phase 1 both planes still run over the same TCP

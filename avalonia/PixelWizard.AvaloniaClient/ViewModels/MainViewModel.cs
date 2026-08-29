@@ -15,7 +15,7 @@ using PixelWizard.AvaloniaClient.Platform;
 using PixelWizard.AvaloniaClient.Services;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 using PixelWizard.Transport;
 
 namespace PixelWizard.AvaloniaClient.ViewModels;
@@ -442,7 +442,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     // Advertised by whichever host this instance is viewing, learned from HelloAck. Desktop
     // hosts always advertise Full (IInputInjector is always present here); ShareOnly is for a
     // future share-only peer (e.g. a phone with no mouse/keyboard) that nothing in this
-    // codebase produces yet -- see PixelWizard.Core.Protocol.PeerRole.
+    // codebase produces yet -- see PixelWizard.Protocol.PeerRole.
     private PeerRole _hostPeerRole = PeerRole.Full;
 
     private static readonly HelloMessage OurHello = new()

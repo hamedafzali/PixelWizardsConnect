@@ -1,4 +1,4 @@
-namespace PixelWizard.Core.Protocol
+namespace PixelWizard.Protocol
 {
     /// <summary>
     /// Wraparound-safe comparison for StreamFrameMessage.SequenceNumber. A plain subtraction

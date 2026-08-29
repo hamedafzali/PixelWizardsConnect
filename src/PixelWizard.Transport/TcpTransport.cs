@@ -8,7 +8,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using PixelWizard.Core.Interfaces;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 
 namespace PixelWizard.Transport
 {

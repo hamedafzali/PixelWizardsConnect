@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 
 namespace PixelWizard.Core.Interfaces
 {

@@ -1,4 +1,4 @@
-namespace PixelWizard.Core.Protocol
+namespace PixelWizard.Protocol
 {
     public enum MessageType : byte
     {

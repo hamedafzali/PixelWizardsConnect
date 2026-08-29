@@ -1,5 +1,5 @@
 using System.IO;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 using Xunit;
 
 namespace PixelWizard.Tests;

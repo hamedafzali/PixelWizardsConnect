@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 
-namespace PixelWizard.Core.Protocol
+namespace PixelWizard.Protocol
 {
     /// <summary>Current v2 wire-protocol version, exchanged in Hello. Bump on any change to
     /// message layout that isn't itself skippable via the unknown-type envelope.</summary>

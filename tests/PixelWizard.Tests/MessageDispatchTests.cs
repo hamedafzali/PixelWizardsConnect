@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 using Xunit;
 
 namespace PixelWizard.Tests;

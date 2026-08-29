@@ -1,6 +1,6 @@
 using System;
 
-namespace PixelWizard.Core.Protocol
+namespace PixelWizard.Protocol
 {
     /// <summary>
     /// What a viewer does with a message received from the host, once Hello/Handshake are

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using SkiaSharp;
-using PixelWizard.Core.Protocol;
+using PixelWizard.Protocol;
 
 namespace PixelWizard.AvaloniaClient.Platform.Mac;
 
