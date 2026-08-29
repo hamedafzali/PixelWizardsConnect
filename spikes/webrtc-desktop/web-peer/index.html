@@ -1,0 +1,132 @@
+<!doctype html>
+<html><body>
+<canvas id="c" width="640" height="360"></canvas>
+<video id="remote" autoplay playsinline></video>
+<script>
+  window.spikeLog = [];
+  function log(...a) { window.spikeLog.push(a.join(' ')); console.log(...a); }
+
+  window.startSpike = async function(offerSdp) {
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d');
+    let hue = 0;
+    setInterval(() => {
+      ctx.fillStyle = `hsl(${hue++ % 360}, 80%, 50%)`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'white';
+      ctx.font = '30px sans-serif';
+      ctx.fillText(String(Date.now()), 10, 50);
+    }, 33);
+    const stream = canvas.captureStream(30);
+
+    const pc = new RTCPeerConnection({
+      iceServers: [{ urls: 'turn:127.0.0.1:3478', username: 'spike', credential: 'spikepass' }],
+      iceTransportPolicy: 'relay',
+    });
+
+    pc.oniceconnectionstatechange = () => log('[web] ice state ->', pc.iceConnectionState);
+    pc.onconnectionstatechange = () => log('[web] connection state ->', pc.connectionState);
+    pc.onicecandidate = e => log('[web] local candidate:', e.candidate ? e.candidate.candidate : '(end)');
+
+    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+
+    // Prefer H264 if the browser exposes setCodecPreferences (Chrome does).
+    const videoTransceiver = pc.getTransceivers().find(t => t.sender && t.sender.track && t.sender.track.kind === 'video');
+    if (videoTransceiver && videoTransceiver.setCodecPreferences && RTCRtpSender.getCapabilities) {
+      const caps = RTCRtpSender.getCapabilities('video');
+      const h264 = caps.codecs.filter(c => c.mimeType.toLowerCase() === 'video/h264');
+      const others = caps.codecs.filter(c => c.mimeType.toLowerCase() !== 'video/h264');
+      if (h264.length) videoTransceiver.setCodecPreferences([...h264, ...others]);
+      log('[web] h264 codecs available:', JSON.stringify(h264));
+    }
+
+    pc.ontrack = ev => {
+      log('[web] ontrack', ev.track.kind);
+      if (ev.track.kind === 'video') document.getElementById('remote').srcObject = ev.streams[0];
+    };
+
+    // Latency via getStats() rather than pixel-readback from the decoded
+    // <video> element: canvas readback of a real H.264-decoded frame needs a
+    // font/rendering-tolerant OCR step to survive compression artifacting on
+    // a "large blocky counter," which is more fragile than the numbers
+    // getStats() already exposes directly. This measures encode->relay->
+    // jitter-buffer->decode latency (jitterBufferDelay/jitterBufferEmittedCount
+    // gives the average time a frame sat in the receiver's jitter buffer
+    // before decode) plus RTT from the active candidate pair. It does NOT
+    // include capture or on-screen display time, which is stated in the report.
+    window.spikeStatsSamples = [];
+    window.statsInterval = setInterval(async () => {
+      if (!pc || pc.connectionState !== 'connected') return;
+      const stats = await pc.getStats();
+      let inboundVideo = null, candidatePair = null;
+      stats.forEach(r => {
+        if (r.type === 'inbound-rtp' && r.kind === 'video') inboundVideo = r;
+        if (r.type === 'candidate-pair' && r.state === 'succeeded') candidatePair = r;
+      });
+      if (inboundVideo) {
+        window.spikeStatsSamples.push({
+          t: Date.now(),
+          jitterBufferDelay: inboundVideo.jitterBufferDelay,
+          jitterBufferEmittedCount: inboundVideo.jitterBufferEmittedCount,
+          framesDecoded: inboundVideo.framesDecoded,
+          framesPerSecond: inboundVideo.framesPerSecond,
+          totalDecodeTime: inboundVideo.totalDecodeTime,
+          currentRoundTripTime: candidatePair ? candidatePair.currentRoundTripTime : null,
+        });
+      }
+    }, 1000);
+
+    let dc;
+    pc.ondatachannel = ev => {
+      dc = ev.channel;
+      dc.onopen = () => log('[web] datachannel open (remote-initiated)');
+      dc.onmessage = m => {
+        log('[web] dc recv:', m.data);
+        try { dc.send('pong from web t=' + Date.now()); } catch (e) {}
+      };
+    };
+
+    await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+
+    await new Promise(resolve => {
+      if (pc.iceGatheringState === 'complete') return resolve();
+      const check = () => { if (pc.iceGatheringState === 'complete') { pc.removeEventListener('icegatheringstatechange', check); resolve(); } };
+      pc.addEventListener('icegatheringstatechange', check);
+      setTimeout(resolve, 4000);
+    });
+
+    window.spikePc = pc;
+    return pc.localDescription.sdp;
+  };
+
+  // Called by the driver at the end of the run. jitterBufferDelay and
+  // jitterBufferEmittedCount are cumulative counters per spec, so the
+  // average time-in-jitter-buffer per frame is the delta of both divided,
+  // not the raw last-sample value.
+  window.getLatencySummary = function() {
+    const s = window.spikeStatsSamples || [];
+    if (s.length < 2) return { error: 'not enough samples', sampleCount: s.length };
+    const first = s[0], last = s[s.length - 1];
+    const deltaDelay = last.jitterBufferDelay - first.jitterBufferDelay;
+    const deltaCount = last.jitterBufferEmittedCount - first.jitterBufferEmittedCount;
+    const avgJitterBufferMs = deltaCount > 0 ? (deltaDelay / deltaCount) * 1000 : null;
+    const deltaDecodeTime = last.totalDecodeTime - first.totalDecodeTime;
+    const avgDecodeMs = deltaCount > 0 ? (deltaDecodeTime / deltaCount) * 1000 : null;
+    const rtts = s.map(x => x.currentRoundTripTime).filter(x => x != null);
+    const avgRttMs = rtts.length ? (rtts.reduce((a, b) => a + b, 0) / rtts.length) * 1000 : null;
+    const framesDecodedTotal = last.framesDecoded - first.framesDecoded;
+    const elapsedSec = (last.t - first.t) / 1000;
+    return {
+      sampleCount: s.length,
+      avgJitterBufferMs,
+      avgDecodeMs,
+      avgRttMs,
+      framesDecodedTotal,
+      elapsedSec,
+      achievedDecodeFps: elapsedSec > 0 ? framesDecodedTotal / elapsedSec : null,
+    };
+  };
+</script>
+</body></html>
