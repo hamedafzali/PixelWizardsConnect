@@ -24,6 +24,18 @@ code this phase needs to move). Two consequences:
   for the characterization-test section below: the code this phase most needs
   to extract is also the code that grew the most since it was last measured.
 
+This growth was the right trade, not a mistake: Phase 1's own hard rules
+forbade restructuring `MainViewModel` during the protocol change, and mixing
+the two would have made both unreviewable. But it is a real cost, not just a
+number to correct — ADR-001's 4–6 week estimate for Phase 2 was made against
+the smaller, 1,331-line target, before this growth happened. Any phase that
+lands a protocol or feature change ahead of a scheduled refactor should
+expect the same effect: the refactor's estimate is made against a moving
+target, and the target moves in the direction that makes the refactor bigger,
+not smaller, because new work lands in the file that already has the most
+surface area to attach to. Budget Phase 2 against 1,457 lines, and expect
+whatever change lands between now and T9 to add a few more.
+
 ## Target-shape corrections (say-so per the task brief)
 
 ADR-001's table presents `PixelWizard.Transport.{Tcp,WebSocket}` and
