@@ -943,17 +943,21 @@ public class MainViewModel : ReactiveObject, IDisposable
         // applies to this connection.
         _awaitingHelloResponse = false;
 
-        switch (msg.Type)
+        // What to do with this message is a pure function of its MessageType
+        // (MessageDispatch.ClassifyForViewer, exhaustively unit tested in
+        // MessageDispatchTests) -- only how each category is carried out below still
+        // touches instance state and Dispatcher.UIThread.
+        switch (MessageDispatch.ClassifyForViewer(msg.Type))
         {
-            case MessageType.FullScreen:
+            case ViewerDispatchAction.ApplyFullScreen:
                 ApplyFullScreen(msg.Data);
                 ResetFrameTimeoutTimer();
                 break;
-            case MessageType.ScreenDelta:
+            case ViewerDispatchAction.ApplyScreenDelta:
                 ApplyDelta(ScreenDelta.Deserialize(msg.Data));
                 ResetFrameTimeoutTimer();
                 break;
-            case MessageType.HelloAck:
+            case ViewerDispatchAction.HostHelloAck:
                 var hostHello = HelloMessage.Deserialize(msg.Data);
                 _hostPeerRole = hostHello.Role;
                 _ = _transport?.SendMessageAsync(new NetworkMessage
@@ -973,7 +977,7 @@ public class MainViewModel : ReactiveObject, IDisposable
                     StartFrameTimeoutTimer();
                 });
                 break;
-            case MessageType.HelloRejected:
+            case ViewerDispatchAction.HostHelloRejected:
                 var rejected = HelloRejectedMessage.Deserialize(msg.Data);
                 Dispatcher.UIThread.Post(() =>
                 {
@@ -981,27 +985,27 @@ public class MainViewModel : ReactiveObject, IDisposable
                     DisconnectViewer();
                 });
                 break;
-            case MessageType.HandshakeOk:
+            case ViewerDispatchAction.HandshakeAcknowledged:
                 break;
-            case MessageType.HandshakeFailed:
+            case ViewerDispatchAction.HandshakeRejected:
                 Dispatcher.UIThread.Post(() =>
                 {
                     Status = "Host rejected: invalid session token";
                     DisconnectViewer();
                 });
                 break;
-            case MessageType.Pong:
+            case ViewerDispatchAction.LatencyPong:
                 if (msg.Data.Length >= 8)
                     _lastLatencyMs = (int)Math.Max(0,
                         (DateTime.UtcNow - new DateTime(BitConverter.ToInt64(msg.Data, 0), DateTimeKind.Utc))
                         .TotalMilliseconds);
                 break;
-            case MessageType.ClipboardText:
+            case ViewerDispatchAction.Clipboard:
                 string cbText = Encoding.UTF8.GetString(msg.Data);
                 if (ClipboardCallback != null)
                     Dispatcher.UIThread.Post(() => _ = ClipboardCallback(cbText));
                 break;
-            case MessageType.ChatMessage:
+            case ViewerDispatchAction.Chat:
                 string chat = Encoding.UTF8.GetString(msg.Data);
                 Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: true, text: chat));
                 break;
@@ -1024,45 +1028,47 @@ public class MainViewModel : ReactiveObject, IDisposable
 
         ResetSessionWatchdog();
 
-        switch (msg.Type)
+        // See the matching comment in OnViewerMessage: classification is pure and
+        // exhaustively tested (MessageDispatchTests); execution below is not.
+        switch (MessageDispatch.ClassifyForHost(msg.Type))
         {
-            case MessageType.MouseMove:
+            case HostDispatchAction.MouseMove:
                 var mv = MouseMoveMessage.Deserialize(msg.Data);
                 Dispatcher.UIThread.Post(() => _input?.MoveMouse(mv.X, mv.Y));
                 break;
-            case MessageType.MouseClick:
+            case HostDispatchAction.MouseClick:
                 var cl = MouseClickMessage.Deserialize(msg.Data);
                 Dispatcher.UIThread.Post(() => _input?.Click(cl.X, cl.Y, cl.LeftButton));
                 break;
-            case MessageType.MouseButtonDown:
+            case HostDispatchAction.MouseButtonDown:
                 var bd = MouseClickMessage.Deserialize(msg.Data);
                 Dispatcher.UIThread.Post(() => _input?.ButtonDown(bd.X, bd.Y, bd.LeftButton));
                 break;
-            case MessageType.MouseButtonUp:
+            case HostDispatchAction.MouseButtonUp:
                 var bu = MouseClickMessage.Deserialize(msg.Data);
                 Dispatcher.UIThread.Post(() => _input?.ButtonUp(bu.X, bu.Y, bu.LeftButton));
                 break;
-            case MessageType.KeyPress:
+            case HostDispatchAction.KeyPress:
                 var kp = KeyMessage.Deserialize(msg.Data);
                 Dispatcher.UIThread.Post(() => _input?.SendKey(kp.VirtualKey, true));
                 break;
-            case MessageType.KeyRelease:
+            case HostDispatchAction.KeyRelease:
                 var kr = KeyMessage.Deserialize(msg.Data);
                 Dispatcher.UIThread.Post(() => _input?.SendKey(kr.VirtualKey, false));
                 break;
-            case MessageType.Ping:
+            case HostDispatchAction.PingReply:
                 _ = _hostTransport?.SendMessageAsync(new NetworkMessage { Type = MessageType.Pong, Data = msg.Data });
                 break;
-            case MessageType.QualityPreset:
+            case HostDispatchAction.QualityChanged:
                 if (msg.Data.Length >= 4)
                     Dispatcher.UIThread.Post(() => HostQualityIndex = BitConverter.ToInt32(msg.Data, 0));
                 break;
-            case MessageType.ClipboardText:
+            case HostDispatchAction.Clipboard:
                 string cbText = Encoding.UTF8.GetString(msg.Data);
                 if (ClipboardCallback != null)
                     Dispatcher.UIThread.Post(() => _ = ClipboardCallback(cbText));
                 break;
-            case MessageType.ChatMessage:
+            case HostDispatchAction.Chat:
                 string chat = Encoding.UTF8.GetString(msg.Data);
                 Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: false, text: chat));
                 break;
