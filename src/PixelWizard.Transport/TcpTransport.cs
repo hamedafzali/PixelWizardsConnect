@@ -40,6 +40,7 @@ namespace PixelWizard.Transport
         public event Action? Connected;
         public event Action? Disconnected;
         public event Action<Exception>? Error;
+        public event Action<Exception>? HandlerError;
         public event Action<int>? BytesReceived;
         public event Action<int>? BytesSent;
 
@@ -50,6 +51,12 @@ namespace PixelWizard.Transport
         /// instead of every version needing to match exactly.
         /// </summary>
         public event Action<byte>? UnknownMessageTypeSkipped;
+
+        /// <summary>
+        /// A handler is considered stuck, not just unlucky, once it has failed on this many
+        /// consecutive messages -- see <see cref="RepeatedHandlerFailureException"/>.
+        /// </summary>
+        internal const int MaxConsecutiveHandlerFailures = 5;
 
         public bool IsConnected => _isConnected && _tcpClient?.Connected == true;
 
@@ -168,8 +175,10 @@ namespace PixelWizard.Transport
         private async Task ReceiveLoop(CancellationToken token)
         {
             byte[] lenBuf = new byte[4];
+            int consecutiveHandlerFailures = 0;
             while (!token.IsCancellationRequested && IsConnected)
             {
+                NetworkMessage message;
                 try
                 {
                     if (!await ReadExact(lenBuf, 4, token)) break;
@@ -185,18 +194,40 @@ namespace PixelWizard.Transport
                     if (!await ReadExact(msgBuf, len, token)) break;
 
                     BytesReceived?.Invoke(4 + len);
-                    var message = NetworkMessage.Deserialize(msgBuf);
+                    message = NetworkMessage.Deserialize(msgBuf);
 
                     if (!Enum.IsDefined(typeof(MessageType), message.Type))
                     {
                         UnknownMessageTypeSkipped?.Invoke((byte)message.Type);
                         continue;
                     }
-
-                    MessageReceived?.Invoke(message);
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex) { Error?.Invoke(ex); break; }
+
+                // A well-formed message reached us; whatever happens dispatching it to
+                // subscribers is a handler bug, not a transport failure. The connection is
+                // fine, so it stays open and the loop keeps reading -- unless the handler is
+                // stuck failing on every message, in which case that's no longer distinguishable
+                // from a dead session and is escalated the same way a transport error would be.
+                try
+                {
+                    MessageReceived?.Invoke(message);
+                    consecutiveHandlerFailures = 0;
+                }
+                catch (Exception ex)
+                {
+                    consecutiveHandlerFailures++;
+                    HandlerError?.Invoke(ex);
+
+                    if (consecutiveHandlerFailures >= MaxConsecutiveHandlerFailures)
+                    {
+                        Error?.Invoke(new RepeatedHandlerFailureException(consecutiveHandlerFailures, ex,
+                            $"A message handler failed on {consecutiveHandlerFailures} consecutive messages; " +
+                            "treating the session as stuck and disconnecting."));
+                        break;
+                    }
+                }
             }
             Disconnect();
         }

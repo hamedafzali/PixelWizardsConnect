@@ -11,7 +11,21 @@ namespace PixelWizard.Core.Interfaces
         event Action<NetworkMessage>? MessageReceived;
         event Action? Connected;
         event Action? Disconnected;
+
+        /// <summary>
+        /// The transport itself failed (framing, socket, deserialization) — stream sync is
+        /// lost or the connection is gone. The session is disconnected by the time this fires.
+        /// </summary>
         event Action<Exception>? Error;
+
+        /// <summary>
+        /// A <see cref="MessageReceived"/> subscriber threw while handling an otherwise
+        /// well-formed message. The connection is unaffected and the receive loop continues —
+        /// see <see cref="PixelWizard.Transport.RepeatedHandlerFailureException"/> for what
+        /// happens if a handler keeps failing on every message instead of just this one.
+        /// </summary>
+        event Action<Exception>? HandlerError;
+
         event Action<int>? BytesReceived;
         event Action<int>? BytesSent;
 

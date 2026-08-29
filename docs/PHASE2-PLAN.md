@@ -91,9 +91,9 @@ Rationale for the order:
   `Transport.*` projects are pure file moves plus namespace changes; the
   extraction-scores table in STATUS_REPORT §4 already rates their source
   components 3–5 out of 5 (safe to move today). They're sequenced T2→T7 by
-  dependency only (Protocol has zero dependents to break; Core depends on
-  Protocol's types; Media and Transport depend on Core's interfaces), not by
-  risk. T3 and T8 are slotted in wherever convenient since they don't touch
+  dependency only (Protocol has zero dependencies on other new projects, so
+  nothing had to move before it; Core depends on Protocol's types; Media and
+  Transport depend on Core's interfaces), not by risk. T3 and T8 are slotted in wherever convenient since they don't touch
   the extraction graph at all — shown at their natural backlog position, but
   either could move earlier or later without consequence.
 - **T9 (Session) is deliberately last among the extractions**, not first.

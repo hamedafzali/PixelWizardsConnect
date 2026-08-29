@@ -87,5 +87,69 @@ namespace PixelWizard.Tests
             Assert.True(disconnected);
             Assert.False(server.IsConnected);
         }
+
+        [Fact]
+        public async Task HandlerThrowsOnce_SessionSurvives_NextMessageStillDispatched()
+        {
+            int port = GetFreePort();
+            using var server = await StartServerAsync(port);
+
+            var handlerErrors = new List<Exception>();
+            var received = new List<NetworkMessage>();
+            bool disconnected = false;
+            server.HandlerError += ex => handlerErrors.Add(ex);
+            server.Disconnected += () => disconnected = true;
+            server.MessageReceived += m =>
+            {
+                received.Add(m);
+                if (received.Count == 1) throw new InvalidOperationException("boom");
+            };
+
+            using var client = new TcpTransport();
+            await client.ConnectAsync("127.0.0.1", port, useTls: false);
+            await Task.Delay(50);
+
+            await client.SendMessageAsync(new NetworkMessage { Type = MessageType.Ping, Data = Array.Empty<byte>() });
+            await Task.Delay(50);
+            await client.SendMessageAsync(new NetworkMessage { Type = MessageType.Ping, Data = Array.Empty<byte>() });
+            await Task.Delay(50);
+
+            Assert.Single(handlerErrors);
+            Assert.IsType<InvalidOperationException>(handlerErrors[0]);
+            Assert.Equal(2, received.Count);
+            Assert.False(disconnected);
+            Assert.True(server.IsConnected);
+        }
+
+        [Fact]
+        public async Task HandlerFailsRepeatedly_EscalatesToTransportError_Disconnects()
+        {
+            int port = GetFreePort();
+            using var server = await StartServerAsync(port);
+
+            var handlerErrors = new List<Exception>();
+            Exception? error = null;
+            bool disconnected = false;
+            server.HandlerError += ex => handlerErrors.Add(ex);
+            server.Error += ex => error = ex;
+            server.Disconnected += () => disconnected = true;
+            server.MessageReceived += _ => throw new InvalidOperationException("always fails");
+
+            using var client = new TcpTransport();
+            await client.ConnectAsync("127.0.0.1", port, useTls: false);
+            await Task.Delay(50);
+
+            for (int i = 0; i < TcpTransport.MaxConsecutiveHandlerFailures; i++)
+            {
+                await client.SendMessageAsync(new NetworkMessage { Type = MessageType.Ping, Data = Array.Empty<byte>() });
+                await Task.Delay(30);
+            }
+            await Task.Delay(50);
+
+            Assert.Equal(TcpTransport.MaxConsecutiveHandlerFailures, handlerErrors.Count);
+            Assert.IsType<RepeatedHandlerFailureException>(error);
+            Assert.True(disconnected);
+            Assert.False(server.IsConnected);
+        }
     }
 }

@@ -599,6 +599,9 @@ public class MainViewModel : ReactiveObject, IDisposable
             if (t.IsConnected)
                 Dispatcher.UIThread.Post(() => Status = FriendlyError.Describe(ex));
         };
+        // A handler bug, not a transport failure -- the connection survives, so this is
+        // surfaced for diagnostics only and never touches Status/IsConnected.
+        t.HandlerError += ex => System.Diagnostics.Debug.WriteLine($"[Viewer] handler error (session continues): {ex}");
         return t;
     }
 
@@ -763,6 +766,9 @@ public class MainViewModel : ReactiveObject, IDisposable
             if (t.IsConnected)
                 Dispatcher.UIThread.Post(() => Status = FriendlyError.Describe(ex));
         };
+        // A handler bug, not a transport failure -- the connection survives, so this is
+        // surfaced for diagnostics only and never touches Status/IsConnected.
+        t.HandlerError += ex => System.Diagnostics.Debug.WriteLine($"[Host] handler error (session continues): {ex}");
         return t;
     }
 
