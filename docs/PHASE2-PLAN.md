@@ -113,6 +113,38 @@ Rationale for the order:
 - **T13 (delete `MainViewModel`) is last by construction** — every prior task
   removes one more slice of it. It closes when nothing is left to remove.
 
+## Intermediate milestone
+
+Stopping anywhere in T2–T7 leaves the phase in its worst-looking honest
+state: six new projects, a pile of moved files, and `MainViewModel` still
+1,400+ lines and still the thing users would notice if it broke. That is real
+progress — the extraction-scores table says these moves are safe precisely
+because nothing about them is visible from outside — but it is not a
+defensible pause point for a solo developer returning after a gap. There is
+nothing to show for it except diffs, and "six projects, zero behavior change"
+reads like a refactor that stalled, even when it didn't.
+
+**The milestone is after T9 and T10.** At that point:
+
+- `HostSession`/`ViewerSession` exist, dispatch has left `MainViewModel`
+  entirely, and `Dispatcher.UIThread` no longer appears anywhere below the
+  view-model layer — the one architectural property ADR-001 names explicitly
+  ("zero `Dispatcher` references" in Session) is met.
+- `MainViewModel`'s line count has dropped by whatever T9 removed, which is
+  most of the 1,457 — a number worth reporting in T9's own report, not
+  deferred to T13.
+- T10's live socket test passes, which is external, checkable proof the new
+  Session layer actually works end-to-end, not just that it compiles.
+
+That is a shippable, explainable state even if T11–T13 never happen: the god
+object's most dangerous logic is out, tested, and running. T11 (Mac parity)
+and T12 (pin-mismatch UI) are independent surface work that can slot in
+before or after this point without changing that. If the phase has to pause
+anywhere, pause after T10, not after T7 — and if a gap is coming, do T3 and
+T8 (both independent, both small, both already-known-good fixes) on the way
+to T9 rather than after it, so there's a second, earlier proof of forward
+motion before the big one lands.
+
 Build-and-run gate: every task above ends with `dotnet build` succeeding for
 all TFMs and the app launching in both host and viewer mode. T2–T9 are pure
 moves plus adapter shims, so this is enforceable by construction — a task
