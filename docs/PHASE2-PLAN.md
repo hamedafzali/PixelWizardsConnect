@@ -78,7 +78,7 @@ T9  PixelWizard.Session: HostSession/ViewerSession, zero Dispatcher refs
 T10 Live end-to-end Hello-flow socket test (backlog item 4, unblocked by T9)
 T11 Extract PixelWizard.Platform.Mac (parity with Windows/Linux hosts)
 T12 Pin-mismatch recovery UI (backlog item 3)
-T13 Split MainViewModel into thin per-mode view models; delete the god object
+T13 Split MainViewModel/XAML into thin per-mode views; delete the god object
 ```
 
 Rationale for the order:
@@ -239,4 +239,27 @@ covered by existing tests moving with the code, or is new UI-only surface
   duplication included.
 - **The 884-line XAML split** named in ADR-001's Phase 2 row is folded into
   T13 rather than given its own task — splitting the views has no independent
-  meaning separate from splitting the view models they bind to.
+  meaning separate from splitting the view models they bind to. **T13 also
+  consolidates every hardcoded color and spacing literal currently scattered
+  across that XAML into a single `ResourceDictionary`**, using provisional
+  values — not a redesign, and no visual value changes while splitting. The
+  point is one file for Phase 4.5 to swap values in, instead of six files to
+  hunt through. Do not build the token pipeline or touch `docs/DESIGN-SYSTEM.md`'s
+  provisional values as part of this — that's Phase 4.5's job, not this task's.
+
+## Roadmap update: Phase 4.5 — Design foundation (new)
+
+`docs/DESIGN-SYSTEM.md` (added alongside this plan) inserts a new phase into
+the roadmap between Phase 4 and Phase 5:
+
+| Phase | Scope | Duration |
+|---|---|---|
+| **4.5 — Design foundation** *(new)* | Competitive teardown (TeamViewer, AnyDesk, RustDesk, TeamViewer Pilot, Vuforia Chalk, Help Lightning). Settle the provisional values in `docs/DESIGN-SYSTEM.md`. Build `design/tokens.json` and the Style Dictionary pipeline (CSS, Dart, and the custom Avalonia `ResourceDictionary` format). Wireframe the four core flows: pair, consent, active session, connection failure. Deliberate review of the safety-critical UI section (consent dialog, viewing badge, certificate mismatch). Write `docs/DESIGN-PRINCIPLES.md`. | ~2–3 wk |
+
+It sits there, not earlier and not folded into Phase 2, because Phase 5's
+browser expert client is the first genuinely new UX surface in the roadmap —
+the foundation needs to exist before that surface is built, not be
+retrofitted onto it afterward. Phase 2 does no more toward this than T13's
+`ResourceDictionary` consolidation above: structural tidying that makes
+Phase 4.5's eventual token swap a one-file change, nothing that anticipates
+what the tokens will actually be.
