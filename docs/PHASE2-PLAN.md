@@ -69,7 +69,7 @@ independent extraction (T4) — nothing about it needs revision.
 T1  Characterization tests for MainViewModel dispatch (current shape)
 T2  Extract PixelWizard.Protocol from PixelWizard.Core
 T3  ReceiveLoop error-class split (backlog item 1)              [independent]
-T4  Extract remaining PixelWizard.Core (interfaces + domain models)
+T4  Extract remaining PixelWizard.Core (interfaces + domain models)  [completed by T2 — see note below]
 T5  Extract PixelWizard.Media (capture loop, pacing, diffing, codecs)
 T6  Extract PixelWizard.Transport.Tcp (rename/narrow existing Transport)
 T7  Extract PixelWizard.Transport.WebSocket + Playwright browser smoke test
@@ -80,6 +80,14 @@ T11 Extract PixelWizard.Platform.Mac (parity with Windows/Linux hosts)
 T12 Pin-mismatch recovery UI (backlog item 3)
 T13 Split MainViewModel/XAML into thin per-mode views; delete the god object
 ```
+
+**T4 note:** this plan's own intro (above) describes the `PixelWizard.Core` split — wire
+types vs. interfaces/domain models — as one extraction. T2's execution moved all nine
+protocol files in a single pass rather than a partial set, which completed both halves of
+that split at once. `PixelWizard.Core` today contains exactly `Interfaces/` and `Models/` —
+T4's target state — with nothing left to move. T4 is retained as an identifier (not
+renumbered, not deleted) because T5–T13 are referenced by number elsewhere; it requires no
+commit of its own.
 
 Rationale for the order:
 
@@ -112,6 +120,14 @@ Rationale for the order:
   reason to interrupt the extraction sequence for them.
 - **T13 (delete `MainViewModel`) is last by construction** — every prior task
   removes one more slice of it. It closes when nothing is left to remove.
+- **At T8, before starting T9: split T9 into sub-tasks with individual gates.**
+  Not now — T5–T7 will have shown by then how real extractions actually behave
+  in this codebase, which T1–T4's compile-time moves don't. T9 pulls dispatch
+  logic across 35 `Dispatcher.UIThread` call sites into `HostSession`/
+  `ViewerSession`; that is exactly the shape of task that overruns, and per the
+  convergence note below it is the one task in the phase that cannot be
+  allowed to. Do the split with real data about extraction risk in hand, not
+  speculatively now.
 
 ## Intermediate milestone
 
@@ -144,6 +160,28 @@ anywhere, pause after T10, not after T7 — and if a gap is coming, do T3 and
 T8 (both independent, both small, both already-known-good fixes) on the way
 to T9 rather than after it, so there's a second, earlier proof of forward
 motion before the big one lands.
+
+## Convergence
+
+`MainViewModel.cs` line count through the phase so far: 1,463 (T1) → 1,463
+(T2) → 1,469 (T3). It stays flat through T8 too — T4 (no scope), T5, T6, T7,
+and T8 none touch `MainViewModel` by their own descriptions; they extract
+`Media`, `Transport.Tcp`, `Transport.WebSocket`, and remove WinForms,
+respectively, all without going near the view model. The "under 300 lines"
+exit gate rests entirely on T9 and T13.
+
+State this plainly rather than letting it surface gradually across nine flat
+reports: **T9 is not one task among thirteen — it is substantially the whole
+phase.** Everything before it (T1–T8) is infrastructure that makes T9
+possible; nothing before it delivers the phase's stated outcome
+(`MainViewModel` under 300 lines, zero `Dispatcher` references in `Session`).
+T13 finishes the job T9 starts, but T9 is where the actual dispatch logic
+moves. If T9 overruns, the phase has consumed weeks of real work — six new
+projects, a fixed error-handling bug, a design-system reference doc — with
+the god object structurally intact and the one property ADR-001 actually
+asks for still unmet. See the T8 note above for the mitigation: split T9 into
+gated sub-tasks before starting it, using what T5–T7 show about how this
+codebase's extractions actually go, not before that data exists.
 
 Build-and-run gate: every task above ends with `dotnet build` succeeding for
 all TFMs and the app launching in both host and viewer mode. T2–T9 are pure
