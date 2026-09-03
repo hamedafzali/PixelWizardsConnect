@@ -48,6 +48,7 @@
     <ProjectReference Include="..\..\src\PixelWizard.Core\PixelWizard.Core.csproj" />
     <ProjectReference Include="..\..\src\PixelWizard.Media\PixelWizard.Media.csproj" />
     <ProjectReference Include="..\..\src\PixelWizard.Transport.Tcp\PixelWizard.Transport.Tcp.csproj" />
+    <ProjectReference Include="..\..\src\PixelWizard.Transport.WebSocket\PixelWizard.Transport.WebSocket.csproj" />
   </ItemGroup>
 
   <!-- WindowsHost only wired in for the Windows target -->

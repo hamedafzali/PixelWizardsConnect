@@ -7,8 +7,12 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using PixelWizard.Protocol;
+// The project/namespace is named PixelWizard.Transport.WebSocket. Inside that namespace,
+// an unqualified "WebSocket" resolves to the namespace segment itself, not the BCL type --
+// even a same-named using-alias loses to that. Alias to a distinct name instead of fighting it.
+using WsSocket = System.Net.WebSockets.WebSocket;
 
-namespace PixelWizard.Transport.Tcp
+namespace PixelWizard.Transport.WebSocket
 {
     /// <summary>
     /// Starts an HTTP server on the given port that:
@@ -21,7 +25,7 @@ namespace PixelWizard.Transport.Tcp
         private readonly int _port;
         private HttpListener? _listener;
         private CancellationTokenSource? _cts;
-        private readonly ConcurrentDictionary<string, WebSocket> _clients = new();
+        private readonly ConcurrentDictionary<string, WsSocket> _clients = new();
 
         public event Action<string>? Log;
 
@@ -163,7 +167,7 @@ namespace PixelWizard.Transport.Tcp
             }
         }
 
-        private async Task DrainWebSocket(string id, WebSocket ws, CancellationToken token)
+        private async Task DrainWebSocket(string id, WsSocket ws, CancellationToken token)
         {
             var buf = new byte[1024];
             try

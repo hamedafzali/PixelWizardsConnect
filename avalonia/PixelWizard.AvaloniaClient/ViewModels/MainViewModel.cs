@@ -18,6 +18,7 @@ using PixelWizard.Core.Models;
 using PixelWizard.Media;
 using PixelWizard.Protocol;
 using PixelWizard.Transport.Tcp;
+using PixelWizard.Transport.WebSocket;
 
 namespace PixelWizard.AvaloniaClient.ViewModels;
 
