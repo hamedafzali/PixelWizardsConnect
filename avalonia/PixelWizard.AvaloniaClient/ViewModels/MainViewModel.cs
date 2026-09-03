@@ -15,6 +15,7 @@ using PixelWizard.AvaloniaClient.Platform;
 using PixelWizard.AvaloniaClient.Services;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
+using PixelWizard.Media;
 using PixelWizard.Protocol;
 using PixelWizard.Transport;
 
@@ -411,11 +412,9 @@ public class MainViewModel : ReactiveObject, IDisposable
     private ISessionTransport?    _transport;
     private ISessionTransport?    _hostTransport;
     private readonly IRouterClient _router = new RouterHttpClient();
-    private IScreenCapture?       _capture;
+    private CaptureLoop?          _captureLoop;
     private IInputInjector?       _input;
     private WebSocketHostServer?  _wsServer;
-    private System.Timers.Timer?  _captureTimer;
-    private bool                  _isSendingFrame;
     private bool                  _relistening = false;
     private CancellationTokenSource? _discoveryCts;
     private CancellationTokenSource? _announceCts;
@@ -667,7 +666,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             SetupHostServices();
             _hostTransport = BuildHostTransport();
             await _hostTransport.StartServerAsync(port, HostTlsEnabled);
-            StartCaptureTimer();
+            _captureLoop!.Start();
             _announceCts = new CancellationTokenSource();
             _ = NetworkDiscovery.AnnounceAsync(_activeHostPort, _announceCts.Token);
             string lanIp = GetLanIp();
@@ -706,7 +705,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             SetupHostServices();
             _hostTransport = BuildHostTransport();
             await _hostTransport.StartServerAsync(8888, HostTlsEnabled);
-            StartCaptureTimer();
+            _captureLoop!.Start();
             _announceCts = new CancellationTokenSource();
             _ = NetworkDiscovery.AnnounceAsync(_activeHostPort, _announceCts.Token);
             HostStatus = $"Ready — code: {result.ConnectionCode}";
@@ -718,7 +717,26 @@ public class MainViewModel : ReactiveObject, IDisposable
     private void SetupHostServices()
     {
         var settings = StreamingSettings.FromPresetIndex(HostQualityIndex);
-        _capture = _hostProvider.CreateCapture(settings.FullRefreshInterval, SelectedMonitorIndex);
+        var capture  = _hostProvider.CreateCapture(settings.FullRefreshInterval, SelectedMonitorIndex);
+        _captureLoop = new CaptureLoop(
+            capture,
+            () => StreamingSettings.FromPresetIndex(HostQualityIndex),
+            () => _hostTransport?.IsConnected == true);
+        _captureLoop.DeltaCapturedAsync = async (delta, full) =>
+        {
+            await _hostTransport!.SendMessageAsync(new NetworkMessage
+            {
+                Type = full ? MessageType.FullScreen : MessageType.ScreenDelta,
+                Data = full ? delta.ImageData : delta.Serialize()
+            });
+
+            if (_wsServer != null)
+            {
+                if (full) await _wsServer.BroadcastFrameAsync(delta.ImageData);
+                else      await _wsServer.BroadcastDeltaAsync(delta);
+            }
+        };
+        _captureLoop.CaptureError += _ => Status = "Screen capture error — the session may be unstable.";
         _input   = _hostProvider.CreateInput();
 
         _wsServer = new WebSocketHostServer(9001);
@@ -803,19 +821,16 @@ public class MainViewModel : ReactiveObject, IDisposable
     private void StopHost()
     {
         SaveSessionNotes();
-        _captureTimer?.Stop();
-        _captureTimer?.Dispose();
-        _captureTimer = null;
         _announceCts?.Cancel();
         _announceCts = null;
         _sessionWatchdog?.Stop();
         _sessionWatchdog?.Dispose();
         _sessionWatchdog = null;
         _hostTransport?.Disconnect();
-        _capture?.Dispose();
+        _captureLoop?.Dispose();
         _wsServer?.Stop();
         _hostTransport         = null;
-        _capture               = null;
+        _captureLoop            = null;
         _input                 = null;
         _wsServer              = null;
         _hostHelloComplete     = false;
@@ -892,52 +907,6 @@ public class MainViewModel : ReactiveObject, IDisposable
     {
         _sessionWatchdog?.Stop();
         _sessionWatchdog?.Start();
-    }
-
-    // ── Capture loop ──────────────────────────────────────────────────────────
-
-    private void StartCaptureTimer()
-    {
-        var settings = StreamingSettings.FromPresetIndex(HostQualityIndex);
-        _captureTimer?.Stop();
-        _captureTimer?.Dispose();
-        _captureTimer = new System.Timers.Timer(settings.FrameInterval.TotalMilliseconds)
-        {
-            AutoReset = true
-        };
-        _captureTimer.Elapsed += async (_, _) => await CaptureTickAsync();
-        _captureTimer.Start();
-    }
-
-    private async Task CaptureTickAsync()
-    {
-        if (_capture == null || _hostTransport?.IsConnected != true || _isSendingFrame) return;
-        _isSendingFrame = true;
-        try
-        {
-            var settings = StreamingSettings.FromPresetIndex(HostQualityIndex);
-            var deltas   = _capture.Capture(false, settings.JpegQuality);
-            foreach (var delta in deltas)
-            {
-                bool full = delta.X == 0 && delta.Y == 0 &&
-                            delta.Width  == _capture.Resolution.Width &&
-                            delta.Height == _capture.Resolution.Height;
-
-                await _hostTransport.SendMessageAsync(new NetworkMessage
-                {
-                    Type = full ? MessageType.FullScreen : MessageType.ScreenDelta,
-                    Data = full ? delta.ImageData : delta.Serialize()
-                });
-
-                if (_wsServer != null)
-                {
-                    if (full) await _wsServer.BroadcastFrameAsync(delta.ImageData);
-                    else      await _wsServer.BroadcastDeltaAsync(delta);
-                }
-            }
-        }
-        catch { Status = "Screen capture error — the session may be unstable."; }
-        finally { _isSendingFrame = false; }
     }
 
     // ── Incoming messages ─────────────────────────────────────────────────────
