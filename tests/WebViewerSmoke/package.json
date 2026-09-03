@@ -1,0 +1,12 @@
+{
+  "name": "web-viewer-smoke",
+  "private": true,
+  "type": "module",
+  "description": "T7 Playwright smoke test: WebSocketHostServer's embedded browser viewer actually renders a frame. Pattern follows spikes/webrtc-desktop/web-peer/drive.mjs.",
+  "dependencies": {
+    "playwright": "^1.55.0"
+  },
+  "scripts": {
+    "smoke": "node drive.mjs"
+  }
+}

@@ -57,3 +57,6 @@ $RECYCLE.BIN/
 
 # Claude Code local worktrees/state
 .claude/
+
+# Node.js (Playwright smoke tests, spikes)
+node_modules/

@@ -119,6 +119,40 @@ jobs:
           fi
           echo "::notice::SystemDrawingScreenChangeDetectorTests explicitly SKIPPED on macos-latest: net9.0-windows test host cannot launch (Microsoft.WindowsDesktop.App has no macOS build). Confirmed expected, not silently ignored."
 
+  # T7's only automated coverage for WebSocketHostServer (extracted from
+  # PixelWizard.Transport.Tcp into PixelWizard.Transport.WebSocket): headless
+  # Chromium loads the embedded browser viewer against a real server instance
+  # and confirms it renders a broadcast frame end to end (WS connect -> 0x01
+  # frame tag -> JS decode -> canvas visible). Node drives Playwright; the
+  # server itself runs as a small standalone .NET host process spawned by the
+  # driver script (xUnit cannot drive a browser page). See
+  # tests/WebViewerSmoke/drive.mjs and Host/Program.cs for what this test does
+  # and, importantly, does not cover (no real screen capture pipeline).
+  playwright-smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tests/WebViewerSmoke
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: npm ci
+        run: npm ci
+
+      - name: Install Playwright + Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke test
+        run: node drive.mjs
+
   go:
     runs-on: ubuntu-latest
     defaults:
