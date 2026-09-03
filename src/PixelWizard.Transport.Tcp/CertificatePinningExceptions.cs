@@ -1,6 +1,6 @@
 using System;
 
-namespace PixelWizard.Transport
+namespace PixelWizard.Transport.Tcp
 {
     /// <summary>
     /// The certificate presented by a previously-pinned host does not match the fingerprint

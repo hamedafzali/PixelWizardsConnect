@@ -21,7 +21,7 @@ namespace PixelWizard.Core.Interfaces
         /// <summary>
         /// A <see cref="MessageReceived"/> subscriber threw while handling an otherwise
         /// well-formed message. The connection is unaffected and the receive loop continues —
-        /// see <see cref="PixelWizard.Transport.RepeatedHandlerFailureException"/> for what
+        /// see <see cref="PixelWizard.Transport.Tcp.RepeatedHandlerFailureException"/> for what
         /// happens if a handler keeps failing on every message instead of just this one.
         /// </summary>
         event Action<Exception>? HandlerError;

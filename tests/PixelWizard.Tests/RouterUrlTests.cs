@@ -1,4 +1,4 @@
-using PixelWizard.Transport;
+using PixelWizard.Transport.Tcp;
 using Xunit;
 
 namespace PixelWizard.Tests;

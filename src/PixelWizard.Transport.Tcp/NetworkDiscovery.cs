@@ -6,7 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PixelWizard.Transport
+namespace PixelWizard.Transport.Tcp
 {
     /// <summary>
     /// Lightweight LAN discovery using UDP broadcast.

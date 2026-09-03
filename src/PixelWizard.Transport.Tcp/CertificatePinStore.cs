@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace PixelWizard.Transport
+namespace PixelWizard.Transport.Tcp
 {
     /// <summary>
     /// Persists trust-on-first-use certificate pins (host:port -> SHA-256 fingerprint hex)

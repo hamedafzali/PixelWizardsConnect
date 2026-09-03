@@ -1,6 +1,6 @@
 using System;
 
-namespace PixelWizard.Transport
+namespace PixelWizard.Transport.Tcp
 {
     /// <summary>
     /// The outer 4-byte length prefix was zero, negative, or otherwise unusable. This means

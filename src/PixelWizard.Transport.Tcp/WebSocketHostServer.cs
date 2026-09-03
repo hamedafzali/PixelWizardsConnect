@@ -8,7 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using PixelWizard.Protocol;
 
-namespace PixelWizard.Transport
+namespace PixelWizard.Transport.Tcp
 {
     /// <summary>
     /// Starts an HTTP server on the given port that:

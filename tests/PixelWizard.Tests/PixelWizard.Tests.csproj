@@ -25,7 +25,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\PixelWizard.Core\PixelWizard.Core.csproj" />
-    <ProjectReference Include="..\..\src\PixelWizard.Transport\PixelWizard.Transport.csproj" />
+    <ProjectReference Include="..\..\src\PixelWizard.Transport.Tcp\PixelWizard.Transport.Tcp.csproj" />
     <!-- internal sealed; SkiaDetectorHarness reaches it via reflection instead of
          InternalsVisibleTo, to keep this task's changes inside tests/. -->
     <ProjectReference Include="..\..\src\PixelWizard.LinuxHost\PixelWizard.LinuxHost.csproj" />

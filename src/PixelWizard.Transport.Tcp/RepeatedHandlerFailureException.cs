@@ -1,6 +1,6 @@
 using System;
 
-namespace PixelWizard.Transport
+namespace PixelWizard.Transport.Tcp
 {
     /// <summary>
     /// A <c>MessageReceived</c> subscriber has thrown on <see cref="ConsecutiveFailures"/>

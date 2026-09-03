@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Protocol;
 
-namespace PixelWizard.Transport
+namespace PixelWizard.Transport.Tcp
 {
     public class TcpTransport : ISessionTransport
     {

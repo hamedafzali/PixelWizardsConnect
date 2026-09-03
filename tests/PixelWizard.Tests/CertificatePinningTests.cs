@@ -4,7 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using PixelWizard.Transport;
+using PixelWizard.Transport.Tcp;
 using Xunit;
 
 namespace PixelWizard.Tests
