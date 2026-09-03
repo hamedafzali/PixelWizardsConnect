@@ -74,6 +74,8 @@ T5  Extract PixelWizard.Media (capture loop, pacing, diffing, codecs)
 T6  Extract PixelWizard.Transport.Tcp (rename/narrow existing Transport)
 T7  Extract PixelWizard.Transport.WebSocket + Playwright browser smoke test
 T8  WinForms removal + paired macOS CI assertion flip              [independent, same commit]
+T5b Detector relocation: ScreenChangeDetector + both SkiaScreenChangeDetector
+    copies into PixelWizard.Media (deferred half of T5 — see note below)
 T9  PixelWizard.Session: HostSession/ViewerSession, zero Dispatcher refs
 T10 Live end-to-end Hello-flow socket test (backlog item 4, unblocked by T9)
 T11 Extract PixelWizard.Platform.Mac (parity with Windows/Linux hosts)
@@ -88,6 +90,30 @@ that split at once. `PixelWizard.Core` today contains exactly `Interfaces/` and 
 T4's target state — with nothing left to move. T4 is retained as an identifier (not
 renumbered, not deleted) because T5–T13 are referenced by number elsewhere; it requires no
 commit of its own.
+
+**T5b note:** T5's own text ("capture loop, pacing, diffing, codecs") describes the detector
+relocation as part of T5. Executing T5 found it wasn't a mechanical move like the rest of
+T2–T7 — it's a separate task, split out as T5b, for three concrete reasons found during T5:
+
+1. `tests/PixelWizard.Tests/ScreenChangeDetector/SkiaDetectorHarness.cs` reaches
+   `PixelWizard.LinuxHost.SkiaScreenChangeDetector` via `Assembly.Load("PixelWizard.LinuxHost")`
+   plus a string type name, specifically to avoid adding `InternalsVisibleTo` to a production
+   project. The compiler cannot catch a bad move through that path — a relocation breaks the
+   harness silently at runtime (wrong-type-name lookup), not at build time.
+2. The Windows detector (`ScreenChangeDetector`, System.Drawing) is `net9.0-windows`-only;
+   Linux and Mac each carry a separate near-identical `SkiaScreenChangeDetector` copy.
+   Co-locating all three in `PixelWizard.Media` needs either TFM-conditional compilation for
+   the Windows one or a namespace scheme to avoid the Linux/Mac class-name collision — neither
+   of which this plan currently addresses.
+3. The Mac copy has zero test coverage today (BACKLOG.md row 3). Moving it doesn't fix that,
+   and the move should not read as having addressed it.
+
+T5b should fix the reflection-by-string harness coupling (blocker 1) *first*, converting it to
+a compile-time reference, so the compiler catches the move itself — that ordering is what
+makes the rest of T5b mechanical rather than another silent-breakage risk. T5b is positioned
+after T8 rather than immediately after T5 because it is independent of T6/T7, and because T8
+removes WinForms from `PixelWizard.WindowsHost`, which may change the TFM constraint in
+blocker 2 before T5b has to solve it.
 
 Rationale for the order:
 
