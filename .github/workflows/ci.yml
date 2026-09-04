@@ -50,11 +50,16 @@ jobs:
           --logger "console;verbosity=normal"
 
       # The System.Drawing (WinForms) detector suite only builds/executes on
-      # the net9.0-windows TFM. On Windows it must actually run — this is the
-      # path that has never executed before T4. Counted via TRX, not eyeballed:
-      # a suite that silently skips everything must fail the job, not pass it.
+      # the net9.0-windows TFM. Before T8, PixelWizard.WindowsHost's
+      # UseWindowsForms=true pulled in Microsoft.WindowsDesktop.App, which has no
+      # macOS build -- so the net9.0-windows test host could not even launch there.
+      # T8 removed UseWindowsForms (EnumDisplayMonitors/SetCursorPos via P/Invoke
+      # replace Screen/Cursor), so the host now launches on both platforms; this
+      # step runs on both, and the two assertion steps below verify the platform-
+      # appropriate outcome (actually-passed on Windows, gracefully-skipped on
+      # macOS) via TRX, not by eyeballing green.
       - name: Test (net9.0-windows — System.Drawing suite)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' || runner.os == 'macOS'
         run: >
           dotnet test tests/PixelWizard.Tests/PixelWizard.Tests.csproj
           --no-build -c Release -f net9.0-windows
@@ -62,7 +67,7 @@ jobs:
           --logger "trx;LogFileName=systemdrawing.trx"
           --results-directory TestResults
 
-      - name: Assert System.Drawing suite actually executed (not silently skipped)
+      - name: Assert System.Drawing suite actually executed and passed (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -90,34 +95,38 @@ jobs:
           }
           Write-Host "::notice::SystemDrawingScreenChangeDetectorTests: $expected/$expected executed and passed on windows-latest."
 
-      # On macOS there is no graceful in-process skip available: the net9.0-windows
-      # TFM pulls in Microsoft.WindowsDesktop.App (via UseWindowsForms on the
-      # referenced WindowsHost project), which has no macOS build. hostfxr refuses
-      # to launch the test host at all, before any xUnit/SkippableFact code runs —
-      # confirmed locally (exit code 1, "No frameworks were found"). So instead of
-      # asserting a graceful skip that cannot exist, this step asserts the launch
-      # fails for exactly that known, expected reason — any other failure mode, or
-      # an unexpected success, fails the job loud rather than passing silently.
-      - name: Verify System.Drawing suite is loudly unexecutable on macOS
+      # T8 change: before T8 this asserted the net9.0-windows test host loudly
+      # FAILED TO LAUNCH on macOS (Microsoft.WindowsDesktop.App absence) -- that
+      # code path no longer exists. The host now launches and every case is
+      # skipped gracefully in-process by SkipIfNotWindows()
+      # (SystemDrawingScreenChangeDetectorTests.cs), the way SkippableFact was
+      # always meant to work. Assert that graceful skip explicitly, the same way
+      # the Windows step asserts an actual pass -- a suite that silently executes
+      # 0 cases as a false green must not go unnoticed here either.
+      - name: Assert System.Drawing suite gracefully skipped (macOS)
         if: runner.os == 'macOS'
-        shell: bash
+        shell: pwsh
         run: |
-          set +e
-          output=$(dotnet test tests/PixelWizard.Tests/PixelWizard.Tests.csproj \
-            --no-build -c Release -f net9.0-windows \
-            --filter "FullyQualifiedName~ScreenChangeDetector.SystemDrawingScreenChangeDetectorTests" 2>&1)
-          code=$?
-          echo "$output"
+          $expected = 13
 
-          if [ $code -eq 0 ]; then
-            echo "::error::net9.0-windows test host launched and returned success on macOS. This was expected to be impossible (no Microsoft.WindowsDesktop.App runtime for macOS) — either that has changed or the suite silently reported green. Investigate before trusting this run."
+          [xml]$trx = Get-Content TestResults/systemdrawing.trx
+          $results = @($trx.TestRun.Results.UnitTestResult)
+          $executed = $results.Count
+          $skipped = @($results | Where-Object { $_.outcome -eq 'NotExecuted' })
+          $notSkipped = @($results | Where-Object { $_.outcome -ne 'NotExecuted' })
+
+          Write-Host "System.Drawing suite on macOS: executed=$executed skipped=$($skipped.Count) other=$($notSkipped.Count)"
+
+          if ($executed -ne $expected) {
+            Write-Error "Expected exactly $expected SystemDrawing tests to report on macos-latest, got $executed."
             exit 1
-          fi
-          if ! echo "$output" | grep -q "Microsoft.WindowsDesktop.App"; then
-            echo "::error::net9.0-windows test host failed on macOS for an UNEXPECTED reason (not the known Microsoft.WindowsDesktop.App absence). Investigate before treating this as an expected skip."
+          }
+          if ($notSkipped.Count -gt 0) {
+            $names = ($notSkipped | ForEach-Object { "$($_.testName): $($_.outcome)" }) -join "; "
+            Write-Error "SystemDrawing suite reported unexpected outcomes on macos-latest (expected all skipped via SkipIfNotWindows): $names"
             exit 1
-          fi
-          echo "::notice::SystemDrawingScreenChangeDetectorTests explicitly SKIPPED on macos-latest: net9.0-windows test host cannot launch (Microsoft.WindowsDesktop.App has no macOS build). Confirmed expected, not silently ignored."
+          }
+          Write-Host "::notice::SystemDrawingScreenChangeDetectorTests: $expected/$expected gracefully skipped on macos-latest (SkipIfNotWindows in-process skip, not a test-host launch failure)."
 
   # T7's only automated coverage for WebSocketHostServer (extracted from
   # PixelWizard.Transport.Tcp into PixelWizard.Transport.WebSocket): headless

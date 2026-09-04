@@ -1,11 +1,13 @@
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
 using PixelWizard.Core.Interfaces;
 
 namespace PixelWizard.WindowsHost
 {
     public class WindowsInputInjector : IInputInjector
     {
+        [DllImport("user32.dll")]
+        private static extern bool SetCursorPos(int x, int y);
+
         [DllImport("user32.dll")]
         private static extern void mouse_event(uint flags, uint dx, uint dy, uint buttons, uint extra);
 
@@ -18,12 +20,12 @@ namespace PixelWizard.WindowsHost
 
         public void MoveMouse(int x, int y)
         {
-            Cursor.Position = new System.Drawing.Point(x, y);
+            SetCursorPos(x, y);
         }
 
         public void Click(int x, int y, bool leftButton)
         {
-            Cursor.Position = new System.Drawing.Point(x, y);
+            SetCursorPos(x, y);
             if (leftButton)
             {
                 mouse_event(LEFTDOWN, 0, 0, 0, 0);
@@ -38,13 +40,13 @@ namespace PixelWizard.WindowsHost
 
         public void ButtonDown(int x, int y, bool leftButton)
         {
-            Cursor.Position = new System.Drawing.Point(x, y);
+            SetCursorPos(x, y);
             mouse_event(leftButton ? LEFTDOWN : RIGHTDOWN, 0, 0, 0, 0);
         }
 
         public void ButtonUp(int x, int y, bool leftButton)
         {
-            Cursor.Position = new System.Drawing.Point(x, y);
+            SetCursorPos(x, y);
             mouse_event(leftButton ? LEFTUP : RIGHTUP, 0, 0, 0, 0);
         }
 

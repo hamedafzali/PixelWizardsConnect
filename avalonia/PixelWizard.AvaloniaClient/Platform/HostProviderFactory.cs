@@ -36,28 +36,28 @@ file sealed class WindowsHostProvider : IHostProvider
 
     public IReadOnlyList<MonitorInfo> ListMonitors()
     {
-        var screens = System.Windows.Forms.Screen.AllScreens;
-        var list    = new List<MonitorInfo>(screens.Length);
-        for (int i = 0; i < screens.Length; i++)
+        var monitors = WindowsMonitors.List();
+        var list     = new List<MonitorInfo>(monitors.Count);
+        for (int i = 0; i < monitors.Count; i++)
         {
-            var s = screens[i];
+            var m = monitors[i];
             list.Add(new MonitorInfo(
                 Index     : i,
-                Name      : string.IsNullOrWhiteSpace(s.DeviceName) ? $"Display {i + 1}" : s.DeviceName,
-                Width     : s.Bounds.Width,
-                Height    : s.Bounds.Height,
-                IsPrimary : s.Primary));
+                Name      : string.IsNullOrWhiteSpace(m.DeviceName) ? $"Display {i + 1}" : m.DeviceName,
+                Width     : m.Bounds.Width,
+                Height    : m.Bounds.Height,
+                IsPrimary : m.IsPrimary));
         }
         return list;
     }
 
     public IScreenCapture CreateCapture(TimeSpan fullRefreshInterval, int monitorIndex = 0)
     {
-        var screens = System.Windows.Forms.Screen.AllScreens;
-        var screen  = (monitorIndex >= 0 && monitorIndex < screens.Length)
-                      ? screens[monitorIndex]
-                      : System.Windows.Forms.Screen.PrimaryScreen ?? screens[0];
-        return new WindowsScreenCapture(screen: screen, fullRefreshInterval: fullRefreshInterval);
+        var monitors = WindowsMonitors.List();
+        var monitor  = (monitorIndex >= 0 && monitorIndex < monitors.Count)
+                       ? monitors[monitorIndex]
+                       : WindowsMonitors.Primary();
+        return new WindowsScreenCapture(monitor: monitor, fullRefreshInterval: fullRefreshInterval);
     }
 
     public IInputInjector CreateInput() =>
