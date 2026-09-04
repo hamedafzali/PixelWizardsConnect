@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!--
+    Deliberately no reference to Avalonia (or Avalonia.Threading specifically). That is
+    what makes "PixelWizard.Session has zero Dispatcher references" an enforced project
+    boundary rather than a convention someone can accidentally violate in T9.2/T9.3:
+    Dispatcher.UIThread is not a type this project can even name. Sessions emit events
+    outward; the view model (which does reference Avalonia) marshals to the UI thread
+    in its own event handlers.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\PixelWizard.Core\PixelWizard.Core.csproj" />
+    <ProjectReference Include="..\PixelWizard.Protocol\PixelWizard.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

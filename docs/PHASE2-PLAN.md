@@ -10,9 +10,15 @@ execution prompt without re-deriving the sequencing argument.
 ## Baseline correction (read this before using the ADR's numbers)
 
 ADR-001 and STATUS_REPORT.md both cite `MainViewModel.cs` at 1,331 lines.
-**It is 1,457 lines today** on `main` (Phase 1 added Hello/HelloAck/v1-detection
-dispatch directly into `OnHostMessage`/`OnViewerMessage`, which is exactly the
-code this phase needs to move). Two consequences:
+It grew to 1,457 lines on `main` before Phase 2 started (Phase 1 added
+Hello/HelloAck/v1-detection dispatch directly into
+`OnHostMessage`/`OnViewerMessage`, which is exactly the code this phase needs
+to move). **It is 1,439 lines as of T9.1** (`wc -l`, checked against the
+actual git history below, not carried forward from an earlier report — see
+the Convergence section for the corrected per-task numbers; this section's
+1,457 and the Convergence section's former 1,463/1,469/"flat through T8"
+figures were two different unreconciled numbers, neither matching what T1–T8
+actually did to the file). Two consequences:
 
 - The "under 300 lines" exit gate in ADR-001 is restated below against the
   *current* file, not the stale baseline. Nothing about the target changes —
@@ -33,8 +39,8 @@ lands a protocol or feature change ahead of a scheduled refactor should
 expect the same effect: the refactor's estimate is made against a moving
 target, and the target moves in the direction that makes the refactor bigger,
 not smaller, because new work lands in the file that already has the most
-surface area to attach to. Budget Phase 2 against 1,457 lines, and expect
-whatever change lands between now and T9 to add a few more.
+surface area to attach to. Budget Phase 2 against 1,457 lines at the start of
+the phase; see Convergence below for what it actually did task by task.
 
 ## Target-shape corrections (say-so per the task brief)
 
@@ -77,6 +83,7 @@ T8  WinForms removal + paired macOS CI assertion flip              [independent,
 T5b Detector relocation: ScreenChangeDetector + both SkiaScreenChangeDetector
     copies into PixelWizard.Media (deferred half of T5 — see note below)
 T9  PixelWizard.Session: HostSession/ViewerSession, zero Dispatcher refs
+    [split into T9.1-T9.5 at T8 — see the sub-task breakdown below]
 T10 Live end-to-end Hello-flow socket test (backlog item 4, unblocked by T9)
 T11 Extract PixelWizard.Platform.Mac (parity with Windows/Linux hosts)
 T12 Pin-mismatch recovery UI (backlog item 3)
@@ -170,25 +177,84 @@ Rationale for the order:
   `MainViewModel.cs` in hand:
 
   ```
-  T9.1 Introduce Session skeleton (HostSession/ViewerSession classes, empty
-       of logic, wired into DI/construction but not yet called from dispatch).
-       Additive only. MainViewModel line count: unchanged (~1,439).
-  T9.2 Move protocol dispatch: OnHostMessage/OnViewerMessage and their
-       HandleHello/HandleHandshake/... helpers into Session. This is the
-       35-call-site core and carries the phase's real regression risk.
-       Target: MainViewModel ~1,150-1,200 lines.
-  T9.3 Move connection lifecycle: Connect/Disconnect/StartHost/StopHost/
-       RegisterWithRouter/SetupHostServices/RelistenHostAsync.
-       Target: MainViewModel ~850-950 lines.
-  T9.4 Move frame-apply, input-send, clipboard/chat, and timer/watchdog
-       logic that only Session needs (not UI-bound state).
-       Target: MainViewModel ~500-650 lines.
-  T9.5 Delete the now-dead inline copies left behind by T9.2-T9.4 once
-       Session is confirmed driving dispatch end-to-end (T10's live socket
-       test is part of that confirmation). Target: MainViewModel under
-       ~400-500 lines — the final <300 gate is T13's, after the per-mode
-       view split removes what's left that's legitimately UI-only.
+  T9.1  Introduce Session skeleton: PixelWizard.Session project, HostSession/
+        ViewerSession classes wrapping ISessionTransport, forwarding its
+        lifecycle events (Connected/Disconnected/Error/HandlerError/
+        BytesReceived/BytesSent) untouched -- no dispatch logic yet. Not
+        referenced by MainViewModel yet: DI/construction wiring happens in
+        T9.2a/T9.2b, once there is dispatch logic here for it to replace.
+        Additive only. MainViewModel line count: unchanged (1,439).
+        Gate: unit tests proving every transport event/method is forwarded
+        unmodified (HostSessionTests/ViewerSessionTests), full solution
+        build, existing suite still green.
+  T9.2a Move viewer-side dispatch: OnViewerMessage and its
+        MessageDispatch.ClassifyForViewer switch into ViewerSession, wired
+        into MainViewModel's construction. Smaller and lower-risk half of
+        T9.2's original 35-call-site core -- MainViewModel still runs the
+        host role's dispatch inline.
+        Target: MainViewModel ~1,300-1,340 lines.
+  T9.2b Move host-side dispatch: OnHostMessage, HandleHello, HandleHandshake
+        into HostSession, wired into MainViewModel's construction. Carries
+        the phase's real regression risk (Hello/handshake negotiation,
+        consent gating) -- isolated to its own commit so a bad move here is
+        bisectable independently of T9.2a.
+        Target: MainViewModel ~1,150-1,200 lines.
+  T9.2c Gate: write BACKLOG item 4 (live end-to-end Hello-flow socket test)
+        against HostSession + ViewerSession now that both exist and are
+        drivable without a UI -- this is precisely backlog item 4's own
+        stated precondition, and it exercises exactly the dispatch path
+        T9.2a/T9.2b just moved (Hello negotiation, HelloAck/HelloRejected,
+        Handshake/HandshakeOk/HandshakeFailed, real socket I/O). T9.2 does
+        not close until this test exists and passes -- a line-count target
+        met by code that doesn't work is not a pass. Closes BACKLOG row 4.
+        No MainViewModel change (test-only commit).
+  T9.3  Move connection lifecycle: Connect/Disconnect/StartHost/StopHost/
+        RegisterWithRouter/SetupHostServices/RelistenHostAsync.
+        Target: MainViewModel ~850-950 lines.
+  T9.4  Move frame-apply, input-send, clipboard/chat, and timer/watchdog
+        logic that only Session needs (not UI-bound state).
+        Target: MainViewModel ~500-650 lines.
+  T9.5  Delete the now-dead inline copies left behind by T9.2-T9.4 once
+        Session is confirmed driving dispatch end-to-end (T10's live socket
+        test is part of that confirmation). Target: MainViewModel under
+        ~400-500 lines -- the final <300 gate is T13's, after the per-mode
+        view split removes what's left that's legitimately UI-only.
   ```
+
+  **Design-constraint finding, flagged now per the T9.1 brief rather than at
+  T9.3:** the pure events-outward shape (Session fires a plain event,
+  MainViewModel's handler does `Dispatcher.UIThread.Post(...)`) holds cleanly
+  for every dispatch case that's fire-and-forget -- which is most of them
+  (mouse/key input, clipboard, chat, quality changes, frame/delta apply).
+  It does **not** fit `HandleHandshake`'s consent flow as-is: today it awaits
+  `ConsentCallback("incoming viewer")` (a `Func<string, Task<bool>>` the view
+  hands the view model) and only proceeds to
+  `StartSessionWatchdog()`/`IsHostRunning = true`/etc. if the answer is
+  `true` -- a request-response across the boundary, not a one-way
+  notification. An event can't carry that answer back. The fix, decided now
+  so T9.2b isn't redesigning this mid-move: `HostSession`'s constructor takes
+  the same delegate `MainViewModel` already exposes as a public property
+  (`Func<string, Task<bool>>? consentCallback`, plus the equivalent for
+  `ClipboardCallback`/`GetClipboardCallback` when T9.4 gets there) instead of
+  turning it into an event. A delegate the caller supplies is still zero
+  `Dispatcher` references inside `PixelWizard.Session` -- the callback's own
+  implementation (still living in `MainViewModel`, still free to call
+  `Dispatcher.UIThread`) decides how to answer, `Session` just awaits the
+  `Task<bool>` it's handed. Events for one-way notifications, constructor
+  delegates for anything that needs an answer back -- that's the shape T9.2b
+  should follow, not a pure event surface.
+
+  T9.2's original single-commit shape (35 call sites, ~250-line drop) was the
+  one sub-task most likely to overrun on its own terms, so it's split again,
+  by role: host dispatch and viewer dispatch touch disjoint code paths (the
+  transport carries either role, never both, in one `MainViewModel`
+  instance), so splitting them halves the blast radius of a bad move and
+  keeps each one bisectable on its own. Every sub-task also needs a
+  behavioural assertion alongside its line-count number -- a target met by
+  moving code that doesn't work is not a pass. T9.1's is the forwarding unit
+  tests; T9.2's is the live Hello socket test in T9.2c; T9.3-T9.5 need their
+  own before being executed (not designed here, to avoid speculating ahead of
+  the code those sub-tasks will actually move).
 
   Each sub-task is its own commit with its own build+test gate, following the
   plan's existing "introduce alongside, then delete" backout pattern (Risk
@@ -215,9 +281,9 @@ reads like a refactor that stalled, even when it didn't.
   entirely, and `Dispatcher.UIThread` no longer appears anywhere below the
   view-model layer — the one architectural property ADR-001 names explicitly
   ("zero `Dispatcher` references" in Session) is met.
-- `MainViewModel`'s line count has dropped by whatever T9 removed, which is
-  most of the 1,457 — a number worth reporting in T9's own report, not
-  deferred to T13.
+- `MainViewModel`'s line count has dropped by whatever T9.2–T9.5 removed
+  (from the 1,439 baseline at T9.1), the bulk of that drop — a number worth
+  reporting in each sub-task's own report, not deferred to T13.
 - T10's live socket test passes, which is external, checkable proof the new
   Session layer actually works end-to-end, not just that it compiles.
 
@@ -232,12 +298,18 @@ motion before the big one lands.
 
 ## Convergence
 
-`MainViewModel.cs` line count through the phase so far: 1,463 (T1) → 1,463
-(T2) → 1,469 (T3). It stays flat through T8 too — T4 (no scope), T5, T6, T7,
-and T8 none touch `MainViewModel` by their own descriptions; they extract
-`Media`, `Transport.Tcp`, `Transport.WebSocket`, and remove WinForms,
-respectively, all without going near the view model. The "under 300 lines"
-exit gate rests entirely on T9 and T13.
+`MainViewModel.cs` line count through the phase so far, measured directly
+from each task's commit (`git show <sha>:.../MainViewModel.cs | wc -l`), not
+carried forward from a prior report: 1,463 (T1) → 1,463 (T2) → 1,469 (T3) →
+1,438 (T5) → 1,438 (T6) → 1,439 (T7) → 1,439 (T8) → 1,439 (T9.1). Not flat
+throughout, as an earlier version of this section claimed: T5's extraction of
+`PixelWizard.Media` dropped 31 lines (capture-loop plumbing and `using`
+directives that moved with it) despite T5's own description not naming
+`MainViewModel` as a target — an extraction can shrink the file as a
+side-effect even when that isn't the stated goal. T9.1 is additive-only by
+design (new `PixelWizard.Session` project, nothing moved out of
+`MainViewModel` yet) and holds exactly at 1,439. The "under 300 lines" exit
+gate still rests almost entirely on T9.2–T9.5 and T13.
 
 State this plainly rather than letting it surface gradually across nine flat
 reports: **T9 is not one task among thirteen — it is substantially the whole
