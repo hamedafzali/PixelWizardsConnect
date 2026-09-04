@@ -115,6 +115,20 @@ after T8 rather than immediately after T5 because it is independent of T6/T7, an
 removes WinForms from `PixelWizard.WindowsHost`, which may change the TFM constraint in
 blocker 2 before T5b has to solve it.
 
+**Blocker 2, confirmed post-T8:** partially resolved, not eliminated. Empirically retargeting
+`PixelWizard.WindowsHost.csproj` from `net9.0-windows` to plain `net9.0` (temporary local test,
+not committed) builds clean — 0 errors, only `CA1416` platform-compatibility warnings on the
+`System.Drawing`-based `ScreenChangeDetector` calls (expected: those APIs are annotated
+`[SupportedOSPlatform("windows")]`, and were reachable from a non-Windows TFM the moment
+`UseWindowsForms` stopped forcing a Windows-Desktop TFM). So TFM-conditional compilation is
+**no longer required** to co-locate the Windows detector in `PixelWizard.Media` — it can build
+under the same plain `net9.0` the Linux/Mac detectors already use, with `CA1416` warnings
+suppressed or accepted at the call site (consistent with `SkipIfNotWindows()` already gating it
+correctly at runtime). What blocker 2 still requires is the **namespace scheme** for the
+Linux/Mac `SkiaScreenChangeDetector` name collision — that half is unchanged by T8. Net effect:
+T5b's scope shrinks (one fewer real blocker to design around), but T5b is not mechanical yet —
+blocker 1 (harness coupling) and the namespace collision both still need solving first.
+
 Rationale for the order:
 
 - **T1 before any extraction touches dispatch.** See the characterization
@@ -147,13 +161,42 @@ Rationale for the order:
 - **T13 (delete `MainViewModel`) is last by construction** — every prior task
   removes one more slice of it. It closes when nothing is left to remove.
 - **At T8, before starting T9: split T9 into sub-tasks with individual gates.**
-  Not now — T5–T7 will have shown by then how real extractions actually behave
-  in this codebase, which T1–T4's compile-time moves don't. T9 pulls dispatch
+  Not before — T5–T7 needed to show first how real extractions actually behave
+  in this codebase, which T1–T4's compile-time moves didn't. T9 pulls dispatch
   logic across 35 `Dispatcher.UIThread` call sites into `HostSession`/
   `ViewerSession`; that is exactly the shape of task that overruns, and per the
   convergence note below it is the one task in the phase that cannot be
-  allowed to. Do the split with real data about extraction risk in hand, not
-  speculatively now.
+  allowed to. The split, done at T8 with the actual method-level shape of
+  `MainViewModel.cs` in hand:
+
+  ```
+  T9.1 Introduce Session skeleton (HostSession/ViewerSession classes, empty
+       of logic, wired into DI/construction but not yet called from dispatch).
+       Additive only. MainViewModel line count: unchanged (~1,439).
+  T9.2 Move protocol dispatch: OnHostMessage/OnViewerMessage and their
+       HandleHello/HandleHandshake/... helpers into Session. This is the
+       35-call-site core and carries the phase's real regression risk.
+       Target: MainViewModel ~1,150-1,200 lines.
+  T9.3 Move connection lifecycle: Connect/Disconnect/StartHost/StopHost/
+       RegisterWithRouter/SetupHostServices/RelistenHostAsync.
+       Target: MainViewModel ~850-950 lines.
+  T9.4 Move frame-apply, input-send, clipboard/chat, and timer/watchdog
+       logic that only Session needs (not UI-bound state).
+       Target: MainViewModel ~500-650 lines.
+  T9.5 Delete the now-dead inline copies left behind by T9.2-T9.4 once
+       Session is confirmed driving dispatch end-to-end (T10's live socket
+       test is part of that confirmation). Target: MainViewModel under
+       ~400-500 lines — the final <300 gate is T13's, after the per-mode
+       view split removes what's left that's legitimately UI-only.
+  ```
+
+  Each sub-task is its own commit with its own build+test gate, following the
+  plan's existing "introduce alongside, then delete" backout pattern (Risk
+  table, T9 row) rather than one large T9 commit — so a bad extraction is
+  caught and reverted at the sub-task that caused it, not after all of T9
+  lands. If any sub-task's actual line-count delta misses its target by a
+  wide margin, that's the signal to stop and re-split rather than push through
+  (Hard Rule: larger than described → stop and report).
 
 ## Intermediate milestone
 
