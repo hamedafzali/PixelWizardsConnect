@@ -42,11 +42,17 @@ const readyPromise = new Promise((resolve, reject) => {
   });
 });
 
+// Declared outside the try so the finally block can always close it -- a failed
+// waitForFunction jumps straight past the `browser.close()` that used to sit only at
+// the end of the try block, leaving Chromium (and Node's event loop) running forever.
+// That bug turned a ~30s expected failure into a 4-hour stuck CI job (run 33802825128).
+let browser;
+
 try {
   await readyPromise;
   console.log('[smoke] host ready on port', port);
 
-  const browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   page.on('console', (msg) => console.log('[browser]', msg.text()));
 
@@ -65,8 +71,6 @@ try {
   );
   console.log('[smoke] PASS: canvas shows a rendered frame');
 
-  await browser.close();
-
   // The canvas becoming visible already proves the frame was sent, received, and decoded --
   // this is just a secondary sanity check, not a pass/fail signal (stdout can arrive after
   // the page has already rendered).
@@ -74,5 +78,10 @@ try {
 } catch (err) {
   fail(err.message);
 } finally {
+  if (browser) await browser.close();
   host.kill();
+  // Belt-and-suspenders: force the process to end regardless of any handle Playwright,
+  // the killed child process, or its stdout stream may still be holding open. Nothing
+  // in this script should legitimately keep running past this point.
+  process.exit(process.exitCode ?? 0);
 }

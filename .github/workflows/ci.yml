@@ -130,6 +130,10 @@ jobs:
   # and, importantly, does not cover (no real screen capture pipeline).
   playwright-smoke:
     runs-on: ubuntu-latest
+    # This job hung for 4+ hours on its first run (33802825128) due to a driver bug
+    # that left Chromium running after a failure instead of exiting -- fixed, but
+    # capping the job here means any future hang fails in minutes, not hours.
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: tests/WebViewerSmoke
