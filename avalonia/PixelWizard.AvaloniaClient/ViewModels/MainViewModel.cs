@@ -17,6 +17,7 @@ using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
 using PixelWizard.Media;
 using PixelWizard.Protocol;
+using PixelWizard.Session;
 using PixelWizard.Transport.Tcp;
 using PixelWizard.Transport.WebSocket;
 
@@ -412,6 +413,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private ISessionTransport?    _transport;
     private ISessionTransport?    _hostTransport;
+    private ViewerSession?        _viewerSession;
     private readonly IRouterClient _router = new RouterHttpClient();
     private CaptureLoop?          _captureLoop;
     private IInputInjector?       _input;
@@ -593,7 +595,6 @@ public class MainViewModel : ReactiveObject, IDisposable
             _pingTimer?.Stop();
             KeyboardActive = false;
         });
-        t.MessageReceived += OnViewerMessage;
         t.BytesReceived   += b => _receivedBytes += b;
         t.Error += ex => {
             if (t.IsConnected)
@@ -602,6 +603,56 @@ public class MainViewModel : ReactiveObject, IDisposable
         // A handler bug, not a transport failure -- the connection survives, so this is
         // surfaced for diagnostics only and never touches Status/IsConnected.
         t.HandlerError += ex => System.Diagnostics.Debug.WriteLine($"[Viewer] handler error (session continues): {ex}");
+
+        // Dispatch classification lives in ViewerSession (T9.2a); MainViewModel's handlers
+        // below only do what still needs Dispatcher.UIThread or touches instance state
+        // ViewerSession doesn't own (see ViewerSession's class comment).
+        var session = new ViewerSession(t, _sessionSecret);
+        session.AnyMessageReceived += () => _awaitingHelloResponse = false;
+        session.FullScreenReceived += data =>
+        {
+            ApplyFullScreen(data);
+            ResetFrameTimeoutTimer();
+        };
+        session.ScreenDeltaReceived += delta =>
+        {
+            ApplyDelta(delta);
+            ResetFrameTimeoutTimer();
+        };
+        session.HostHelloAcknowledged += hostHello =>
+        {
+            _hostPeerRole = hostHello.Role;
+            Dispatcher.UIThread.Post(() =>
+            {
+                IsConnected  = true;
+                IsConnecting = false;
+                Screen       = AppScreen.LiveScreen;
+                Status       = "Connected";
+                RememberHost(HostAddress.Trim());
+                UpdateWindowTitle();
+                _pingTimer?.Start();
+                StartFrameTimeoutTimer();
+            });
+        };
+        session.HostHelloRejected += rejected => Dispatcher.UIThread.Post(() =>
+        {
+            Status = $"Host rejected connection: {rejected.Message}";
+            DisconnectViewer();
+        });
+        session.HandshakeRejected += () => Dispatcher.UIThread.Post(() =>
+        {
+            Status = "Host rejected: invalid session token";
+            DisconnectViewer();
+        });
+        session.LatencyMeasured += ms => _lastLatencyMs = ms;
+        session.ClipboardReceived += text =>
+        {
+            if (ClipboardCallback != null)
+                Dispatcher.UIThread.Post(() => _ = ClipboardCallback(text));
+        };
+        session.ChatReceived += text => Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: true, text: text));
+        _viewerSession = session;
+
         return t;
     }
 
@@ -609,7 +660,8 @@ public class MainViewModel : ReactiveObject, IDisposable
     {
         StopFrameTimeoutTimer();
         _transport?.Disconnect();
-        _transport   = null;
+        _transport     = null;
+        _viewerSession = null;
         IsConnected  = false;
         IsConnecting = false;
         RemoteScreen = null;
@@ -911,82 +963,9 @@ public class MainViewModel : ReactiveObject, IDisposable
     }
 
     // ── Incoming messages ─────────────────────────────────────────────────────
-
-    private void OnViewerMessage(NetworkMessage msg)
-    {
-        // Any reply at all -- even one we don't otherwise act on -- proves the host is
-        // Hello-aware, so the v1-host heuristic in the Disconnected handler above no longer
-        // applies to this connection.
-        _awaitingHelloResponse = false;
-
-        // What to do with this message is a pure function of its MessageType
-        // (MessageDispatch.ClassifyForViewer, exhaustively unit tested in
-        // MessageDispatchTests) -- only how each category is carried out below still
-        // touches instance state and Dispatcher.UIThread.
-        switch (MessageDispatch.ClassifyForViewer(msg.Type))
-        {
-            case ViewerDispatchAction.ApplyFullScreen:
-                ApplyFullScreen(msg.Data);
-                ResetFrameTimeoutTimer();
-                break;
-            case ViewerDispatchAction.ApplyScreenDelta:
-                ApplyDelta(ScreenDelta.Deserialize(msg.Data));
-                ResetFrameTimeoutTimer();
-                break;
-            case ViewerDispatchAction.HostHelloAck:
-                var hostHello = HelloMessage.Deserialize(msg.Data);
-                _hostPeerRole = hostHello.Role;
-                _ = _transport?.SendMessageAsync(new NetworkMessage
-                {
-                    Type = MessageType.Handshake,
-                    Data = Encoding.UTF8.GetBytes(_sessionSecret)
-                });
-                Dispatcher.UIThread.Post(() =>
-                {
-                    IsConnected  = true;
-                    IsConnecting = false;
-                    Screen       = AppScreen.LiveScreen;
-                    Status       = "Connected";
-                    RememberHost(HostAddress.Trim());
-                    UpdateWindowTitle();
-                    _pingTimer?.Start();
-                    StartFrameTimeoutTimer();
-                });
-                break;
-            case ViewerDispatchAction.HostHelloRejected:
-                var rejected = HelloRejectedMessage.Deserialize(msg.Data);
-                Dispatcher.UIThread.Post(() =>
-                {
-                    Status = $"Host rejected connection: {rejected.Message}";
-                    DisconnectViewer();
-                });
-                break;
-            case ViewerDispatchAction.HandshakeAcknowledged:
-                break;
-            case ViewerDispatchAction.HandshakeRejected:
-                Dispatcher.UIThread.Post(() =>
-                {
-                    Status = "Host rejected: invalid session token";
-                    DisconnectViewer();
-                });
-                break;
-            case ViewerDispatchAction.LatencyPong:
-                if (msg.Data.Length >= 8)
-                    _lastLatencyMs = (int)Math.Max(0,
-                        (DateTime.UtcNow - new DateTime(BitConverter.ToInt64(msg.Data, 0), DateTimeKind.Utc))
-                        .TotalMilliseconds);
-                break;
-            case ViewerDispatchAction.Clipboard:
-                string cbText = Encoding.UTF8.GetString(msg.Data);
-                if (ClipboardCallback != null)
-                    Dispatcher.UIThread.Post(() => _ = ClipboardCallback(cbText));
-                break;
-            case ViewerDispatchAction.Chat:
-                string chat = Encoding.UTF8.GetString(msg.Data);
-                Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: true, text: chat));
-                break;
-        }
-    }
+    // Viewer-side dispatch (formerly OnViewerMessage) moved to PixelWizard.Session's
+    // ViewerSession in T9.2a -- see BuildViewerTransport for the event wiring. Host-side
+    // dispatch below is unchanged; it moves to HostSession in T9.2b.
 
     private void OnHostMessage(NetworkMessage msg)
     {
