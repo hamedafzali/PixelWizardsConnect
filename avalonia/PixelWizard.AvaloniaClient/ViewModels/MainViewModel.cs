@@ -414,6 +414,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     private ISessionTransport?    _transport;
     private ISessionTransport?    _hostTransport;
     private ViewerSession?        _viewerSession;
+    private HostSession?          _hostSession;
     private readonly IRouterClient _router = new RouterHttpClient();
     private CaptureLoop?          _captureLoop;
     private IInputInjector?       _input;
@@ -433,8 +434,6 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private string _sessionSecret         = "";
     private string _expectedSessionSecret = "";
-    private bool   _hostHandshakeComplete;
-    private bool   _hostHelloComplete;
     private int    _activeHostPort = 8888;
 
     // Viewer-side heuristic for detecting a v1 host (see BuildViewerTransport): true from the
@@ -808,21 +807,14 @@ public class MainViewModel : ReactiveObject, IDisposable
     private ISessionTransport BuildHostTransport()
     {
         var t = new TcpTransport();
-        t.Connected += () =>
+        t.Connected += () => Dispatcher.UIThread.Post(() =>
         {
-            _hostHelloComplete     = false;
-            _hostHandshakeComplete = false;
-            Dispatcher.UIThread.Post(() =>
-            {
-                HostStatus = "Viewer connecting — authenticating…";
-                Status     = "Authenticating viewer…";
-            });
-        };
+            HostStatus = "Viewer connecting — authenticating…";
+            Status     = "Authenticating viewer…";
+        });
         t.Disconnected += () => Dispatcher.UIThread.Post(async () =>
         {
             _sessionWatchdog?.Stop();
-            _hostHelloComplete     = false;
-            _hostHandshakeComplete = false;
             HideViewingBadgeCallback?.Invoke();
             TrayTooltip = "Hosting — waiting for viewer";
             SaveSessionNotes();
@@ -831,7 +823,6 @@ public class MainViewModel : ReactiveObject, IDisposable
             if (IsHostRunning && !_relistening)
                 await RelistenHostAsync();
         });
-        t.MessageReceived += OnHostMessage;
         t.Error += ex => {
             // Only surface error if transport was actually connected — ignore EOF/reset on disconnect
             if (t.IsConnected)
@@ -840,6 +831,66 @@ public class MainViewModel : ReactiveObject, IDisposable
         // A handler bug, not a transport failure -- the connection survives, so this is
         // surfaced for diagnostics only and never touches Status/IsConnected.
         t.HandlerError += ex => System.Diagnostics.Debug.WriteLine($"[Host] handler error (session continues): {ex}");
+
+        // Dispatch classification lives in HostSession (T9.2b); MainViewModel's handlers
+        // below only do what still needs Dispatcher.UIThread or touches instance state
+        // HostSession doesn't own (see HostSession's class comment, especially why the
+        // consent callback stays here rather than being injected into HostSession).
+        var session = new HostSession(t, OurHello, _expectedSessionSecret);
+        session.IncompatiblePeer += () => Dispatcher.UIThread.Post(() =>
+        {
+            HostStatus = "Viewer is running an older, incompatible version — please update it";
+            Status     = "Incompatible viewer version";
+        });
+        session.BadHello += () => Dispatcher.UIThread.Post(() => { HostStatus = "Bad hello — disconnecting"; Status = "Bad hello"; });
+        session.MalformedHello += () => Dispatcher.UIThread.Post(() => { HostStatus = "Malformed hello — disconnecting"; Status = "Malformed hello"; });
+        session.HelloRejectedLocally += reasonText => Dispatcher.UIThread.Post(() =>
+        {
+            HostStatus = $"Rejected viewer: {reasonText}";
+            Status     = "Rejected: " + reasonText;
+        });
+        session.BadHandshake += () => Dispatcher.UIThread.Post(() => { HostStatus = "Bad handshake — disconnecting"; Status = "Bad handshake"; });
+        session.HandshakeTokenInvalid += () => Dispatcher.UIThread.Post(() => { HostStatus = "Rejected: invalid token"; Status = "Rejected: invalid session token"; });
+        session.HandshakeVerified += () =>
+        {
+            _ = Dispatcher.UIThread.InvokeAsync(async () =>
+            {
+                bool allowed = ConsentCallback != null
+                    ? await ConsentCallback("incoming viewer")
+                    : true;
+
+                if (!allowed)
+                {
+                    HostStatus = "Connection denied";
+                    Status     = "Connection denied";
+                    session.Disconnect();
+                    return;
+                }
+
+                StartSessionWatchdog();
+                HostStatus    = "Client connected — sharing screen";
+                IsHostRunning = true;
+                Status        = "Client connected";
+                TrayTooltip   = "Hosting — viewer connected";
+                ShowViewingBadgeCallback?.Invoke();
+            });
+        };
+        session.PostHandshakeMessageReceived += ResetSessionWatchdog;
+        session.MouseMoveReceived       += mv => Dispatcher.UIThread.Post(() => _input?.MoveMouse(mv.X, mv.Y));
+        session.MouseClickReceived      += cl => Dispatcher.UIThread.Post(() => _input?.Click(cl.X, cl.Y, cl.LeftButton));
+        session.MouseButtonDownReceived += bd => Dispatcher.UIThread.Post(() => _input?.ButtonDown(bd.X, bd.Y, bd.LeftButton));
+        session.MouseButtonUpReceived   += bu => Dispatcher.UIThread.Post(() => _input?.ButtonUp(bu.X, bu.Y, bu.LeftButton));
+        session.KeyPressReceived        += kp => Dispatcher.UIThread.Post(() => _input?.SendKey(kp.VirtualKey, true));
+        session.KeyReleaseReceived      += kr => Dispatcher.UIThread.Post(() => _input?.SendKey(kr.VirtualKey, false));
+        session.QualityChanged          += q  => Dispatcher.UIThread.Post(() => HostQualityIndex = q);
+        session.ClipboardReceived       += text =>
+        {
+            if (ClipboardCallback != null)
+                Dispatcher.UIThread.Post(() => _ = ClipboardCallback(text));
+        };
+        session.ChatReceived += text => Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: false, text: text));
+        _hostSession = session;
+
         return t;
     }
 
@@ -882,12 +933,11 @@ public class MainViewModel : ReactiveObject, IDisposable
         _hostTransport?.Disconnect();
         _captureLoop?.Dispose();
         _wsServer?.Stop();
-        _hostTransport         = null;
-        _captureLoop            = null;
-        _input                 = null;
-        _wsServer              = null;
-        _hostHelloComplete     = false;
-        _hostHandshakeComplete = false;
+        _hostTransport = null;
+        _hostSession   = null;
+        _captureLoop   = null;
+        _input         = null;
+        _wsServer      = null;
         IsHostRunning  = false;
         ShowCodeCard   = false;
         ShowWebViewer  = false;
@@ -963,182 +1013,9 @@ public class MainViewModel : ReactiveObject, IDisposable
     }
 
     // ── Incoming messages ─────────────────────────────────────────────────────
-    // Viewer-side dispatch (formerly OnViewerMessage) moved to PixelWizard.Session's
-    // ViewerSession in T9.2a -- see BuildViewerTransport for the event wiring. Host-side
-    // dispatch below is unchanged; it moves to HostSession in T9.2b.
-
-    private void OnHostMessage(NetworkMessage msg)
-    {
-        if (!_hostHelloComplete)
-        {
-            HandleHello(msg);
-            return;
-        }
-
-        if (!_hostHandshakeComplete)
-        {
-            HandleHandshake(msg);
-            return;
-        }
-
-        ResetSessionWatchdog();
-
-        // See the matching comment in OnViewerMessage: classification is pure and
-        // exhaustively tested (MessageDispatchTests); execution below is not.
-        switch (MessageDispatch.ClassifyForHost(msg.Type))
-        {
-            case HostDispatchAction.MouseMove:
-                var mv = MouseMoveMessage.Deserialize(msg.Data);
-                Dispatcher.UIThread.Post(() => _input?.MoveMouse(mv.X, mv.Y));
-                break;
-            case HostDispatchAction.MouseClick:
-                var cl = MouseClickMessage.Deserialize(msg.Data);
-                Dispatcher.UIThread.Post(() => _input?.Click(cl.X, cl.Y, cl.LeftButton));
-                break;
-            case HostDispatchAction.MouseButtonDown:
-                var bd = MouseClickMessage.Deserialize(msg.Data);
-                Dispatcher.UIThread.Post(() => _input?.ButtonDown(bd.X, bd.Y, bd.LeftButton));
-                break;
-            case HostDispatchAction.MouseButtonUp:
-                var bu = MouseClickMessage.Deserialize(msg.Data);
-                Dispatcher.UIThread.Post(() => _input?.ButtonUp(bu.X, bu.Y, bu.LeftButton));
-                break;
-            case HostDispatchAction.KeyPress:
-                var kp = KeyMessage.Deserialize(msg.Data);
-                Dispatcher.UIThread.Post(() => _input?.SendKey(kp.VirtualKey, true));
-                break;
-            case HostDispatchAction.KeyRelease:
-                var kr = KeyMessage.Deserialize(msg.Data);
-                Dispatcher.UIThread.Post(() => _input?.SendKey(kr.VirtualKey, false));
-                break;
-            case HostDispatchAction.PingReply:
-                _ = _hostTransport?.SendMessageAsync(new NetworkMessage { Type = MessageType.Pong, Data = msg.Data });
-                break;
-            case HostDispatchAction.QualityChanged:
-                if (msg.Data.Length >= 4)
-                    Dispatcher.UIThread.Post(() => HostQualityIndex = BitConverter.ToInt32(msg.Data, 0));
-                break;
-            case HostDispatchAction.Clipboard:
-                string cbText = Encoding.UTF8.GetString(msg.Data);
-                if (ClipboardCallback != null)
-                    Dispatcher.UIThread.Post(() => _ = ClipboardCallback(cbText));
-                break;
-            case HostDispatchAction.Chat:
-                string chat = Encoding.UTF8.GetString(msg.Data);
-                Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: false, text: chat));
-                break;
-        }
-    }
-
-    private void HandleHello(NetworkMessage msg)
-    {
-        if (HelloCompatibility.LooksLikeV1Peer(msg.Type))
-        {
-            // A v1 viewer has no concept of Hello -- its first message is always Handshake.
-            // This is a distinct, positively-identified case, not a generic bad-hello failure:
-            // the peer isn't malformed, it's just too old to negotiate at all.
-            Dispatcher.UIThread.Post(() =>
-            {
-                HostStatus = "Viewer is running an older, incompatible version — please update it";
-                Status     = "Incompatible viewer version";
-            });
-            _hostTransport?.Disconnect();
-            return;
-        }
-
-        if (msg.Type != MessageType.Hello)
-        {
-            Dispatcher.UIThread.Post(() => { HostStatus = "Bad hello — disconnecting"; Status = "Bad hello"; });
-            _hostTransport?.Disconnect();
-            return;
-        }
-
-        HelloMessage remoteHello;
-        try
-        {
-            remoteHello = HelloMessage.Deserialize(msg.Data);
-        }
-        catch (Exception)
-        {
-            Dispatcher.UIThread.Post(() => { HostStatus = "Malformed hello — disconnecting"; Status = "Malformed hello"; });
-            _hostTransport?.Disconnect();
-            return;
-        }
-
-        var rejectReason = HelloNegotiator.Evaluate(OurHello, remoteHello);
-        if (rejectReason != null)
-        {
-            string reasonText = rejectReason == HelloRejectReason.VersionMismatch
-                ? $"viewer protocol v{remoteHello.ProtocolVersion} is incompatible with this host's v{ProtocolVersions.Current}"
-                : "viewer and host share no compatible codec";
-            _ = _hostTransport?.SendMessageAsync(new NetworkMessage
-            {
-                Type = MessageType.HelloRejected,
-                Data = new HelloRejectedMessage { Reason = rejectReason.Value, Message = reasonText }.Serialize()
-            });
-            Dispatcher.UIThread.Post(() => { HostStatus = $"Rejected viewer: {reasonText}"; Status = "Rejected: " + reasonText; });
-            _hostTransport?.Disconnect();
-            return;
-        }
-
-        _hostHelloComplete = true;
-        _ = _hostTransport?.SendMessageAsync(new NetworkMessage
-        {
-            Type = MessageType.HelloAck,
-            Data = OurHello.Serialize()
-        });
-    }
-
-    private void HandleHandshake(NetworkMessage msg)
-    {
-        if (msg.Type != MessageType.Handshake)
-        {
-            Dispatcher.UIThread.Post(() => { HostStatus = "Bad handshake — disconnecting"; Status = "Bad handshake"; });
-            _hostTransport?.Disconnect();
-            return;
-        }
-
-        string secret = Encoding.UTF8.GetString(msg.Data);
-        // For a direct (non-router) connection, _expectedSessionSecret is never set and
-        // stays "", matching the "" the host sends for the same reason — there is no
-        // channel to share a secret out-of-band when a user just types an IP address, so
-        // this check is a deliberate no-op on that path, not a bug. The consent dialog is
-        // the sole gate for direct connections. See README "Security" for the full trust
-        // model of both connection paths.
-        if (secret != _expectedSessionSecret)
-        {
-            _ = _hostTransport?.SendMessageAsync(new NetworkMessage { Type = MessageType.HandshakeFailed });
-            Dispatcher.UIThread.Post(() => { HostStatus = "Rejected: invalid token"; Status = "Rejected: invalid session token"; });
-            _hostTransport?.Disconnect();
-            return;
-        }
-
-        _hostHandshakeComplete = true;
-        var transport = _hostTransport;
-        _ = transport?.SendMessageAsync(new NetworkMessage { Type = MessageType.HandshakeOk });
-
-        _ = Dispatcher.UIThread.InvokeAsync(async () =>
-        {
-            bool allowed = ConsentCallback != null
-                ? await ConsentCallback("incoming viewer")
-                : true;
-
-            if (!allowed)
-            {
-                HostStatus = "Connection denied";
-                Status     = "Connection denied";
-                transport?.Disconnect();
-                return;
-            }
-
-            StartSessionWatchdog();
-            HostStatus    = "Client connected — sharing screen";
-            IsHostRunning = true;
-            Status        = "Client connected";
-            TrayTooltip   = "Hosting — viewer connected";
-            ShowViewingBadgeCallback?.Invoke();
-        });
-    }
+    // Dispatch (formerly OnViewerMessage/OnHostMessage/HandleHello/HandleHandshake) moved
+    // to PixelWizard.Session's ViewerSession (T9.2a) and HostSession (T9.2b) -- see
+    // BuildViewerTransport/BuildHostTransport for the event wiring.
 
     // ── Feature 1: Clipboard sync ─────────────────────────────────────────────
 
