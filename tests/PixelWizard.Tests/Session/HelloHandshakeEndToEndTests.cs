@@ -97,6 +97,51 @@ public class HelloHandshakeEndToEndTests
         Assert.False(await WaitAsync(viewerDropped, "viewer to see the host drop"));
     }
 
+    /// <summary>
+    /// T10: the tests above run plaintext for speed, but the app defaults to TLS
+    /// (HostTlsEnabled, TcpTransport's TOFU pinning). Same Hello-through-Handshake flow,
+    /// over TLS, through HostListener -- the path MainViewModel actually uses to host.
+    /// The viewer gets an isolated pin store so the run never touches the user's pins.
+    /// </summary>
+    [Fact]
+    public async Task HappyPath_OverTls_ThroughHostListener_HostVerifiesAndViewerAcknowledges()
+    {
+        int port = GetFreePort();
+        const string secret = "shared-secret";
+        string pinPath = Path.Combine(Path.GetTempPath(), $"pixelwizard-pins-{Guid.NewGuid():N}.json");
+        var pinStore = new CertificatePinStore(pinPath);
+
+        var listener = new HostListener(() => new TcpTransport(), OurHello, port, useTls: () => true, secret);
+        var hostVerified = new TaskCompletionSource<bool>();
+        listener.SessionCreated += host =>
+        {
+            host.HandshakeVerified += () => hostVerified.TrySetResult(true);
+            host.HelloRejectedLocally += r => hostVerified.TrySetException(new Exception($"unexpected HelloRejectedLocally: {r}"));
+            host.HandshakeTokenInvalid += () => hostVerified.TrySetException(new Exception("unexpected HandshakeTokenInvalid"));
+        };
+        _ = listener.StartAsync();
+        await Task.Delay(50); // give the listener a moment to bind before connecting
+
+        try
+        {
+            using var viewer = new ViewerSession(() => new TcpTransport(pinStore), OurHello, secret);
+            var viewerAcked = new TaskCompletionSource<HelloMessage>();
+            viewer.HostHelloAcknowledged += h => viewerAcked.TrySetResult(h);
+            viewer.HostHelloRejected += r => viewerAcked.TrySetException(new Exception($"unexpected HostHelloRejected: {r.Message}"));
+
+            await viewer.ConnectAsync("127.0.0.1", port, useTls: true);
+
+            await WaitAsync(viewerAcked, "viewer to receive HelloAck over TLS");
+            Assert.True(await WaitAsync(hostVerified, "host to verify the handshake over TLS"));
+            Assert.NotNull(pinStore.TryGetPin($"127.0.0.1:{port}"));
+        }
+        finally
+        {
+            listener.Stop();
+            if (File.Exists(pinPath)) File.Delete(pinPath);
+        }
+    }
+
     [Fact]
     public async Task VersionMismatch_RealSockets_HostRejectsAndDisconnects_NoHandshakeVerified()
     {
