@@ -90,6 +90,8 @@ T10 Live end-to-end Hello-flow socket test (backlog item 4, unblocked by T9)
 T11 Extract PixelWizard.Platform.Mac (parity with Windows/Linux hosts)
     [as executed (0be1647): named PixelWizard.MacHost, matching WindowsHost/LinuxHost]
 T12 Pin-mismatch recovery UI (backlog item 3)
+    [as executed (314930c): PinMismatchDialog, refuse-by-default, Trust = ForgetPin;
+     MainViewModel +29 lines (1,210 -> 1,239) -- new UI wiring, not a move]
 T13 Split MainViewModel/XAML into thin per-mode views; delete the god object
 ```
 
@@ -373,7 +375,7 @@ carried forward from a prior report: 1,463 (T1) → 1,463 (T2) → 1,469 (T3) �
 1,438 (T5) → 1,438 (T6) → 1,439 (T7) → 1,439 (T8) → 1,439 (T9.1) →
 1,418 (T9.2a) → 1,295 (T9.2b) → 1,295 (T9.2c) → 1,274 (T9.3a) →
 1,254 (T9.3b) → 1,254 (43a4097, transport fix) → 1,210 (T9.4) →
-1,210 (T9.5). Not flat
+1,210 (T9.5) → 1,210 (T10, T11) → 1,239 (T12, adds UI). Not flat
 throughout, as an earlier version of this section claimed: T5's extraction of
 `PixelWizard.Media` dropped 31 lines (capture-loop plumbing and `using`
 directives that moved with it) despite T5's own description not naming
