@@ -411,14 +411,12 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     // ── Internal state ────────────────────────────────────────────────────────
 
-    private ISessionTransport?    _hostTransport;
     private ViewerSession?        _viewerSession;
-    private HostSession?          _hostSession;
+    private HostListener?         _hostListener;
     private readonly IRouterClient _router = new RouterHttpClient();
     private CaptureLoop?          _captureLoop;
     private IInputInjector?       _input;
     private WebSocketHostServer?  _wsServer;
-    private bool                  _relistening = false;
     private CancellationTokenSource? _discoveryCts;
     private CancellationTokenSource? _announceCts;
 
@@ -695,8 +693,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         try
         {
             SetupHostServices();
-            _hostTransport = BuildHostTransport();
-            await _hostTransport.StartServerAsync(port, HostTlsEnabled);
+            await StartHostListenerAsync(port);
             _captureLoop!.Start();
             _announceCts = new CancellationTokenSource();
             _ = NetworkDiscovery.AnnounceAsync(_activeHostPort, _announceCts.Token);
@@ -734,8 +731,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             ShowCodeCard = true;
 
             SetupHostServices();
-            _hostTransport = BuildHostTransport();
-            await _hostTransport.StartServerAsync(8888, HostTlsEnabled);
+            await StartHostListenerAsync(8888);
             _captureLoop!.Start();
             _announceCts = new CancellationTokenSource();
             _ = NetworkDiscovery.AnnounceAsync(_activeHostPort, _announceCts.Token);
@@ -752,10 +748,10 @@ public class MainViewModel : ReactiveObject, IDisposable
         _captureLoop = new CaptureLoop(
             capture,
             () => StreamingSettings.FromPresetIndex(HostQualityIndex),
-            () => _hostTransport?.IsConnected == true);
+            () => _hostListener?.Current?.IsConnected == true);
         _captureLoop.DeltaCapturedAsync = async (delta, full) =>
         {
-            await _hostTransport!.SendMessageAsync(new NetworkMessage
+            await _hostListener!.Current!.SendMessageAsync(new NetworkMessage
             {
                 Type = full ? MessageType.FullScreen : MessageType.ScreenDelta,
                 Data = full ? delta.ImageData : delta.Serialize()
@@ -783,15 +779,23 @@ public class MainViewModel : ReactiveObject, IDisposable
         TrayTooltip            = "Hosting — waiting for viewer";
     }
 
-    private ISessionTransport BuildHostTransport()
+    private Task StartHostListenerAsync(int port)
     {
-        var t = new TcpTransport();
-        t.Connected += () => Dispatcher.UIThread.Post(() =>
+        // Listen/relisten mechanics and per-connection HostSession creation live in
+        // HostListener (T9.3b); whether to relisten stays here (it depends on IsHostRunning).
+        _hostListener = new HostListener(() => new TcpTransport(), OurHello, port, () => HostTlsEnabled, _expectedSessionSecret);
+        _hostListener.SessionCreated += WireHostSession;
+        return _hostListener.StartAsync();
+    }
+
+    private void WireHostSession(HostSession session)
+    {
+        session.Connected += () => Dispatcher.UIThread.Post(() =>
         {
             HostStatus = "Viewer connecting — authenticating…";
             Status     = "Authenticating viewer…";
         });
-        t.Disconnected += () => Dispatcher.UIThread.Post(async () =>
+        session.Disconnected += () => Dispatcher.UIThread.Post(async () =>
         {
             _sessionWatchdog?.Stop();
             HideViewingBadgeCallback?.Invoke();
@@ -799,23 +803,31 @@ public class MainViewModel : ReactiveObject, IDisposable
             SaveSessionNotes();
             HostStatus = "Client disconnected";
             Status     = "Client disconnected";
-            if (IsHostRunning && !_relistening)
-                await RelistenHostAsync();
+            if (IsHostRunning && _hostListener is { IsRelistening: false } listener)
+            {
+                HostStatus = "Waiting for next connection…";
+                Status     = "Waiting for next connection…";
+                try { await listener.RelistenAsync(); }
+                catch (Exception ex)
+                {
+                    Status = FriendlyError.Describe(ex);
+                    IsHostRunning = false;
+                }
+            }
         });
-        t.Error += ex => {
+        session.Error += ex => {
             // Only surface error if transport was actually connected — ignore EOF/reset on disconnect
-            if (t.IsConnected)
+            if (session.IsConnected)
                 Dispatcher.UIThread.Post(() => Status = FriendlyError.Describe(ex));
         };
         // A handler bug, not a transport failure -- the connection survives, so this is
         // surfaced for diagnostics only and never touches Status/IsConnected.
-        t.HandlerError += ex => System.Diagnostics.Debug.WriteLine($"[Host] handler error (session continues): {ex}");
+        session.HandlerError += ex => System.Diagnostics.Debug.WriteLine($"[Host] handler error (session continues): {ex}");
 
         // Dispatch classification lives in HostSession (T9.2b); MainViewModel's handlers
         // below only do what still needs Dispatcher.UIThread or touches instance state
         // HostSession doesn't own (see HostSession's class comment, especially why the
         // consent callback stays here rather than being injected into HostSession).
-        var session = new HostSession(t, OurHello, _expectedSessionSecret);
         session.IncompatiblePeer += () => Dispatcher.UIThread.Post(() =>
         {
             HostStatus = "Viewer is running an older, incompatible version — please update it";
@@ -868,37 +880,6 @@ public class MainViewModel : ReactiveObject, IDisposable
                 Dispatcher.UIThread.Post(() => _ = ClipboardCallback(text));
         };
         session.ChatReceived += text => Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: false, text: text));
-        _hostSession = session;
-
-        return t;
-    }
-
-    private async Task RelistenHostAsync()
-    {
-        if (_relistening) return;
-        _relistening = true;
-        HostStatus = "Waiting for next connection…";
-        Status     = "Waiting for next connection…";
-        try
-        {
-            // Null out first so the Disconnected event fired by Dispose
-            // sees _hostTransport == null and skips the re-listen guard.
-            var old = _hostTransport;
-            _hostTransport = null;
-            old?.Dispose();
-
-            _hostTransport = BuildHostTransport();
-            await _hostTransport.StartServerAsync(_activeHostPort, HostTlsEnabled);
-        }
-        catch (Exception ex)
-        {
-            Status = FriendlyError.Describe(ex);
-            IsHostRunning = false;
-        }
-        finally
-        {
-            _relistening = false;
-        }
     }
 
     private void StopHost()
@@ -909,11 +890,10 @@ public class MainViewModel : ReactiveObject, IDisposable
         _sessionWatchdog?.Stop();
         _sessionWatchdog?.Dispose();
         _sessionWatchdog = null;
-        _hostTransport?.Disconnect();
+        _hostListener?.Stop();
         _captureLoop?.Dispose();
         _wsServer?.Stop();
-        _hostTransport = null;
-        _hostSession   = null;
+        _hostListener  = null;
         _captureLoop   = null;
         _input         = null;
         _wsServer      = null;
@@ -980,7 +960,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         {
             HostStatus = "Session timed out — viewer inactive";
             Status     = "Session timed out";
-            _hostTransport?.Disconnect();
+            _hostListener?.Current?.Disconnect();
         });
         _sessionWatchdog.Start();
     }
@@ -994,7 +974,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     // ── Incoming messages ─────────────────────────────────────────────────────
     // Dispatch (formerly OnViewerMessage/OnHostMessage/HandleHello/HandleHandshake) moved
     // to PixelWizard.Session's ViewerSession (T9.2a) and HostSession (T9.2b) -- see
-    // BuildViewerSession/BuildHostTransport for the event wiring.
+    // BuildViewerSession/WireHostSession for the event wiring.
 
     // ── Feature 1: Clipboard sync ─────────────────────────────────────────────
 
@@ -1013,8 +993,8 @@ public class MainViewModel : ReactiveObject, IDisposable
 
         if (_viewerSession?.IsConnected == true)
             await _viewerSession.SendMessageAsync(msg);
-        else if (_hostTransport?.IsConnected == true)
-            await _hostTransport.SendMessageAsync(msg);
+        else if (_hostListener?.Current?.IsConnected == true)
+            await _hostListener!.Current!.SendMessageAsync(msg);
     }
 
     // ── Feature 4: Chat ───────────────────────────────────────────────────────
@@ -1025,7 +1005,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         if (string.IsNullOrEmpty(text)) return;
         ChatInput = "";
 
-        bool isHost = _hostTransport?.IsConnected == true;
+        bool isHost = _hostListener?.Current?.IsConnected == true;
         ChatMessages.Add(new ChatEntry(DateTime.Now, isHost, text));
 
         var msg = new NetworkMessage
@@ -1036,8 +1016,8 @@ public class MainViewModel : ReactiveObject, IDisposable
 
         if (_viewerSession?.IsConnected == true)
             _ = _viewerSession.SendMessageAsync(msg);
-        else if (_hostTransport?.IsConnected == true)
-            _ = _hostTransport.SendMessageAsync(msg);
+        else if (_hostListener?.Current?.IsConnected == true)
+            _ = _hostListener!.Current!.SendMessageAsync(msg);
     }
 
     private void ReceiveChatMessage(bool isFromHost, string text)

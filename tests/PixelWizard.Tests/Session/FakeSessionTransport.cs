@@ -43,10 +43,14 @@ public sealed class FakeSessionTransport : ISessionTransport
         return Task.CompletedTask;
     }
 
+    // When set, StartServerAsync doesn't complete until the test completes this -- mirrors
+    // TcpTransport, whose StartServerAsync only returns once a client connects.
+    public TaskCompletionSource<bool>? StartServerGate { get; set; }
+
     public Task StartServerAsync(int port, bool useTls = true)
     {
         LastStartServerArgs = (port, useTls);
-        return Task.CompletedTask;
+        return StartServerGate?.Task ?? Task.CompletedTask;
     }
 
     public Task SendMessageAsync(NetworkMessage message)
