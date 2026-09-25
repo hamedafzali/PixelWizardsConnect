@@ -95,7 +95,6 @@ public sealed class HostSession : IDisposable
     public event Action<string>? ChatReceived;
 
     public Task StartServerAsync(int port, bool useTls = true) => _transport.StartServerAsync(port, useTls);
-    public Task SendMessageAsync(NetworkMessage message) => _transport.SendMessageAsync(message);
     public void Disconnect() => _transport.Disconnect();
 
     // Outbound frames/clipboard/chat (formerly inline in MainViewModel, moved here in T9.4).

@@ -114,18 +114,6 @@ public class HostSessionTests
     }
 
     [Fact]
-    public async System.Threading.Tasks.Task SendMessageAsync_DelegatesToTransport()
-    {
-        var fake = new FakeSessionTransport();
-        var session = new HostSession(fake, TestHello);
-        var msg = new NetworkMessage { Type = MessageType.ChatMessage, Data = new byte[] { 1, 2, 3 } };
-
-        await session.SendMessageAsync(msg);
-
-        Assert.Same(msg, fake.LastSentMessage);
-    }
-
-    [Fact]
     public void Disconnect_DelegatesToTransport()
     {
         var fake = new FakeSessionTransport();

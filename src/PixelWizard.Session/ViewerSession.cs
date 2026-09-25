@@ -95,7 +95,6 @@ public sealed class ViewerSession : IDisposable
     public event Action<string>? ChatReceived;
 
     public Task ConnectAsync(string host, int port, bool useTls = true) => _transport.ConnectAsync(host, port, useTls);
-    public Task SendMessageAsync(NetworkMessage message) => _transport.SendMessageAsync(message);
     public void Disconnect() => _transport.Disconnect();
 
     // Outbound message construction (formerly inline in MainViewModel's input/ping/quality/
