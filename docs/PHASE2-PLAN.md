@@ -254,6 +254,13 @@ Rationale for the order:
         Session is confirmed driving dispatch end-to-end. Target likewise to
         be recomputed; the final <300 gate is T13's, after DI and the
         per-mode view split remove what's left that's legitimately UI-only.
+        As executed (9eaba2e): no dead inline copies existed -- each T9.2-T9.4
+        move deleted its MainViewModel code in the same commit. The only
+        leftover was the generic SendMessageAsync on ViewerSession/HostSession,
+        unused by production since T9.4; removed. MainViewModel stays 1,210.
+        Pre-existing unused usings (System, System.IO, System.Threading --
+        redundant under ImplicitUsings -- and Avalonia.Platform, unused on
+        main too) were left alone: not Phase 2 leftovers.
   ```
 
 - **T9.3 re-split (decided at T9.2c's close).** The original T9.3 listed
@@ -362,7 +369,8 @@ from each task's commit (`git show <sha>:.../MainViewModel.cs | wc -l`), not
 carried forward from a prior report: 1,463 (T1) → 1,463 (T2) → 1,469 (T3) →
 1,438 (T5) → 1,438 (T6) → 1,439 (T7) → 1,439 (T8) → 1,439 (T9.1) →
 1,418 (T9.2a) → 1,295 (T9.2b) → 1,295 (T9.2c) → 1,274 (T9.3a) →
-1,254 (T9.3b) → 1,254 (43a4097, transport fix) → 1,210 (T9.4). Not flat
+1,254 (T9.3b) → 1,254 (43a4097, transport fix) → 1,210 (T9.4) →
+1,210 (T9.5). Not flat
 throughout, as an earlier version of this section claimed: T5's extraction of
 `PixelWizard.Media` dropped 31 lines (capture-loop plumbing and `using`
 directives that moved with it) despite T5's own description not naming
