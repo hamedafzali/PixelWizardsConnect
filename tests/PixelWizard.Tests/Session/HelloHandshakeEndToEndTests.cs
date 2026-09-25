@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -71,17 +72,14 @@ public class HelloHandshakeEndToEndTests
         _ = host.StartServerAsync(port, useTls: false);
         await Task.Delay(50); // give the listener a moment to bind before connecting
 
-        using var viewerTransport = new TcpTransport();
-        var viewer = new ViewerSession(viewerTransport, secret);
+        using var viewer = new ViewerSession(() => new TcpTransport(), OurHello, secret);
         var viewerAcked = new TaskCompletionSource<HelloMessage>();
         viewer.HostHelloAcknowledged += h => viewerAcked.TrySetResult(h);
         viewer.HostHelloRejected += r => viewerAcked.TrySetException(new Exception($"unexpected HostHelloRejected: {r.Message}"));
         viewer.HandshakeRejected += () => viewerAcked.TrySetException(new Exception("unexpected HandshakeRejected"));
 
+        // No hand-sent Hello: since T9.3a ViewerSession sends it on connect itself.
         await viewer.ConnectAsync("127.0.0.1", port, useTls: false);
-        // The real Hello send-on-connect lives in MainViewModel.BuildViewerTransport (still
-        // above ViewerSession, per T9.2a's design note), so drive it explicitly here.
-        await viewer.SendMessageAsync(new NetworkMessage { Type = MessageType.Hello, Data = OurHello.Serialize() });
 
         var ackedHello = await WaitAsync(viewerAcked, "viewer to receive HelloAck");
         Assert.Equal(OurHello.ProtocolVersion, ackedHello.ProtocolVersion);
@@ -90,6 +88,13 @@ public class HelloHandshakeEndToEndTests
         Assert.True(verified);
         Assert.True(host.IsConnected);
         Assert.True(viewer.IsConnected);
+
+        // Negative control for the v1-host heuristic: a host that answered Hello and then
+        // drops must not be reported as a possibly-older host.
+        var viewerDropped = new TaskCompletionSource<bool>();
+        viewer.Disconnected += () => viewerDropped.TrySetResult(viewer.HelloUnansweredAtDisconnect);
+        host.Disconnect();
+        Assert.False(await WaitAsync(viewerDropped, "viewer to see the host drop"));
     }
 
     [Fact]
@@ -105,13 +110,8 @@ public class HelloHandshakeEndToEndTests
         _ = host.StartServerAsync(port, useTls: false);
         await Task.Delay(50); // give the listener a moment to bind before connecting
 
-        using var viewerTransport = new TcpTransport();
-        var viewer = new ViewerSession(viewerTransport);
-        var viewerRejected = new TaskCompletionSource<HelloRejectedMessage>();
-        viewer.HostHelloRejected += r => viewerRejected.TrySetResult(r);
-        viewer.HostHelloAcknowledged += _ => viewerRejected.TrySetException(new Exception("unexpected HostHelloAcknowledged"));
-
-        await viewer.ConnectAsync("127.0.0.1", port, useTls: false);
+        // The viewer itself advertises the mismatched version -- it's what ViewerSession sends
+        // on connect, not a hand-crafted packet.
         var mismatched = new HelloMessage
         {
             ProtocolVersion = unchecked((byte)(OurHello.ProtocolVersion + 1)),
@@ -119,7 +119,12 @@ public class HelloHandshakeEndToEndTests
             Codecs = SupportedCodecs.Jpeg,
             MaxConcurrentStreams = 1
         };
-        await viewer.SendMessageAsync(new NetworkMessage { Type = MessageType.Hello, Data = mismatched.Serialize() });
+        using var viewer = new ViewerSession(() => new TcpTransport(), mismatched);
+        var viewerRejected = new TaskCompletionSource<HelloRejectedMessage>();
+        viewer.HostHelloRejected += r => viewerRejected.TrySetResult(r);
+        viewer.HostHelloAcknowledged += _ => viewerRejected.TrySetException(new Exception("unexpected HostHelloAcknowledged"));
+
+        await viewer.ConnectAsync("127.0.0.1", port, useTls: false);
 
         var reason = await WaitAsync(hostRejected, "host to reject the mismatched Hello");
         Assert.Contains("incompatible", reason);
@@ -141,15 +146,13 @@ public class HelloHandshakeEndToEndTests
         _ = host.StartServerAsync(port, useTls: false);
         await Task.Delay(50); // give the listener a moment to bind before connecting
 
-        using var viewerTransport = new TcpTransport();
         // Viewer answers the handshake with a different secret than the host expects -- this
         // is the real scenario (a stale/guessed connection code), not a hand-crafted packet.
-        var viewer = new ViewerSession(viewerTransport, sessionSecret: "wrong-secret");
+        using var viewer = new ViewerSession(() => new TcpTransport(), OurHello, sessionSecret: "wrong-secret");
         var viewerHandshakeRejected = new TaskCompletionSource<bool>();
         viewer.HandshakeRejected += () => viewerHandshakeRejected.TrySetResult(true);
 
         await viewer.ConnectAsync("127.0.0.1", port, useTls: false);
-        await viewer.SendMessageAsync(new NetworkMessage { Type = MessageType.Hello, Data = OurHello.Serialize() });
 
         Assert.True(await WaitAsync(hostTokenInvalid, "host to detect the invalid handshake token"));
         Assert.True(await WaitAsync(viewerHandshakeRejected, "viewer to be notified of HandshakeRejected"));
@@ -180,5 +183,55 @@ public class HelloHandshakeEndToEndTests
         });
 
         Assert.True(await WaitAsync(incompatible, "host to detect the v1 peer"));
+    }
+
+    [Fact]
+    public async Task V1Host_RealSocket_ClosesOnHelloWithoutReplying_ViewerReportsHelloUnanswered()
+    {
+        int port = GetFreePort();
+
+        // A v1 host has no Hello concept: its strict pre-handshake gate sees an unknown
+        // message type and drops the connection with zero bytes sent back. Simulate exactly
+        // that on the wire with a raw listener: accept, read one full frame (the viewer's
+        // Hello), close.
+        var listener = new TcpListener(IPAddress.Loopback, port);
+        listener.Start();
+        var v1Host = Task.Run(async () =>
+        {
+            using var client = await listener.AcceptTcpClientAsync();
+            var stream = client.GetStream();
+            var lenBuf = new byte[4];
+            await ReadExactAsync(stream, lenBuf);
+            await ReadExactAsync(stream, new byte[BitConverter.ToInt32(lenBuf, 0)]);
+            client.Close();
+        });
+
+        try
+        {
+            using var viewer = new ViewerSession(() => new TcpTransport(), OurHello);
+            var viewerDropped = new TaskCompletionSource<bool>();
+            viewer.Disconnected += () => viewerDropped.TrySetResult(viewer.HelloUnansweredAtDisconnect);
+            viewer.HostHelloAcknowledged += _ => viewerDropped.TrySetException(new Exception("unexpected HostHelloAcknowledged"));
+
+            await viewer.ConnectAsync("127.0.0.1", port, useTls: false);
+
+            Assert.True(await WaitAsync(viewerDropped, "viewer to see the v1 host close"));
+            await v1Host;
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    private static async Task ReadExactAsync(NetworkStream stream, byte[] buf)
+    {
+        int read = 0;
+        while (read < buf.Length)
+        {
+            int n = await stream.ReadAsync(buf, read, buf.Length - read);
+            if (n == 0) throw new EndOfStreamException("peer closed before a full frame arrived");
+            read += n;
+        }
     }
 }

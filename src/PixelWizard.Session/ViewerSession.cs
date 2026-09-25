@@ -14,23 +14,50 @@ namespace PixelWizard.Session;
 /// (<c>MainViewModel</c>'s fields, <c>Dispatcher.UIThread</c>) and only does the
 /// protocol-level work (deserializing, replying on the wire) itself.
 ///
-/// <c>_hostPeerRole</c>/<c>_sessionSecret</c>/<c>_awaitingHelloResponse</c>/
-/// <c>_lastLatencyMs</c> stay MainViewModel fields, not properties here: each is also
-/// read or written from code that has not moved (input-send guards, ConnectDirect/
-/// ConnectViaCode, the metrics timer), so the session only ever reports a new value
-/// outward -- it never becomes the owner of state something outside dispatch depends on.
+/// <c>_hostPeerRole</c>/<c>_sessionSecret</c>/<c>_lastLatencyMs</c> stay MainViewModel
+/// fields, not properties here: each is also read or written from code that has not moved
+/// (input-send guards, ConnectDirect/ConnectViaCode, the metrics timer), so the session
+/// only ever reports a new value outward -- it never becomes the owner of state something
+/// outside dispatch depends on.
+///
+/// T9.3a moved the connect lifecycle's protocol half here: sending Hello on connect and
+/// tracking whether it has been answered (formerly MainViewModel's
+/// <c>_awaitingHelloResponse</c>). The transport comes from an injected factory so this
+/// project never references a concrete transport (Transport.Tcp today, WebRTC in Phase 4).
 /// </summary>
 public sealed class ViewerSession : IDisposable
 {
     private readonly ISessionTransport _transport;
+    private readonly HelloMessage _ourHello;
     private readonly string _sessionSecret;
 
-    public ViewerSession(ISessionTransport transport, string sessionSecret = "")
+    // True from the moment Hello is sent until either any reply arrives or the connection
+    // drops -- the viewer-side heuristic for detecting a v1 host (see
+    // HelloUnansweredAtDisconnect).
+    private bool _awaitingHelloResponse;
+
+    public ViewerSession(Func<ISessionTransport> transportFactory, HelloMessage ourHello, string sessionSecret = "")
     {
-        _transport = transport ?? throw new ArgumentNullException(nameof(transport));
+        if (transportFactory == null) throw new ArgumentNullException(nameof(transportFactory));
+        _transport = transportFactory() ?? throw new InvalidOperationException("transportFactory returned null");
+        _ourHello = ourHello ?? throw new ArgumentNullException(nameof(ourHello));
         _sessionSecret = sessionSecret;
+        _transport.Connected += async () =>
+        {
+            _awaitingHelloResponse = true;
+            await _transport.SendMessageAsync(new NetworkMessage
+            {
+                Type = MessageType.Hello,
+                Data = _ourHello.Serialize()
+            });
+        };
         _transport.Connected += () => Connected?.Invoke();
-        _transport.Disconnected += () => Disconnected?.Invoke();
+        _transport.Disconnected += () =>
+        {
+            HelloUnansweredAtDisconnect = _awaitingHelloResponse;
+            _awaitingHelloResponse = false;
+            Disconnected?.Invoke();
+        };
         _transport.Error += ex => Error?.Invoke(ex);
         _transport.HandlerError += ex => HandlerError?.Invoke(ex);
         _transport.BytesReceived += n => BytesReceived?.Invoke(n);
@@ -40,17 +67,23 @@ public sealed class ViewerSession : IDisposable
 
     public bool IsConnected => _transport.IsConnected;
 
+    // A v1 host has no concept of Hello: its own strict pre-handshake gate sees an
+    // unrecognized message type and disconnects immediately with zero bytes sent back
+    // (nothing like HelloAck/HelloRejected is possible from a build that predates them). So
+    // "we sent Hello and the connection closed before any reply arrived" is the only
+    // observable signal from this side -- not a positive identification (an ordinary network
+    // drop in that same narrow window looks identical), so callers should word it hedged.
+    // Snapshotted when the transport reports Disconnected, just before this session's
+    // Disconnected fires; read it synchronously inside that handler -- the transport can
+    // report Disconnected more than once, and each report takes a fresh snapshot.
+    public bool HelloUnansweredAtDisconnect { get; private set; }
+
     public event Action? Connected;
     public event Action? Disconnected;
     public event Action<Exception>? Error;
     public event Action<Exception>? HandlerError;
     public event Action<int>? BytesReceived;
     public event Action<int>? BytesSent;
-
-    // Fired for every inbound message, before classification -- mirrors the unconditional
-    // "_awaitingHelloResponse = false" that used to sit at the top of OnViewerMessage: any
-    // reply at all proves the host is Hello-aware, regardless of what it turns out to be.
-    public event Action? AnyMessageReceived;
 
     public event Action<byte[]>? FullScreenReceived;
     public event Action<ScreenDelta>? ScreenDeltaReceived;
@@ -71,7 +104,9 @@ public sealed class ViewerSession : IDisposable
     // means either replying on the wire or raising an event for MainViewModel to act on.
     private void OnTransportMessageReceived(NetworkMessage msg)
     {
-        AnyMessageReceived?.Invoke();
+        // Unconditional, before classification: any reply at all proves the host is
+        // Hello-aware, regardless of what it turns out to be.
+        _awaitingHelloResponse = false;
 
         switch (MessageDispatch.ClassifyForViewer(msg.Type))
         {

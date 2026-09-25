@@ -411,7 +411,6 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     // ── Internal state ────────────────────────────────────────────────────────
 
-    private ISessionTransport?    _transport;
     private ISessionTransport?    _hostTransport;
     private ViewerSession?        _viewerSession;
     private HostSession?          _hostSession;
@@ -435,10 +434,6 @@ public class MainViewModel : ReactiveObject, IDisposable
     private string _sessionSecret         = "";
     private string _expectedSessionSecret = "";
     private int    _activeHostPort = 8888;
-
-    // Viewer-side heuristic for detecting a v1 host (see BuildViewerTransport): true from the
-    // moment Hello is sent until either any reply arrives or the connection drops.
-    private bool _awaitingHelloResponse;
 
     // Advertised by whichever host this instance is viewing, learned from HelloAck. Desktop
     // hosts always advertise Full (IInputInjector is always present here); ShareOnly is for a
@@ -536,8 +531,8 @@ public class MainViewModel : ReactiveObject, IDisposable
         Status = $"Connecting to {HostAddress}…";
         try
         {
-            _transport = BuildViewerTransport();
-            await _transport.ConnectAsync(HostAddress.Trim(), 8888, UseTls);
+            _viewerSession = BuildViewerSession();
+            await _viewerSession.ConnectAsync(HostAddress.Trim(), 8888, UseTls);
         }
         catch (Exception ex) { Status = FriendlyError.Describe(ex); IsConnecting = false; }
     }
@@ -556,58 +551,45 @@ public class MainViewModel : ReactiveObject, IDisposable
             _settings.LastRouterAddress = RouterAddress;
             _settings.Save();
             var parts = result.HostEndpoint.Split(':');
-            _transport = BuildViewerTransport();
-            await _transport.ConnectAsync(parts[0], int.Parse(parts[1]), UseTls);
+            _viewerSession = BuildViewerSession();
+            await _viewerSession.ConnectAsync(parts[0], int.Parse(parts[1]), UseTls);
         }
         catch (Exception ex) { Status = FriendlyError.Describe(ex); IsConnecting = false; }
     }
 
-    private ISessionTransport BuildViewerTransport()
+    private ViewerSession BuildViewerSession()
     {
-        var t = new TcpTransport();
-        t.Connected += async () =>
+        // Hello-on-connect and awaiting-Hello tracking live in ViewerSession (T9.3a);
+        // dispatch classification too (T9.2a). MainViewModel's handlers below only do what
+        // still needs Dispatcher.UIThread or touches instance state ViewerSession doesn't
+        // own (see ViewerSession's class comment).
+        var session = new ViewerSession(() => new TcpTransport(), OurHello, _sessionSecret);
+        session.Disconnected += () =>
         {
-            _awaitingHelloResponse = true;
-            await t.SendMessageAsync(new NetworkMessage
+            // Read synchronously: it's a per-report snapshot (see ViewerSession).
+            bool helloUnanswered = session.HelloUnansweredAtDisconnect;
+            Dispatcher.UIThread.Post(() =>
             {
-                Type = MessageType.Hello,
-                Data = OurHello.Serialize()
+                StopFrameTimeoutTimer();
+                IsConnected  = false;
+                IsConnecting = false;
+                Screen       = AppScreen.Viewer;
+                // Deliberately hedged: see ViewerSession.HelloUnansweredAtDisconnect.
+                Status = helloUnanswered
+                    ? "Disconnected — the host may be running an older, incompatible version"
+                    : "Disconnected";
+                _pingTimer?.Stop();
+                KeyboardActive = false;
             });
         };
-        t.Disconnected += () => Dispatcher.UIThread.Post(() =>
-        {
-            StopFrameTimeoutTimer();
-            IsConnected  = false;
-            IsConnecting = false;
-            Screen       = AppScreen.Viewer;
-            // A v1 host has no concept of Hello: its own strict pre-handshake gate sees an
-            // unrecognized message type and disconnects immediately with zero bytes sent back
-            // (nothing like HelloAck/HelloRejected is possible from a build that predates
-            // them). So "we sent Hello and the connection closed before any reply arrived" is
-            // the only observable signal from this side -- unlike the host-side detection
-            // above, it isn't a positive identification (an ordinary network drop in that same
-            // narrow window looks identical), so the wording below is deliberately hedged.
-            Status = _awaitingHelloResponse
-                ? "Disconnected — the host may be running an older, incompatible version"
-                : "Disconnected";
-            _awaitingHelloResponse = false;
-            _pingTimer?.Stop();
-            KeyboardActive = false;
-        });
-        t.BytesReceived   += b => _receivedBytes += b;
-        t.Error += ex => {
-            if (t.IsConnected)
+        session.BytesReceived   += b => _receivedBytes += b;
+        session.Error += ex => {
+            if (session.IsConnected)
                 Dispatcher.UIThread.Post(() => Status = FriendlyError.Describe(ex));
         };
         // A handler bug, not a transport failure -- the connection survives, so this is
         // surfaced for diagnostics only and never touches Status/IsConnected.
-        t.HandlerError += ex => System.Diagnostics.Debug.WriteLine($"[Viewer] handler error (session continues): {ex}");
-
-        // Dispatch classification lives in ViewerSession (T9.2a); MainViewModel's handlers
-        // below only do what still needs Dispatcher.UIThread or touches instance state
-        // ViewerSession doesn't own (see ViewerSession's class comment).
-        var session = new ViewerSession(t, _sessionSecret);
-        session.AnyMessageReceived += () => _awaitingHelloResponse = false;
+        session.HandlerError += ex => System.Diagnostics.Debug.WriteLine($"[Viewer] handler error (session continues): {ex}");
         session.FullScreenReceived += data =>
         {
             ApplyFullScreen(data);
@@ -650,16 +632,13 @@ public class MainViewModel : ReactiveObject, IDisposable
                 Dispatcher.UIThread.Post(() => _ = ClipboardCallback(text));
         };
         session.ChatReceived += text => Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: true, text: text));
-        _viewerSession = session;
-
-        return t;
+        return session;
     }
 
     private void DisconnectViewer()
     {
         StopFrameTimeoutTimer();
-        _transport?.Disconnect();
-        _transport     = null;
+        _viewerSession?.Disconnect();
         _viewerSession = null;
         IsConnected  = false;
         IsConnecting = false;
@@ -1015,7 +994,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     // ── Incoming messages ─────────────────────────────────────────────────────
     // Dispatch (formerly OnViewerMessage/OnHostMessage/HandleHello/HandleHandshake) moved
     // to PixelWizard.Session's ViewerSession (T9.2a) and HostSession (T9.2b) -- see
-    // BuildViewerTransport/BuildHostTransport for the event wiring.
+    // BuildViewerSession/BuildHostTransport for the event wiring.
 
     // ── Feature 1: Clipboard sync ─────────────────────────────────────────────
 
@@ -1032,8 +1011,8 @@ public class MainViewModel : ReactiveObject, IDisposable
             Data = Encoding.UTF8.GetBytes(text)
         };
 
-        if (_transport?.IsConnected == true)
-            await _transport.SendMessageAsync(msg);
+        if (_viewerSession?.IsConnected == true)
+            await _viewerSession.SendMessageAsync(msg);
         else if (_hostTransport?.IsConnected == true)
             await _hostTransport.SendMessageAsync(msg);
     }
@@ -1055,8 +1034,8 @@ public class MainViewModel : ReactiveObject, IDisposable
             Data = Encoding.UTF8.GetBytes(text)
         };
 
-        if (_transport?.IsConnected == true)
-            _ = _transport.SendMessageAsync(msg);
+        if (_viewerSession?.IsConnected == true)
+            _ = _viewerSession.SendMessageAsync(msg);
         else if (_hostTransport?.IsConnected == true)
             _ = _hostTransport.SendMessageAsync(msg);
     }
@@ -1072,8 +1051,8 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private void SendViewerQualityPreset(int index)
     {
-        if (_transport?.IsConnected != true) return;
-        _ = _transport.SendMessageAsync(new NetworkMessage
+        if (_viewerSession?.IsConnected != true) return;
+        _ = _viewerSession.SendMessageAsync(new NetworkMessage
         {
             Type = MessageType.QualityPreset,
             Data = BitConverter.GetBytes(index)
@@ -1139,10 +1118,10 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public async void SendMouseMove(int rx, int ry)
     {
-        if (_transport?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
+        if (_viewerSession?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
         if (Math.Abs(rx - _lastMousePos.x) < 1 && Math.Abs(ry - _lastMousePos.y) < 1) return;
         _lastMousePos = (rx, ry);
-        await _transport.SendMessageAsync(new NetworkMessage
+        await _viewerSession.SendMessageAsync(new NetworkMessage
         {
             Type = MessageType.MouseMove,
             Data = new MouseMoveMessage { X = rx, Y = ry }.Serialize()
@@ -1151,8 +1130,8 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public async void SendMouseClick(int rx, int ry, bool leftButton)
     {
-        if (_transport?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
-        await _transport.SendMessageAsync(new NetworkMessage
+        if (_viewerSession?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
+        await _viewerSession.SendMessageAsync(new NetworkMessage
         {
             Type = MessageType.MouseClick,
             Data = new MouseClickMessage { X = rx, Y = ry, LeftButton = leftButton, RightButton = !leftButton }.Serialize()
@@ -1161,8 +1140,8 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public async void SendMouseDown(int rx, int ry, bool leftButton)
     {
-        if (_transport?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
-        await _transport.SendMessageAsync(new NetworkMessage
+        if (_viewerSession?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
+        await _viewerSession.SendMessageAsync(new NetworkMessage
         {
             Type = MessageType.MouseButtonDown,
             Data = new MouseClickMessage { X = rx, Y = ry, LeftButton = leftButton, RightButton = !leftButton }.Serialize()
@@ -1171,8 +1150,8 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public async void SendMouseUp(int rx, int ry, bool leftButton)
     {
-        if (_transport?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
-        await _transport.SendMessageAsync(new NetworkMessage
+        if (_viewerSession?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
+        await _viewerSession.SendMessageAsync(new NetworkMessage
         {
             Type = MessageType.MouseButtonUp,
             Data = new MouseClickMessage { X = rx, Y = ry, LeftButton = leftButton, RightButton = !leftButton }.Serialize()
@@ -1181,8 +1160,8 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     public async void SendKey(int vk, bool isDown)
     {
-        if (_transport?.IsConnected != true || vk == 0 || !_hostPeerRole.AcceptsInput()) return;
-        await _transport.SendMessageAsync(new NetworkMessage
+        if (_viewerSession?.IsConnected != true || vk == 0 || !_hostPeerRole.AcceptsInput()) return;
+        await _viewerSession.SendMessageAsync(new NetworkMessage
         {
             Type = isDown ? MessageType.KeyPress : MessageType.KeyRelease,
             Data = new KeyMessage { VirtualKey = vk, IsKeyDown = isDown }.Serialize()
@@ -1211,8 +1190,8 @@ public class MainViewModel : ReactiveObject, IDisposable
         _pingTimer = new System.Timers.Timer(2000) { AutoReset = true };
         _pingTimer.Elapsed += async (_, _) =>
         {
-            if (_transport?.IsConnected == true)
-                await _transport.SendMessageAsync(new NetworkMessage
+            if (_viewerSession?.IsConnected == true)
+                await _viewerSession.SendMessageAsync(new NetworkMessage
                 {
                     Type = MessageType.Ping,
                     Data = BitConverter.GetBytes(DateTime.UtcNow.Ticks)
