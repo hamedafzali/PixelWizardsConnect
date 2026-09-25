@@ -103,7 +103,7 @@ public class HostListenerEndToEndTests
             await WaitAsync(viewer2Acked, "second viewer to receive HelloAck");
             var s2 = await WaitAsync(secondVerified, "second viewer to reach HandshakeVerified");
 
-            var first = firstVerified.Task.Result;
+            var first = await firstVerified.Task;
             Assert.NotSame(first, s2);
             Assert.Same(s2Created, s2);
             Assert.Same(s2, listener.Current);
@@ -150,5 +150,29 @@ public class HostListenerEndToEndTests
         // it accepts, and Stop left no relisten behind to open a new one.
         using var probe = new TcpClient();
         await Assert.ThrowsAnyAsync<SocketException>(() => probe.ConnectAsync(IPAddress.Loopback, port));
+    }
+
+    [Fact]
+    public async Task Stop_WhileWaitingForAViewer_CancelsTheListen_NoSessionReachesAnyone()
+    {
+        int port = GetFreePort();
+        var listener = new HostListener(() => new TcpTransport(), OurHello, port, () => false);
+        HostSession? session = null;
+        bool hostConnected = false;
+        listener.SessionCreated += s =>
+        {
+            session = s;
+            s.Connected += () => hostConnected = true;
+        };
+        var listening = listener.StartAsync();
+        await Task.Delay(50);
+
+        listener.Stop();
+
+        Assert.Same(listening, await Task.WhenAny(listening, Task.Delay(TimeSpan.FromSeconds(5))));
+        using var probe = new TcpClient();
+        await Assert.ThrowsAnyAsync<SocketException>(() => probe.ConnectAsync(IPAddress.Loopback, port));
+        Assert.False(hostConnected);
+        Assert.False(session!.IsConnected);
     }
 }

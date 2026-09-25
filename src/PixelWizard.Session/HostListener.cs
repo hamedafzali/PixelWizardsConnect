@@ -81,9 +81,8 @@ public sealed class HostListener
     }
 
     /// <summary>
-    /// Disconnects the current session and makes every later <see cref="RelistenAsync"/> a
-    /// no-op. Known limitation (see BACKLOG): a listen still waiting to accept is not
-    /// cancelled -- <c>TcpTransport.Disconnect</c> doesn't stop its pending accept.
+    /// Disconnects the current session -- including one still waiting to accept, which the
+    /// transport cancels -- and makes every later <see cref="RelistenAsync"/> a no-op.
     /// </summary>
     public void Stop()
     {

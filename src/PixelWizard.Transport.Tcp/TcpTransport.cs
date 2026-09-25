@@ -17,6 +17,11 @@ namespace PixelWizard.Transport.Tcp
         private TcpClient? _tcpClient;
         private Stream? _stream;
         private CancellationTokenSource? _cts;
+        // The listener of a StartServerAsync still waiting to accept. Whoever takes it first
+        // (Interlocked.Exchange) owns the outcome: StartServerAsync after a successful accept,
+        // or Disconnect cancelling the pending accept -- so a stop racing an accept can never
+        // leave a live connection behind.
+        private TcpListener? _pendingListener;
         private bool _isConnected;
         private readonly CertificatePinStore _pinStore;
 
@@ -103,8 +108,26 @@ namespace PixelWizard.Transport.Tcp
             {
                 var listener = new TcpListener(IPAddress.Any, port);
                 listener.Start();
-                _tcpClient = await listener.AcceptTcpClientAsync();
+                _pendingListener = listener;
+                TcpClient accepted;
+                try
+                {
+                    accepted = await listener.AcceptTcpClientAsync();
+                }
+                catch (Exception) when (Volatile.Read(ref _pendingListener) != listener)
+                {
+                    // Disconnect() stopped the pending accept: a deliberate stop, not an
+                    // error, and Disconnect has already raised Disconnected.
+                    return;
+                }
+                if (Interlocked.Exchange(ref _pendingListener, null) != listener)
+                {
+                    // Disconnect() won the race after the accept completed -- drop the client.
+                    accepted.Dispose();
+                    return;
+                }
                 listener.Stop();
+                _tcpClient = accepted;
 
                 Stream stream = _tcpClient.GetStream();
 
@@ -148,6 +171,7 @@ namespace PixelWizard.Transport.Tcp
 
         public void Disconnect()
         {
+            Interlocked.Exchange(ref _pendingListener, null)?.Stop();
             _isConnected = false;
             _cts?.Cancel();
             _stream?.Close();
