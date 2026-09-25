@@ -208,18 +208,58 @@ Rationale for the order:
         not close until this test exists and passes -- a line-count target
         met by code that doesn't work is not a pass. Closes BACKLOG row 4.
         No MainViewModel change (test-only commit).
-  T9.3  Move connection lifecycle: Connect/Disconnect/StartHost/StopHost/
-        RegisterWithRouter/SetupHostServices/RelistenHostAsync.
-        Target: MainViewModel ~850-950 lines.
+  T9.3a Move viewer connect lifecycle into ViewerSession: Hello-on-connect
+        (currently MainViewModel.BuildViewerTransport's t.Connected handler)
+        and awaiting-Hello-response tracking (_awaitingHelloResponse), with
+        the "host closed before answering Hello" condition surfaced as a
+        Session event instead of a MainViewModel flag. Transport construction
+        is injected as a factory (Func<ISessionTransport>) so Session stays
+        Core+Protocol only -- it must not reference Transport.Tcp (Phase 4's
+        SIPSorcery transport plugs in at the same seam). Status strings and
+        UI-thread marshalling stay in MainViewModel.
+        Gate: T9.2c's end-to-end tests stop hand-sending Hello (ViewerSession
+        does it), plus a real-socket test where the host accepts and closes
+        without replying and the viewer reports the "possibly older host"
+        signal. Unit tests for the flag's set/clear/reset transitions.
+        Target: MainViewModel ~1,280-1,290 lines (honest: this is a small,
+        behavior-bearing move, not a size reduction).
+  T9.3b Move host listen/relisten into Session: a long-lived host listener
+        in Session built from an injected transport factory, creating a
+        HostSession per connection and re-listening after disconnect
+        (currently RelistenHostAsync + _relistening guard). Capture loop,
+        WebSocketHostServer, NetworkDiscovery and router registration stay
+        in MainViewModel: Session cannot construct them without taking
+        references ADR-001 forbids; they move with DI at T13.
+        Gate: real-socket test with two sequential viewers served by the same
+        listener (second one gets a fresh HostSession, Hello/handshake state
+        reset, consent gate re-reached), and a test that stopping the host
+        halts relisten.
+        Target: MainViewModel ~1,230-1,260 lines.
   T9.4  Move frame-apply, input-send, clipboard/chat, and timer/watchdog
         logic that only Session needs (not UI-bound state).
-        Target: MainViewModel ~500-650 lines.
+        Target: to be recomputed at T9.3b's close from the actual method
+        sizes -- the original ~500-650 was derived from T9.3's ~850-950,
+        which was never reachable (see T9.3 note below).
   T9.5  Delete the now-dead inline copies left behind by T9.2-T9.4 once
-        Session is confirmed driving dispatch end-to-end (T10's live socket
-        test is part of that confirmation). Target: MainViewModel under
-        ~400-500 lines -- the final <300 gate is T13's, after the per-mode
-        view split removes what's left that's legitimately UI-only.
+        Session is confirmed driving dispatch end-to-end. Target likewise to
+        be recomputed; the final <300 gate is T13's, after DI and the
+        per-mode view split remove what's left that's legitimately UI-only.
   ```
+
+- **T9.3 re-split (decided at T9.2c's close).** The original T9.3 listed
+  Connect/Disconnect/StartHost/StopHost/RegisterWithRouter/SetupHostServices/
+  RelistenHostAsync with a target of ~850-950. Measured at 1,295 lines, those
+  methods total ~202 lines, so even moving every one wholesale caps the file
+  near ~1,093 -- the target was unreachable by construction. Most of that
+  code also can't move: it constructs `TcpTransport`, `CaptureLoop`,
+  `WebSocketHostServer`, `NetworkDiscovery` and `RouterHttpClient`, which
+  would give `PixelWizard.Session` references to Transport.Tcp/Media/
+  Transport.WebSocket that ADR-001 rules out. What *is* Session's concern is
+  the protocol-level lifecycle (Hello-on-connect, awaiting-Hello, per-
+  connection host sessions and relisten), so T9.3 is split into T9.3a/T9.3b
+  along that line with a realistic combined drop of ~40-65 lines. The <300
+  exit gate depends on T13 (DI + per-mode VMs) far more than this plan's
+  original T9 numbers implied.
 
   **Design-constraint finding, flagged now per the T9.1 brief rather than at
   T9.3:** the pure events-outward shape (Session fires a plain event,
@@ -243,6 +283,15 @@ Rationale for the order:
   `Task<bool>` it's handed. Events for one-way notifications, constructor
   delegates for anything that needs an answer back -- that's the shape T9.2b
   should follow, not a pure event surface.
+
+  **As executed (T9.2b), this was not followed:** `HostSession` raises
+  `HandshakeVerified` and `MainViewModel` still awaits `ConsentCallback` via
+  `Dispatcher.UIThread.InvokeAsync`, because `ConsentDialog.Show()` must run
+  on the UI thread and the handshake arrives on the transport's receive
+  thread -- a delegate awaited inside Session would still need that marshal
+  on the MainViewModel side. The consent gate is instead proven by
+  `HostSessionTests` (HandshakeVerified never fires on any rejection path,
+  exactly once on success). Revisit if/when consent moves out with T13.
 
   T9.2's original single-commit shape (35 call sites, ~250-line drop) was the
   one sub-task most likely to overrun on its own terms, so it's split again,
@@ -301,7 +350,8 @@ motion before the big one lands.
 `MainViewModel.cs` line count through the phase so far, measured directly
 from each task's commit (`git show <sha>:.../MainViewModel.cs | wc -l`), not
 carried forward from a prior report: 1,463 (T1) → 1,463 (T2) → 1,469 (T3) →
-1,438 (T5) → 1,438 (T6) → 1,439 (T7) → 1,439 (T8) → 1,439 (T9.1). Not flat
+1,438 (T5) → 1,438 (T6) → 1,439 (T7) → 1,439 (T8) → 1,439 (T9.1) →
+1,418 (T9.2a) → 1,295 (T9.2b) → 1,295 (T9.2c). Not flat
 throughout, as an earlier version of this section claimed: T5's extraction of
 `PixelWizard.Media` dropped 31 lines (capture-loop plumbing and `using`
 directives that moved with it) despite T5's own description not naming
