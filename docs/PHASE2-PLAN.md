@@ -85,6 +85,8 @@ T5b Detector relocation: ScreenChangeDetector + both SkiaScreenChangeDetector
 T9  PixelWizard.Session: HostSession/ViewerSession, zero Dispatcher refs
     [split into T9.1-T9.5 at T8 — see the sub-task breakdown below]
 T10 Live end-to-end Hello-flow socket test (backlog item 4, unblocked by T9)
+    [as executed: the plaintext tests landed at T9.2c and grew in T9.3a/b;
+     72c0e70 adds the TLS path through HostListener, the app's default]
 T11 Extract PixelWizard.Platform.Mac (parity with Windows/Linux hosts)
 T12 Pin-mismatch recovery UI (backlog item 3)
 T13 Split MainViewModel/XAML into thin per-mode views; delete the god object
