@@ -240,6 +240,16 @@ Rationale for the order:
         Target: to be recomputed at T9.3b's close from the actual method
         sizes -- the original ~500-650 was derived from T9.3's ~850-950,
         which was never reachable (see T9.3 note below).
+        Recomputed at T9.3b's close: ~1,210-1,220. Only outbound message
+        construction is session-only. Frame-apply draws on the UI thread
+        (RenderTargetBitmap, _canvas); the frame-timeout, metrics, ping and
+        session-watchdog timers are started/stopped from UI-thread handlers
+        and post to Dispatcher; the input guards read VM state
+        (_hostPeerRole, _lastMousePos) that outlives a session.
+        As executed (90a8282): typed senders on ViewerSession (mouse
+        move/click/down/up, key, quality preset, ping, clipboard, chat) and
+        HostSession (frame, clipboard, chat); guards and timers stay.
+        MainViewModel 1,254 -> 1,210.
   T9.5  Delete the now-dead inline copies left behind by T9.2-T9.4 once
         Session is confirmed driving dispatch end-to-end. Target likewise to
         be recomputed; the final <300 gate is T13's, after DI and the
@@ -351,7 +361,8 @@ motion before the big one lands.
 from each task's commit (`git show <sha>:.../MainViewModel.cs | wc -l`), not
 carried forward from a prior report: 1,463 (T1) → 1,463 (T2) → 1,469 (T3) →
 1,438 (T5) → 1,438 (T6) → 1,439 (T7) → 1,439 (T8) → 1,439 (T9.1) →
-1,418 (T9.2a) → 1,295 (T9.2b) → 1,295 (T9.2c). Not flat
+1,418 (T9.2a) → 1,295 (T9.2b) → 1,295 (T9.2c) → 1,274 (T9.3a) →
+1,254 (T9.3b) → 1,254 (43a4097, transport fix) → 1,210 (T9.4). Not flat
 throughout, as an earlier version of this section claimed: T5's extraction of
 `PixelWizard.Media` dropped 31 lines (capture-loop plumbing and `using`
 directives that moved with it) despite T5's own description not naming
