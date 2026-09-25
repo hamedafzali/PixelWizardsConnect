@@ -88,6 +88,7 @@ T10 Live end-to-end Hello-flow socket test (backlog item 4, unblocked by T9)
     [as executed: the plaintext tests landed at T9.2c and grew in T9.3a/b;
      72c0e70 adds the TLS path through HostListener, the app's default]
 T11 Extract PixelWizard.Platform.Mac (parity with Windows/Linux hosts)
+    [as executed (0be1647): named PixelWizard.MacHost, matching WindowsHost/LinuxHost]
 T12 Pin-mismatch recovery UI (backlog item 3)
 T13 Split MainViewModel/XAML into thin per-mode views; delete the god object
 ```
