@@ -751,11 +751,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             () => _hostListener?.Current?.IsConnected == true);
         _captureLoop.DeltaCapturedAsync = async (delta, full) =>
         {
-            await _hostListener!.Current!.SendMessageAsync(new NetworkMessage
-            {
-                Type = full ? MessageType.FullScreen : MessageType.ScreenDelta,
-                Data = full ? delta.ImageData : delta.Serialize()
-            });
+            await _hostListener!.Current!.SendFrameAsync(delta, full);
 
             if (_wsServer != null)
             {
@@ -985,16 +981,10 @@ public class MainViewModel : ReactiveObject, IDisposable
             text = await GetClipboardCallback();
         if (string.IsNullOrEmpty(text)) return;
 
-        var msg = new NetworkMessage
-        {
-            Type = MessageType.ClipboardText,
-            Data = Encoding.UTF8.GetBytes(text)
-        };
-
         if (_viewerSession?.IsConnected == true)
-            await _viewerSession.SendMessageAsync(msg);
+            await _viewerSession.SendClipboardAsync(text);
         else if (_hostListener?.Current?.IsConnected == true)
-            await _hostListener!.Current!.SendMessageAsync(msg);
+            await _hostListener!.Current!.SendClipboardAsync(text);
     }
 
     // ── Feature 4: Chat ───────────────────────────────────────────────────────
@@ -1008,16 +998,10 @@ public class MainViewModel : ReactiveObject, IDisposable
         bool isHost = _hostListener?.Current?.IsConnected == true;
         ChatMessages.Add(new ChatEntry(DateTime.Now, isHost, text));
 
-        var msg = new NetworkMessage
-        {
-            Type = MessageType.ChatMessage,
-            Data = Encoding.UTF8.GetBytes(text)
-        };
-
         if (_viewerSession?.IsConnected == true)
-            _ = _viewerSession.SendMessageAsync(msg);
+            _ = _viewerSession.SendChatAsync(text);
         else if (_hostListener?.Current?.IsConnected == true)
-            _ = _hostListener!.Current!.SendMessageAsync(msg);
+            _ = _hostListener!.Current!.SendChatAsync(text);
     }
 
     private void ReceiveChatMessage(bool isFromHost, string text)
@@ -1032,11 +1016,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     private void SendViewerQualityPreset(int index)
     {
         if (_viewerSession?.IsConnected != true) return;
-        _ = _viewerSession.SendMessageAsync(new NetworkMessage
-        {
-            Type = MessageType.QualityPreset,
-            Data = BitConverter.GetBytes(index)
-        });
+        _ = _viewerSession.SendQualityPresetAsync(index);
     }
 
     // ── Screen rendering ──────────────────────────────────────────────────────
@@ -1101,51 +1081,31 @@ public class MainViewModel : ReactiveObject, IDisposable
         if (_viewerSession?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
         if (Math.Abs(rx - _lastMousePos.x) < 1 && Math.Abs(ry - _lastMousePos.y) < 1) return;
         _lastMousePos = (rx, ry);
-        await _viewerSession.SendMessageAsync(new NetworkMessage
-        {
-            Type = MessageType.MouseMove,
-            Data = new MouseMoveMessage { X = rx, Y = ry }.Serialize()
-        });
+        await _viewerSession.SendMouseMoveAsync(rx, ry);
     }
 
     public async void SendMouseClick(int rx, int ry, bool leftButton)
     {
         if (_viewerSession?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
-        await _viewerSession.SendMessageAsync(new NetworkMessage
-        {
-            Type = MessageType.MouseClick,
-            Data = new MouseClickMessage { X = rx, Y = ry, LeftButton = leftButton, RightButton = !leftButton }.Serialize()
-        });
+        await _viewerSession.SendMouseClickAsync(rx, ry, leftButton);
     }
 
     public async void SendMouseDown(int rx, int ry, bool leftButton)
     {
         if (_viewerSession?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
-        await _viewerSession.SendMessageAsync(new NetworkMessage
-        {
-            Type = MessageType.MouseButtonDown,
-            Data = new MouseClickMessage { X = rx, Y = ry, LeftButton = leftButton, RightButton = !leftButton }.Serialize()
-        });
+        await _viewerSession.SendMouseDownAsync(rx, ry, leftButton);
     }
 
     public async void SendMouseUp(int rx, int ry, bool leftButton)
     {
         if (_viewerSession?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
-        await _viewerSession.SendMessageAsync(new NetworkMessage
-        {
-            Type = MessageType.MouseButtonUp,
-            Data = new MouseClickMessage { X = rx, Y = ry, LeftButton = leftButton, RightButton = !leftButton }.Serialize()
-        });
+        await _viewerSession.SendMouseUpAsync(rx, ry, leftButton);
     }
 
     public async void SendKey(int vk, bool isDown)
     {
         if (_viewerSession?.IsConnected != true || vk == 0 || !_hostPeerRole.AcceptsInput()) return;
-        await _viewerSession.SendMessageAsync(new NetworkMessage
-        {
-            Type = isDown ? MessageType.KeyPress : MessageType.KeyRelease,
-            Data = new KeyMessage { VirtualKey = vk, IsKeyDown = isDown }.Serialize()
-        });
+        await _viewerSession.SendKeyAsync(vk, isDown);
     }
 
     // ── Metrics ───────────────────────────────────────────────────────────────
@@ -1171,11 +1131,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         _pingTimer.Elapsed += async (_, _) =>
         {
             if (_viewerSession?.IsConnected == true)
-                await _viewerSession.SendMessageAsync(new NetworkMessage
-                {
-                    Type = MessageType.Ping,
-                    Data = BitConverter.GetBytes(DateTime.UtcNow.Ticks)
-                });
+                await _viewerSession.SendPingAsync();
         };
     }
 

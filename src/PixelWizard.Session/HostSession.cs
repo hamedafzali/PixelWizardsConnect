@@ -98,6 +98,17 @@ public sealed class HostSession : IDisposable
     public Task SendMessageAsync(NetworkMessage message) => _transport.SendMessageAsync(message);
     public void Disconnect() => _transport.Disconnect();
 
+    // Outbound frames/clipboard/chat (formerly inline in MainViewModel, moved here in T9.4).
+    // A full frame goes out as the raw image bytes; a delta as its serialized form.
+    public Task SendFrameAsync(ScreenDelta delta, bool full) => full
+        ? Send(MessageType.FullScreen, delta.ImageData)
+        : Send(MessageType.ScreenDelta, delta.Serialize());
+    public Task SendClipboardAsync(string text) => Send(MessageType.ClipboardText, Encoding.UTF8.GetBytes(text));
+    public Task SendChatAsync(string text) => Send(MessageType.ChatMessage, Encoding.UTF8.GetBytes(text));
+
+    private Task Send(MessageType type, byte[] data) =>
+        _transport.SendMessageAsync(new NetworkMessage { Type = type, Data = data });
+
     private void OnTransportMessageReceived(NetworkMessage msg)
     {
         if (!_helloComplete)

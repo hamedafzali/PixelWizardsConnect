@@ -98,6 +98,27 @@ public sealed class ViewerSession : IDisposable
     public Task SendMessageAsync(NetworkMessage message) => _transport.SendMessageAsync(message);
     public void Disconnect() => _transport.Disconnect();
 
+    // Outbound message construction (formerly inline in MainViewModel's input/ping/quality/
+    // clipboard/chat senders, moved here in T9.4). Guards -- IsConnected, the host's
+    // PeerRole, mouse-move de-dupe -- stay with the caller: they read MainViewModel state.
+    public Task SendMouseMoveAsync(int x, int y) => Send(MessageType.MouseMove,
+        new MouseMoveMessage { X = x, Y = y }.Serialize());
+    public Task SendMouseClickAsync(int x, int y, bool leftButton) => Send(MessageType.MouseClick, Click(x, y, leftButton));
+    public Task SendMouseDownAsync(int x, int y, bool leftButton) => Send(MessageType.MouseButtonDown, Click(x, y, leftButton));
+    public Task SendMouseUpAsync(int x, int y, bool leftButton) => Send(MessageType.MouseButtonUp, Click(x, y, leftButton));
+    public Task SendKeyAsync(int virtualKey, bool isDown) => Send(isDown ? MessageType.KeyPress : MessageType.KeyRelease,
+        new KeyMessage { VirtualKey = virtualKey, IsKeyDown = isDown }.Serialize());
+    public Task SendQualityPresetAsync(int index) => Send(MessageType.QualityPreset, BitConverter.GetBytes(index));
+    // Carries UtcNow ticks; the host echoes them in a Pong, which LatencyMeasured reports.
+    public Task SendPingAsync() => Send(MessageType.Ping, BitConverter.GetBytes(DateTime.UtcNow.Ticks));
+    public Task SendClipboardAsync(string text) => Send(MessageType.ClipboardText, Encoding.UTF8.GetBytes(text));
+    public Task SendChatAsync(string text) => Send(MessageType.ChatMessage, Encoding.UTF8.GetBytes(text));
+
+    private static byte[] Click(int x, int y, bool leftButton) =>
+        new MouseClickMessage { X = x, Y = y, LeftButton = leftButton, RightButton = !leftButton }.Serialize();
+    private Task Send(MessageType type, byte[] data) =>
+        _transport.SendMessageAsync(new NetworkMessage { Type = type, Data = data });
+
     // What to do with a message is a pure function of its MessageType
     // (MessageDispatch.ClassifyForViewer, exhaustively unit tested in MessageDispatchTests)
     // -- only how each category is carried out below still touches state, and here that
