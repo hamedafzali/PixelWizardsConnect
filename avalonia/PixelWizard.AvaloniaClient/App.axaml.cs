@@ -51,6 +51,16 @@ public class App : Application
                 return await tcs.Task;
             };
 
+            // ── Pin-mismatch dialog (T12) ─────────────────────────────────────
+            _vm.PinMismatchCallback = async (key, expected, actual) =>
+            {
+                var tcs    = new TaskCompletionSource<bool>();
+                var dialog = new PinMismatchDialog(key, expected, actual);
+                dialog.Closed += (_, _) => tcs.TrySetResult(dialog.Result == true);
+                dialog.Show();
+                return await tcs.Task;
+            };
+
             // ── Feature 7: Tray icon ──────────────────────────────────────────
             var trayIcon = SetupTrayIcon(_mainWindow, _vm);
 

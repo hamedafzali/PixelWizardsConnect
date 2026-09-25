@@ -448,6 +448,8 @@ public class MainViewModel : ReactiveObject, IDisposable
     };
 
     public Func<string, Task<bool>>? ConsentCallback     { get; set; }
+    // (pin key "host:port", recorded fingerprint, presented fingerprint) -> trust the new one?
+    public Func<string, string, string, Task<bool>>? PinMismatchCallback { get; set; }
     public Func<string, Task>?       ClipboardCallback   { get; set; }
     public Func<Task<string?>>?      GetClipboardCallback { get; set; }
 
@@ -555,6 +557,21 @@ public class MainViewModel : ReactiveObject, IDisposable
         catch (Exception ex) { Status = FriendlyError.Describe(ex); IsConnecting = false; }
     }
 
+    // Refusing is the default: nothing changes unless the user explicitly trusts. Trusting
+    // only forgets the old pin; the next connect (which the user starts) pins whatever the
+    // host presents then, exactly as on a first connection.
+    private async Task OfferPinResetAsync(CertificatePinMismatchException mismatch)
+    {
+        if (PinMismatchCallback == null ||
+            !await PinMismatchCallback(mismatch.Key, mismatch.ExpectedFingerprint, mismatch.ActualFingerprint))
+            return;
+
+        int sep = mismatch.Key.LastIndexOf(':');
+        if (sep > 0 && int.TryParse(mismatch.Key[(sep + 1)..], out int port)
+            && TcpTransport.ForgetPin(mismatch.Key[..sep], port))
+            Status = "Old certificate forgotten. Connect again to trust the host's new certificate.";
+    }
+
     private ViewerSession BuildViewerSession()
     {
         // Hello-on-connect and awaiting-Hello tracking live in ViewerSession (T9.3a);
@@ -562,10 +579,16 @@ public class MainViewModel : ReactiveObject, IDisposable
         // still needs Dispatcher.UIThread or touches instance state ViewerSession doesn't
         // own (see ViewerSession's class comment).
         var session = new ViewerSession(() => new TcpTransport(), OurHello, _sessionSecret);
+        // A certificate failure is raised on Error just before the transport disconnects,
+        // while the session is not yet connected -- so the Error handler below would drop it
+        // and the user would only see "Disconnected". Keep it for the Disconnected handler.
+        Exception? certFailure = null;
         session.Disconnected += () =>
         {
             // Read synchronously: it's a per-report snapshot (see ViewerSession).
             bool helloUnanswered = session.HelloUnansweredAtDisconnect;
+            var failure = certFailure;
+            certFailure = null;
             Dispatcher.UIThread.Post(() =>
             {
                 StopFrameTimeoutTimer();
@@ -573,15 +596,21 @@ public class MainViewModel : ReactiveObject, IDisposable
                 IsConnecting = false;
                 Screen       = AppScreen.Viewer;
                 // Deliberately hedged: see ViewerSession.HelloUnansweredAtDisconnect.
-                Status = helloUnanswered
+                Status = failure != null ? FriendlyError.Describe(failure)
+                    : helloUnanswered
                     ? "Disconnected — the host may be running an older, incompatible version"
                     : "Disconnected";
                 _pingTimer?.Stop();
                 KeyboardActive = false;
+                if (failure is CertificatePinMismatchException mismatch)
+                    _ = OfferPinResetAsync(mismatch);
             });
         };
         session.BytesReceived   += b => _receivedBytes += b;
         session.Error += ex => {
+            if (ex is CertificatePinMismatchException or CertificateMissingException
+                   or CertificatePinStoreCorruptedException)
+                certFailure = ex;
             if (session.IsConnected)
                 Dispatcher.UIThread.Post(() => Status = FriendlyError.Describe(ex));
         };

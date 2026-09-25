@@ -17,6 +17,12 @@ public static class FriendlyError
             SocketError.NetworkUnreachable=> "The network is unreachable. Check your connection.",
             _ => "Could not connect to the host. Check the address and try again."
         },
+        PixelWizard.Transport.Tcp.CertificatePinMismatchException =>
+            "Connection refused: this host's identity changed since you last connected. It may be intercepted.",
+        PixelWizard.Transport.Tcp.CertificateMissingException =>
+            "Connection refused: the host did not present a certificate.",
+        PixelWizard.Transport.Tcp.CertificatePinStoreCorruptedException =>
+            "Connection refused: the saved host certificates could not be read, so this host can't be verified.",
         TimeoutException        => "The operation timed out. Please try again.",
         UriFormatException      => "That address is not valid.",
         FormatException         => "That address or code is not in a valid format.",

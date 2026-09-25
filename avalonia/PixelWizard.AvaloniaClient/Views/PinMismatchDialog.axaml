@@ -1,0 +1,90 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="PixelWizard.AvaloniaClient.Views.PinMismatchDialog"
+        Title="Host Identity Changed"
+        Width="480" Height="400"
+        CanResize="False"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        Background="{StaticResource Brush.App.Bg}"
+        ShowInTaskbar="False"
+        AutomationProperties.Name="Host certificate changed warning">
+
+    <Border Background="{StaticResource Brush.Surface}"
+            CornerRadius="12"
+            BoxShadow="0 4 24 0 #28000000"
+            Margin="0">
+        <Grid Margin="28" RowDefinitions="Auto,Auto,*,Auto">
+
+            <!-- Title -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,12">
+                <TextBlock Text="Connection refused: host identity changed"
+                           FontSize="16" FontWeight="SemiBold"
+                           Foreground="{StaticResource Brush.Text.Primary}"/>
+                <TextBlock x:Name="KeyText"
+                           FontSize="12"
+                           Foreground="{StaticResource Brush.Text.Muted}"
+                           Margin="0,2,0,0"/>
+            </StackPanel>
+
+            <!-- Explanation -->
+            <Border Grid.Row="1"
+                    Background="{StaticResource Brush.Warning.Bg}"
+                    BorderBrush="{StaticResource Brush.Warning.Border}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="14,10"
+                    Margin="0,0,0,12">
+                <TextBlock TextWrapping="Wrap" FontSize="13"
+                           Foreground="{StaticResource Brush.Text.Primary}"
+                           Text="This host presented a different certificate than the one recorded the first time you connected. Someone may be intercepting the connection. It can also happen if the host reinstalled PixelWizard. Only trust the new certificate if you can confirm with the host's owner that it changed."/>
+            </Border>
+
+            <!-- Fingerprints -->
+            <Border Grid.Row="2"
+                    Background="{StaticResource Brush.Surface.Input}"
+                    BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="14,12">
+                <StackPanel Spacing="8">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Recorded" FontSize="12"
+                                   Foreground="{StaticResource Brush.Text.Muted}"/>
+                        <SelectableTextBlock x:Name="ExpectedText" FontSize="12" FontFamily="monospace"
+                                             TextWrapping="Wrap"
+                                             Foreground="{StaticResource Brush.Text.Primary}"/>
+                    </StackPanel>
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Presented now" FontSize="12"
+                                   Foreground="{StaticResource Brush.Text.Muted}"/>
+                        <SelectableTextBlock x:Name="ActualText" FontSize="12" FontFamily="monospace"
+                                             TextWrapping="Wrap"
+                                             Foreground="{StaticResource Brush.Text.Primary}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Buttons: refusing is the default; trusting is never the easy path. -->
+            <Grid Grid.Row="3" ColumnDefinitions="*,12,*" Margin="0,16,0,0">
+                <Button Grid.Column="0"
+                        Classes="Danger"
+                        Content="Trust new certificate"
+                        Height="40"
+                        HorizontalAlignment="Stretch"
+                        Click="OnTrust"
+                        AutomationProperties.Name="Trust the host's new certificate"/>
+                <Button Grid.Column="2"
+                        x:Name="RefuseButton"
+                        Classes="Primary"
+                        Content="Don't connect"
+                        IsDefault="True"
+                        Height="40"
+                        HorizontalAlignment="Stretch"
+                        Click="OnRefuse"
+                        AutomationProperties.Name="Don't connect to this host"/>
+            </Grid>
+
+        </Grid>
+    </Border>
+</Window>
