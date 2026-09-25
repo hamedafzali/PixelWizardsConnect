@@ -4,10 +4,10 @@ using System.Runtime.Versioning;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
 
-namespace PixelWizard.AvaloniaClient.Platform.Mac;
+namespace PixelWizard.MacHost;
 
 [SupportedOSPlatform("osx")]
-internal sealed class MacHostProvider : IHostProvider
+public sealed class MacHostProvider : IHostProvider
 {
     public bool IsAvailable => OperatingSystem.IsMacOS();
 

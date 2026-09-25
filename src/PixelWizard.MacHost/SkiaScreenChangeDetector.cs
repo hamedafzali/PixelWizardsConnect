@@ -4,7 +4,7 @@ using System.IO;
 using SkiaSharp;
 using PixelWizard.Protocol;
 
-namespace PixelWizard.AvaloniaClient.Platform.Mac;
+namespace PixelWizard.MacHost;
 
 /// <summary>
 /// Delta detector that works on SKBitmap — no System.Drawing dependency,

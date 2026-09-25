@@ -8,7 +8,7 @@ using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
 using PixelWizard.Protocol;
 
-namespace PixelWizard.AvaloniaClient.Platform.Mac;
+namespace PixelWizard.MacHost;
 
 [SupportedOSPlatform("osx")]
 public sealed class MacScreenCapture : IScreenCapture

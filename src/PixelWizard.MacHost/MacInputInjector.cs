@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using PixelWizard.Core.Interfaces;
 
-namespace PixelWizard.AvaloniaClient.Platform.Mac;
+namespace PixelWizard.MacHost;
 
 /// <summary>
 /// Injects mouse and keyboard input on macOS via CoreGraphics (Quartz) events.

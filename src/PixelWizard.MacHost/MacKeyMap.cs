@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace PixelWizard.AvaloniaClient.Platform.Mac;
+namespace PixelWizard.MacHost;
 
 /// <summary>
 /// Maps Windows Virtual Key codes (sent over the wire) to macOS Carbon/HIToolbox

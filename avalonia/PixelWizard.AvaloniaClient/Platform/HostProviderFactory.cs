@@ -1,7 +1,7 @@
 #if WINDOWS
 using PixelWizard.WindowsHost;
 #else
-using PixelWizard.AvaloniaClient.Platform.Mac;
+using PixelWizard.MacHost;
 using PixelWizard.LinuxHost;
 #endif
 
