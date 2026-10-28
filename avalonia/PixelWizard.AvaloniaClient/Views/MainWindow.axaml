@@ -153,14 +153,9 @@
                                     <TextBlock Text="Host this computer"
                                                FontSize="15" FontWeight="SemiBold"
                                                Foreground="{StaticResource Brush.Text.Primary}"/>
-                                    <TextBlock FontSize="12"
+                                    <TextBlock Text="{Binding HostCardSubtitle}" FontSize="12"
                                                Foreground="{StaticResource Brush.Text.Muted}"
-                                               Margin="0,4,0,0">
-                                        <TextBlock.Text>
-                                            <Binding Path="CanHost"
-                                                     StringFormat="{}Share your screen — {0:available on this device;host not available on this platform}"/>
-                                        </TextBlock.Text>
-                                    </TextBlock>
+                                               Margin="0,4,0,0"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" Text="›" FontSize="20"
                                            Foreground="{StaticResource Brush.Neutral.300}"

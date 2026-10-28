@@ -91,6 +91,9 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private readonly IHostProvider _hostProvider = HostProviderFactory.Create();
     public bool CanHost => _hostProvider.IsAvailable;
+    public string HostCardSubtitle => CanHost
+        ? "Share your screen — available on this device"
+        : "Share your screen — host not available on this platform";
 
     // ── Shared state ──────────────────────────────────────────────────────────
 
