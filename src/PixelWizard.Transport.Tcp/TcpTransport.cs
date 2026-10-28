@@ -320,11 +320,27 @@ namespace PixelWizard.Transport.Tcp
 
         private static readonly string CertPassword = "pixelwizard-transport";
 
-        private static X509Certificate2 GetOrCreateSelfSignedCert()
+        private static readonly object CertLock = new();
+
+        private static X509Certificate2 GetOrCreateSelfSignedCert() => GetOrCreateSelfSignedCert(CertPath);
+
+        // Serialised: listeners starting together must not each mint a key -- the host would
+        // present one certificate while the file (and every later listen) holds another, and on
+        // Windows the losing writer fails outright. The temp-then-move write means no reader
+        // ever loads a half-written file.
+        internal static X509Certificate2 GetOrCreateSelfSignedCert(string path)
         {
-            if (File.Exists(CertPath))
+            lock (CertLock)
             {
-                try { return X509CertificateLoader.LoadPkcs12FromFile(CertPath, CertPassword, X509KeyStorageFlags.Exportable); }
+                return LoadOrCreate(path);
+            }
+        }
+
+        private static X509Certificate2 LoadOrCreate(string path)
+        {
+            if (File.Exists(path))
+            {
+                try { return X509CertificateLoader.LoadPkcs12FromFile(path, CertPassword, X509KeyStorageFlags.Exportable); }
                 catch { /* regenerate */ }
             }
 
@@ -337,9 +353,11 @@ namespace PixelWizard.Transport.Tcp
                 new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
 
             var cert = req.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(5));
-            Directory.CreateDirectory(Path.GetDirectoryName(CertPath)!);
-            File.WriteAllBytes(CertPath, cert.Export(X509ContentType.Pfx, CertPassword));
-            return X509CertificateLoader.LoadPkcs12FromFile(CertPath, CertPassword, X509KeyStorageFlags.Exportable);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            string tmp = $"{path}.{Guid.NewGuid():N}.tmp";
+            File.WriteAllBytes(tmp, cert.Export(X509ContentType.Pfx, CertPassword));
+            File.Move(tmp, path, overwrite: true);
+            return X509CertificateLoader.LoadPkcs12FromFile(path, CertPassword, X509KeyStorageFlags.Exportable);
         }
     }
 }
