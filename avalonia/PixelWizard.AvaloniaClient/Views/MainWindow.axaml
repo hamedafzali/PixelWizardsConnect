@@ -680,7 +680,7 @@
                             <!-- Fit mode -->
                             <Border IsVisible="{Binding IsFitMode}" Background="#020617">
                                 <Grid>
-                                    <Image Stretch="Uniform"
+                                    <Image x:Name="FitScreenImage" Stretch="Uniform"
                                            Source="{Binding RemoteScreen}"
                                            HorizontalAlignment="Stretch"
                                            VerticalAlignment="Stretch"
@@ -708,7 +708,7 @@
                                           Background="#020617"
                                           HorizontalScrollBarVisibility="Auto"
                                           VerticalScrollBarVisibility="Auto">
-                                <Image Source="{Binding RemoteScreen}"
+                                <Image x:Name="ZoomScreenImage" Source="{Binding RemoteScreen}"
                                        Stretch="None"
                                        Width="{Binding ScaledImageWidth}"
                                        Height="{Binding ScaledImageHeight}"

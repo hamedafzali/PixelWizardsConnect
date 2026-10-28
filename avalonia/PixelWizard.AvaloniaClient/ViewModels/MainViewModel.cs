@@ -139,6 +139,11 @@ public class MainViewModel : ReactiveObject, IDisposable
     public bool ShowConnectPanel => !_isConnected;
     public bool InputEnabled     => !_isConnecting;
 
+    // Raised on the UI thread after each frame is drawn into the canvas. Deltas draw into the
+    // same bitmap instance, so RemoteScreen does not change and the Image would not repaint;
+    // the view invalidates it on this event.
+    public event Action? FrameRendered;
+
     private Bitmap? _remoteScreen;
     public Bitmap? RemoteScreen
     {
@@ -1084,6 +1089,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
             RemoteScreen = _canvas;
             _renderedFrames++;
+            FrameRendered?.Invoke();
             toDispose?.Dispose();
         });
     }
@@ -1105,6 +1111,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             dc.DrawImage(patch, new Rect(dx, dy, dw, dh));
             RemoteScreen = _canvas;
             _renderedFrames++;
+            FrameRendered?.Invoke();
         });
     }
 

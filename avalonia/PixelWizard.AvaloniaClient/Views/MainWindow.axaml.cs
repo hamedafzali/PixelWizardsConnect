@@ -9,12 +9,27 @@ namespace PixelWizard.AvaloniaClient.Views;
 
 public partial class MainWindow : Window
 {
+    private MainViewModel? _subscribedVm;
+
     public MainWindow()
     {
         InitializeComponent();
+        DataContextChanged += (_, _) =>
+        {
+            if (_subscribedVm != null) _subscribedVm.FrameRendered -= OnFrameRendered;
+            _subscribedVm = VM;
+            if (_subscribedVm != null) _subscribedVm.FrameRendered += OnFrameRendered;
+        };
     }
 
     private MainViewModel? VM => DataContext as MainViewModel;
+
+    // Frames are drawn into the same bitmap in place, so the Images must be told to repaint.
+    private void OnFrameRendered()
+    {
+        FitScreenImage.InvalidateVisual();
+        ZoomScreenImage.InvalidateVisual();
+    }
 
     // ── Keyboard ─────────────────────────────────────────────────────────────
 
