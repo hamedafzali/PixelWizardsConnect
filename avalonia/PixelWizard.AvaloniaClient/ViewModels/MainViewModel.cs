@@ -377,11 +377,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         set
         {
             this.RaiseAndSetIfChanged(ref _selectedDiscoveredHost, value);
-            if (value != null)
-            {
-                var parts = value.Split(':');
-                HostAddress = parts[0];
-            }
+            if (value != null) HostAddress = value; // "ip:port" -- keeps a non-default port
         }
     }
 
@@ -526,13 +522,18 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private async Task ConnectDirect()
     {
+        if (!DirectAddress.TryParse(HostAddress, out string host, out int port))
+        {
+            Status = "Enter the host's address, e.g. 192.168.1.10 or 192.168.1.10:8888";
+            return;
+        }
         _sessionSecret = "";
         IsConnecting = true;
-        Status = $"Connecting to {HostAddress}…";
+        Status = $"Connecting to {host}:{port}…";
         try
         {
             _viewerSession = BuildViewerSession();
-            await _viewerSession.ConnectAsync(HostAddress.Trim(), 8888, UseTls);
+            await _viewerSession.ConnectAsync(host, port, UseTls);
         }
         catch (Exception ex) { Status = FriendlyError.Describe(ex); IsConnecting = false; }
     }
