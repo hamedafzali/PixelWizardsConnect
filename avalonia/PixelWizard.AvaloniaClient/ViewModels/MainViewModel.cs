@@ -1084,7 +1084,9 @@ public class MainViewModel : ReactiveObject, IDisposable
             EnsureCanvas(Math.Max(_canvasWidth, dx + dw), Math.Max(_canvasHeight, dy + dh));
             using var ms    = new MemoryStream(imageData);
             using var patch = new Bitmap(ms);
-            using var dc    = _canvas!.CreateDrawingContext();
+            // clear: false -- the parameterless overload wipes the canvas to transparent, so
+            // every delta blanked the screen except its own patch until the next full frame.
+            using var dc    = _canvas!.CreateDrawingContext(false);
             dc.DrawImage(patch, new Rect(dx, dy, dw, dh));
             RemoteScreen = _canvas;
             _renderedFrames++;
