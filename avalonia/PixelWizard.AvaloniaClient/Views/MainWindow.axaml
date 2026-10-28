@@ -15,10 +15,12 @@
     <Grid RowDefinitions="*,32">
 
         <!-- ════ Main layout ════ -->
-        <Grid Grid.Row="0" Margin="16" ColumnDefinitions="224,*" ColumnSpacing="16">
+        <Grid Grid.Row="0" Margin="16" ColumnDefinitions="Auto,*">
 
-            <!-- ══ Sidebar ══ -->
-            <Border Grid.Column="0" Background="{StaticResource Brush.Sidebar.Bg}" CornerRadius="12">
+            <!-- ══ Sidebar (collapsible while viewing) ══ -->
+            <Border Grid.Column="0" Width="224" Margin="0,0,16,0"
+                    IsVisible="{Binding ShowSidebar}"
+                    Background="{StaticResource Brush.Sidebar.Bg}" CornerRadius="12">
                 <DockPanel Margin="20" LastChildFill="False">
 
                     <!-- Logo -->
@@ -571,11 +573,21 @@
                                     <TextBlock Text="{Binding BandwidthText}"
                                                Foreground="{StaticResource Brush.Text.OnDarkMuted}"
                                                FontSize="12" VerticalAlignment="Center"/>
+                                    <TextBlock Text="⌨ Keyboard captured"
+                                               IsVisible="{Binding KeyboardActive}"
+                                               Foreground="#6EE7B7"
+                                               FontSize="12" VerticalAlignment="Center"/>
                                 </StackPanel>
 
                                 <!-- Right: [Quality] [Clipboard] [Chat] [Zoom ComboBox] [+] [−] [Disconnect] -->
                                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"
                                             Spacing="4" VerticalAlignment="Center">
+
+                                    <!-- Sidebar toggle -->
+                                    <Button Classes="Toolbar" Content="Panel"
+                                            Command="{Binding ToggleSidebarCommand}" Width="48"
+                                            ToolTip.Tip="Show or hide the side panel"
+                                            AutomationProperties.Name="Toggle side panel"/>
 
                                     <!-- Feature 9: Quality preset ComboBox -->
                                     <ComboBox SelectedIndex="{Binding ViewerQualityIndex}"

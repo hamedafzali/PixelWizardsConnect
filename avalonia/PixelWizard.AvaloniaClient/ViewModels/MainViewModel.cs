@@ -72,6 +72,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             this.RaisePropertyChanged(nameof(ShowViewerPanel));
             this.RaisePropertyChanged(nameof(ShowHostPanel));
             this.RaisePropertyChanged(nameof(ShowScreenDisplay));
+            this.RaisePropertyChanged(nameof(ShowSidebar));
             UpdateWindowTitle();
         }
     }
@@ -80,6 +81,11 @@ public class MainViewModel : ReactiveObject, IDisposable
     public bool ShowViewerPanel   => _screen == AppScreen.Viewer;
     public bool ShowHostPanel     => _screen == AppScreen.Host;
     public bool ShowScreenDisplay => _screen == AppScreen.LiveScreen;
+
+    // The sidebar is collapsed while viewing so the remote screen gets the full width; the
+    // toolbar's Panel button brings it back. Its live stats are duplicated in the toolbar.
+    private bool _sidebarCollapsedWhileViewing = true;
+    public bool ShowSidebar => !(ShowScreenDisplay && _sidebarCollapsedWhileViewing);
 
     // ── Platform ──────────────────────────────────────────────────────────────
 
@@ -401,6 +407,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> ZoomOutCommand            { get; }
     public ReactiveCommand<Unit, Unit> SendClipboardCommand      { get; }
     public ReactiveCommand<Unit, Unit> ToggleChatCommand         { get; }
+    public ReactiveCommand<Unit, Unit> ToggleSidebarCommand      { get; }
     public ReactiveCommand<Unit, Unit> SendChatCommand           { get; }
     public ReactiveCommand<Unit, Unit> ToggleSessionNotesCommand { get; }
     public ReactiveCommand<Unit, Unit> ScanNetworkCommand        { get; }
@@ -485,6 +492,11 @@ public class MainViewModel : ReactiveObject, IDisposable
         });
         SendClipboardCommand      = ReactiveCommand.CreateFromTask(SendClipboardAsync);
         ToggleChatCommand         = ReactiveCommand.Create(() => { ChatVisible = !ChatVisible; });
+        ToggleSidebarCommand      = ReactiveCommand.Create(() =>
+        {
+            _sidebarCollapsedWhileViewing = !_sidebarCollapsedWhileViewing;
+            this.RaisePropertyChanged(nameof(ShowSidebar));
+        });
         SendChatCommand           = ReactiveCommand.Create(SendChatMessage);
         ToggleSessionNotesCommand = ReactiveCommand.Create(() => { SessionNotesVisible = !SessionNotesVisible; });
         ScanNetworkCommand        = ReactiveCommand.Create(ToggleScan);
