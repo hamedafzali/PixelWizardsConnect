@@ -79,19 +79,19 @@
                         </Border>
 
                         <!-- Keyboard badge -->
-                        <Border Background="#14532D" CornerRadius="6" Padding="10,7"
+                        <Border Background="{StaticResource Brush.Badge.Keyboard.Bg}" CornerRadius="6" Padding="10,7"
                                 IsVisible="{Binding Viewer.KeyboardActive}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Ellipse Width="6" Height="6" Fill="#10B981" VerticalAlignment="Center"/>
+                                <Ellipse Width="6" Height="6" Fill="{StaticResource Brush.Indicator.On}" VerticalAlignment="Center"/>
                                 <TextBlock Text="Keyboard captured"
-                                           FontSize="11" Foreground="#6EE7B7" VerticalAlignment="Center"/>
+                                           FontSize="11" Foreground="{StaticResource Brush.Badge.Keyboard.Text}" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Border>
 
                         <!-- TLS badge -->
                         <Border Background="{StaticResource Brush.Sidebar.Surface}" CornerRadius="6" Padding="10,7">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Ellipse Width="6" Height="6" Fill="#10B981" VerticalAlignment="Center"/>
+                                <Ellipse Width="6" Height="6" Fill="{StaticResource Brush.Indicator.On}" VerticalAlignment="Center"/>
                                 <TextBlock Text="TLS encrypted"
                                            FontSize="11"
                                            Foreground="{StaticResource Brush.Text.OnDarkMuted}"
@@ -108,7 +108,7 @@
 
             <!-- ══ Right panel ══ -->
             <Border Grid.Column="1" Background="{StaticResource Brush.Surface}" CornerRadius="12"
-                    BoxShadow="0 0 0 1 #E5E7EB, 0 4 16 0 #18000000">
+                    BoxShadow="{StaticResource Shadow.Card}">
                 <Grid>
 
                     <!-- ─── MODE SELECTION ─── -->
@@ -143,9 +143,9 @@
                                 <Border Grid.Column="0" Width="44" Height="44"
                                         Background="{StaticResource Brush.Success.Bg}"
                                         CornerRadius="10" Margin="0,0,16,0"
-                                        BorderBrush="#2563EB" BorderThickness="3,0,0,0">
+                                        BorderBrush="{StaticResource Brush.Primary}" BorderThickness="3,0,0,0">
                                     <Path Width="20" Height="20" Stretch="Uniform"
-                                          StrokeThickness="1.5" Stroke="#16A34A" Fill="Transparent"
+                                          StrokeThickness="1.5" Stroke="{StaticResource Brush.Success}" Fill="Transparent"
                                           Data="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12 20.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
@@ -173,10 +173,10 @@
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Width="44" Height="44"
-                                        Background="#EFF6FF" CornerRadius="10"
+                                        Background="{StaticResource Brush.Info.Bg}" CornerRadius="10"
                                         Margin="0,0,16,0">
                                     <Path Width="20" Height="20" Stretch="Uniform"
-                                          StrokeThickness="1.5" Stroke="#2563EB" Fill="Transparent"
+                                          StrokeThickness="1.5" Stroke="{StaticResource Brush.Primary}" Fill="Transparent"
                                           Data="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25z"
                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
@@ -337,11 +337,11 @@
 
                             <!-- Connecting status -->
                             <Border IsVisible="{Binding Viewer.IsConnecting}"
-                                    Background="#EFF6FF" BorderBrush="#BFDBFE"
+                                    Background="{StaticResource Brush.Info.Bg}" BorderBrush="{StaticResource Brush.Info.Border}"
                                     BorderThickness="1" CornerRadius="8" Padding="16,12">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Ellipse Width="7" Height="7" Fill="#3B82F6" VerticalAlignment="Center"/>
-                                    <TextBlock Text="Connecting…" FontSize="13" Foreground="#1D4ED8"
+                                    <Ellipse Width="7" Height="7" Fill="{StaticResource Brush.Info}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Connecting…" FontSize="13" Foreground="{StaticResource Brush.Info.Text}"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
@@ -392,7 +392,7 @@
                             </ComboBox>
 
                             <!-- Method toggle -->
-                            <Border Background="#F3F4F6" CornerRadius="9" Padding="3"
+                            <Border Background="{StaticResource Brush.Segmented.Bg}" CornerRadius="9" Padding="3"
                                     Margin="0,0,0,20" HorizontalAlignment="Left">
                                 <StackPanel Orientation="Horizontal" Spacing="2">
                                     <RadioButton Content="Direct" GroupName="HostMethod"
@@ -460,17 +460,17 @@
 
                             <!-- Connection code hero card -->
                             <Border IsVisible="{Binding Host.ShowCodeCard}"
-                                    Background="#EFF6FF" BorderBrush="#BFDBFE"
+                                    Background="{StaticResource Brush.Info.Bg}" BorderBrush="{StaticResource Brush.Info.Border}"
                                     BorderThickness="1" CornerRadius="10"
                                     Padding="20,16" Margin="0,20,0,0">
                                 <Grid ColumnDefinitions="*,Auto">
                                     <StackPanel Grid.Column="0">
                                         <TextBlock Text="SHARE THIS CODE"
                                                    FontSize="10" FontWeight="SemiBold"
-                                                   Foreground="#3B82F6" Margin="0,0,0,4"/>
+                                                   Foreground="{StaticResource Brush.Info}" Margin="0,0,0,4"/>
                                         <TextBlock Text="{Binding Host.HostConnectionCode}"
                                                    FontSize="32" FontWeight="Bold"
-                                                   Foreground="#1E40AF"/>
+                                                   Foreground="{StaticResource Brush.Info.TextStrong}"/>
                                     </StackPanel>
                                     <Button Grid.Column="1" Classes="Ghost"
                                             Content="Copy" Width="68" Height="34"
@@ -486,12 +486,12 @@
 
                             <!-- Web viewer hint -->
                             <Border IsVisible="{Binding Host.ShowWebViewer}"
-                                    Background="{StaticResource Brush.Success.Bg}" BorderBrush="#A7F3D0"
+                                    Background="{StaticResource Brush.Success.Bg}" BorderBrush="{StaticResource Brush.Success.Border}"
                                     BorderThickness="1" CornerRadius="8"
                                     Padding="16,8" Margin="0,8,0,0">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <TextBlock Text="{Binding Host.WebViewerUrl}"
-                                               FontSize="12" Foreground="#065F46"
+                                               FontSize="12" Foreground="{StaticResource Brush.Success.Text}"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
@@ -499,11 +499,11 @@
                             <!-- Status row (no Stop button here — it's in the status bar) -->
                             <Grid ColumnDefinitions="Auto,*" Margin="0,14,0,0">
                                 <Ellipse Grid.Column="0" Width="7" Height="7"
-                                         Fill="#10B981"
+                                         Fill="{StaticResource Brush.Indicator.On}"
                                          VerticalAlignment="Center" Margin="0,0,8,0"
                                          IsVisible="{Binding Host.IsHostRunning}"/>
                                 <Ellipse Grid.Column="0" Width="7" Height="7"
-                                         Fill="#D1D5DB"
+                                         Fill="{StaticResource Brush.Indicator.Off}"
                                          VerticalAlignment="Center" Margin="0,0,8,0"
                                          IsVisible="{Binding !Host.IsHostRunning}"/>
                                 <TextBlock Grid.Column="1" Text="{Binding Host.HostStatus}"
@@ -553,7 +553,7 @@
                                 <!-- Left: live indicator + stats -->
                                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Spacing="16">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Ellipse Width="7" Height="7" Fill="#10B981" VerticalAlignment="Center"/>
+                                        <Ellipse Width="7" Height="7" Fill="{StaticResource Brush.Indicator.On}" VerticalAlignment="Center"/>
                                         <TextBlock Text="Live"
                                                    Foreground="{StaticResource Brush.Text.OnDark}"
                                                    FontWeight="SemiBold" FontSize="12"
@@ -570,7 +570,7 @@
                                                FontSize="12" VerticalAlignment="Center"/>
                                     <TextBlock Text="⌨ Keyboard captured"
                                                IsVisible="{Binding Viewer.KeyboardActive}"
-                                               Foreground="#6EE7B7"
+                                               Foreground="{StaticResource Brush.Badge.Keyboard.Text}"
                                                FontSize="12" VerticalAlignment="Center"/>
                                 </StackPanel>
 
@@ -587,7 +587,7 @@
                                     <!-- Feature 9: Quality preset ComboBox -->
                                     <ComboBox SelectedIndex="{Binding Viewer.ViewerQualityIndex}"
                                               Height="28" FontSize="11"
-                                              Foreground="#E2E8F0" Background="#1E293B"
+                                              Foreground="{StaticResource Brush.Toolbar.Text}" Background="{StaticResource Brush.Toolbar.Surface}"
                                               Width="84"
                                               VerticalAlignment="Center"
                                               ToolTip.Tip="Stream quality"
@@ -610,7 +610,7 @@
                                                 Command="{Binding Chat.ToggleCommand}" Width="44"
                                                 ToolTip.Tip="Toggle chat panel"
                                                 AutomationProperties.Name="Toggle chat panel"/>
-                                        <Border Background="#EF4444" CornerRadius="8"
+                                        <Border Background="{StaticResource Brush.Badge.Unread}" CornerRadius="8"
                                                 Padding="4,1"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                                 Margin="0,-4,-4,0"
@@ -624,7 +624,7 @@
                                     <!-- Zoom ComboBox -->
                                     <ComboBox SelectedIndex="{Binding Viewer.ZoomPresetIndex}"
                                               Height="28" Width="76" FontSize="11"
-                                              Foreground="#E2E8F0" Background="#1E293B"
+                                              Foreground="{StaticResource Brush.Toolbar.Text}" Background="{StaticResource Brush.Toolbar.Surface}"
                                               VerticalAlignment="Center"
                                               ToolTip.Tip="Zoom level"
                                               AutomationProperties.Name="Zoom level">
@@ -662,15 +662,15 @@
                         <Border Grid.Row="1"
                                 IsVisible="{Binding Viewer.ShowNoFramesBanner}"
                                 Background="{StaticResource Brush.Warning.Bg}"
-                                BorderBrush="#F59E0B"
+                                BorderBrush="{StaticResource Brush.Warning.Strong}"
                                 BorderThickness="0,0,0,1" Padding="16,8">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Path Width="16" Height="16" Stretch="Uniform"
-                                      StrokeThickness="1.5" Stroke="#D97706" Fill="Transparent"
+                                      StrokeThickness="1.5" Stroke="{StaticResource Brush.Warning}" Fill="Transparent"
                                       Data="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
                                       VerticalAlignment="Center"/>
                                 <TextBlock Text="No frames received — check connection"
-                                           FontSize="12" Foreground="#92400E"
+                                           FontSize="12" Foreground="{StaticResource Brush.Warning.Text}"
                                            VerticalAlignment="Center"/>
                             </StackPanel>
                         </Border>
@@ -678,7 +678,7 @@
                         <!-- Screen area -->
                         <Grid Grid.Row="2">
                             <!-- Fit mode -->
-                            <Border IsVisible="{Binding Viewer.IsFitMode}" Background="#020617">
+                            <Border IsVisible="{Binding Viewer.IsFitMode}" Background="{StaticResource Brush.Screen.Bg}">
                                 <Grid>
                                     <Image x:Name="FitScreenImage" Stretch="Uniform"
                                            Source="{Binding Viewer.RemoteScreen}"
@@ -694,9 +694,9 @@
                                     <StackPanel IsVisible="{Binding Viewer.RemoteScreen, Converter={x:Static ObjectConverters.IsNull}}"
                                                 HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <TextBlock Text="Waiting for screen…" FontSize="13"
-                                                   Foreground="#475569" HorizontalAlignment="Center"/>
+                                                   Foreground="{StaticResource Brush.Screen.EmptyText}" HorizontalAlignment="Center"/>
                                         <TextBlock Text="The remote screen will appear here once the host starts streaming."
-                                                   FontSize="11" Foreground="#334155"
+                                                   FontSize="11" Foreground="{StaticResource Brush.Screen.EmptySubtext}"
                                                    TextAlignment="Center" TextWrapping="Wrap"
                                                    MaxWidth="280" Margin="0,8,0,0"/>
                                     </StackPanel>
@@ -705,7 +705,7 @@
 
                             <!-- Zoom mode -->
                             <ScrollViewer IsVisible="{Binding !Viewer.IsFitMode}"
-                                          Background="#020617"
+                                          Background="{StaticResource Brush.Screen.Bg}"
                                           HorizontalScrollBarVisibility="Auto"
                                           VerticalScrollBarVisibility="Auto">
                                 <Image x:Name="ZoomScreenImage" Source="{Binding Viewer.RemoteScreen}"
@@ -726,8 +726,8 @@
                         <!-- Feature 4: Chat panel (overlay at bottom) -->
                         <Border Grid.Row="2"
                                 IsVisible="{Binding Chat.Visible}"
-                                Background="#CC0F172A"
-                                BorderBrush="#1E293B"
+                                Background="{StaticResource Brush.Chat.Overlay}"
+                                BorderBrush="{StaticResource Brush.Chat.Border}"
                                 BorderThickness="0,1,0,0"
                                 MaxHeight="200"
                                 VerticalAlignment="Bottom">
@@ -737,7 +737,7 @@
                                       Margin="12,6,12,4">
                                     <TextBlock Grid.Column="0" Text="Chat"
                                                FontSize="11" FontWeight="SemiBold"
-                                               Foreground="#94A3B8" VerticalAlignment="Center"/>
+                                               Foreground="{StaticResource Brush.Text.OnDarkMuted}" VerticalAlignment="Center"/>
                                     <Button Grid.Column="1" Classes="Toolbar" Content="✕"
                                             Width="22" Height="22" Padding="0"
                                             Command="{Binding Chat.ToggleCommand}"
@@ -753,7 +753,7 @@
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding Display}"
                                                            FontSize="11"
-                                                           Foreground="#CBD5E1"
+                                                           Foreground="{StaticResource Brush.Chat.Text}"
                                                            TextWrapping="Wrap"
                                                            Margin="0,2"/>
                                             </DataTemplate>
@@ -765,9 +765,9 @@
                                     <TextBox Grid.Column="0"
                                              Text="{Binding Chat.Input}"
                                              Watermark="Type a message…"
-                                             Background="#1E293B"
-                                             Foreground="#F1F5F9"
-                                             BorderBrush="#334155"
+                                             Background="{StaticResource Brush.Chat.Input.Bg}"
+                                             Foreground="{StaticResource Brush.Text.OnDark}"
+                                             BorderBrush="{StaticResource Brush.Chat.Input.Border}"
                                              Height="36"
                                              FontSize="12"
                                              Margin="0,0,4,0"
@@ -816,10 +816,10 @@
         <!-- ════ First-run onboarding overlay ════ -->
         <Border Grid.Row="0" Grid.RowSpan="2"
                 IsVisible="{Binding ShowOnboarding}"
-                Background="#CC0F172A">
+                Background="{StaticResource Brush.Overlay.Scrim}">
             <Border Background="{StaticResource Brush.Surface}"
                     CornerRadius="14"
-                    BoxShadow="0 8 32 0 #40000000"
+                    BoxShadow="{StaticResource Shadow.Dialog}"
                     MaxWidth="460"
                     Margin="32"
                     HorizontalAlignment="Center"

@@ -35,4 +35,34 @@
     <SolidColorBrush x:Key="Brush.Neutral.500"      Color="#64748B"/>
     <SolidColorBrush x:Key="Brush.Neutral.600"      Color="#475569"/>
 
+    <!-- Moved from MainWindow.axaml (T13.5), values unchanged -->
+    <SolidColorBrush x:Key="Brush.Info"                Color="#3B82F6"/>
+    <SolidColorBrush x:Key="Brush.Info.Bg"             Color="#EFF6FF"/>
+    <SolidColorBrush x:Key="Brush.Info.Border"         Color="#BFDBFE"/>
+    <SolidColorBrush x:Key="Brush.Info.Text"           Color="#1D4ED8"/>
+    <SolidColorBrush x:Key="Brush.Info.TextStrong"     Color="#1E40AF"/>
+    <SolidColorBrush x:Key="Brush.Success.Border"      Color="#A7F3D0"/>
+    <SolidColorBrush x:Key="Brush.Success.Text"        Color="#065F46"/>
+    <SolidColorBrush x:Key="Brush.Warning.Strong"      Color="#F59E0B"/>
+    <SolidColorBrush x:Key="Brush.Warning.Text"        Color="#92400E"/>
+    <SolidColorBrush x:Key="Brush.Indicator.On"        Color="#10B981"/>
+    <SolidColorBrush x:Key="Brush.Indicator.Off"       Color="#D1D5DB"/>
+    <SolidColorBrush x:Key="Brush.Badge.Keyboard.Bg"   Color="#14532D"/>
+    <SolidColorBrush x:Key="Brush.Badge.Keyboard.Text" Color="#6EE7B7"/>
+    <SolidColorBrush x:Key="Brush.Badge.Unread"        Color="#EF4444"/>
+    <SolidColorBrush x:Key="Brush.Segmented.Bg"        Color="#F3F4F6"/>
+    <SolidColorBrush x:Key="Brush.Toolbar.Text"        Color="#E2E8F0"/>
+    <SolidColorBrush x:Key="Brush.Screen.Bg"           Color="#020617"/>
+    <SolidColorBrush x:Key="Brush.Screen.EmptyText"    Color="#475569"/>
+    <SolidColorBrush x:Key="Brush.Screen.EmptySubtext" Color="#334155"/>
+    <SolidColorBrush x:Key="Brush.Chat.Overlay"        Color="#CC0F172A"/>
+    <SolidColorBrush x:Key="Brush.Chat.Border"         Color="#1E293B"/>
+    <SolidColorBrush x:Key="Brush.Chat.Text"           Color="#CBD5E1"/>
+    <SolidColorBrush x:Key="Brush.Chat.Input.Bg"       Color="#1E293B"/>
+    <SolidColorBrush x:Key="Brush.Chat.Input.Border"   Color="#334155"/>
+    <SolidColorBrush x:Key="Brush.Overlay.Scrim"       Color="#CC0F172A"/>
+
+    <BoxShadows x:Key="Shadow.Card">0 0 0 1 #E5E7EB, 0 4 16 0 #18000000</BoxShadows>
+    <BoxShadows x:Key="Shadow.Dialog">0 8 32 0 #40000000</BoxShadows>
+
 </ResourceDictionary>
