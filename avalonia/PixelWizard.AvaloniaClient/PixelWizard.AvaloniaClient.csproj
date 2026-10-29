@@ -8,6 +8,9 @@
     <!-- Allows cross-compiling the windows target from macOS -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Every {Binding} is checked against its x:DataType at build time (AVLN2000 on a
+         typo or a missing property) instead of failing silently at runtime. -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
 
     <!-- App identity & metadata -->
     <Product>PixelWizard Connect</Product>
