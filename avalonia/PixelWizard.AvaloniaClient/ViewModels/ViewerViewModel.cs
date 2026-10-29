@@ -68,10 +68,10 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         ZoomOutCommand        = ReactiveCommand.Create(() =>
         {
             if (_viewScale <= 0) return;
-            int prev = 0;
-            for (int i = 1; i < _zoomPresets.Length; i++)
-                if (_zoomPresets[i] < _viewScale || (_zoomPresets[i] <= _viewScale && i > 0)) { prev = i - 1; break; }
-            ZoomPresetIndex = Math.Max(prev, 0);
+            int prev = 0; // Fit, when nothing is below the current scale
+            for (int i = _zoomPresets.Length - 1; i > 0; i--)
+                if (_zoomPresets[i] < _viewScale) { prev = i; break; }
+            ZoomPresetIndex = prev;
         });
         ScanNetworkCommand    = ReactiveCommand.Create(ToggleScan);
 

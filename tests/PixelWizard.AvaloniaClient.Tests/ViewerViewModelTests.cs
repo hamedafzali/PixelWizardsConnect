@@ -174,18 +174,19 @@ public sealed class ViewerViewModelTests : IDisposable
         Assert.True(vm.IsFitMode);
     }
 
-    // Pins today's behaviour, moved unchanged from MainViewModel: Zoom out goes straight to
-    // Fit from any zoom (its loop picks the first preset below the current one, which is
-    // always 50%, and steps one past it). Known bug, fixed in its own commit.
+    // Zoom out steps down one preset at a time; 50% steps to Fit.
     [Theory]
-    [InlineData(3)] // 100%
-    [InlineData(5)] // 200%
-    public async Task ZoomOut_CurrentlyAlwaysReturnsToFit(int presetIndex)
+    [InlineData(5, 4)] // 200% -> 150%
+    [InlineData(4, 3)] // 150% -> 100%
+    [InlineData(3, 2)] // 100% -> 75%
+    [InlineData(2, 1)] // 75%  -> 50%
+    [InlineData(1, 0)] // 50%  -> Fit
+    public async Task ZoomOut_StepsDownOnePreset(int fromIndex, int toIndex)
     {
         var vm = Vm();
-        vm.ZoomPresetIndex = presetIndex;
+        vm.ZoomPresetIndex = fromIndex;
         await vm.ZoomOutCommand.Execute();
-        Assert.True(vm.IsFitMode);
+        Assert.Equal(toIndex, vm.ZoomPresetIndex);
     }
 
     // ── Disconnect ────────────────────────────────────────────────────────────
