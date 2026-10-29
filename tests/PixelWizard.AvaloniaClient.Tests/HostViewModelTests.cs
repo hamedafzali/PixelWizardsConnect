@@ -400,4 +400,52 @@ public sealed class HostViewModelTests : IDisposable
         Assert.True(_badgeHidden >= 1);
         Assert.Null(vm.ActiveChatLink);
     }
+
+    // The session's disconnect handler is posted to the UI thread, so it runs after Stop has
+    // already reset the host. It must not bring any of that state back.
+    [AvaloniaFact]
+    public async Task Stop_ThenTheLateDisconnect_ChangesNothing()
+    {
+        var vm = Vm();
+        vm.ConsentCallback = _ => Task.FromResult(true);
+        int port = await StartHost(vm);
+        var viewer = await ConnectViewer(port);
+        await WaitUntil(() => _badgeShown == 1, "approval");
+
+        vm.Stop();
+        int afterStop = _shell.Statuses.Count;
+        await WaitUntil(() => viewer.Disconnected, "viewer to be dropped");
+        await Settle();
+
+        Assert.False(vm.IsHostRunning);
+        Assert.Equal("Stopped", vm.HostStatus);
+        Assert.Equal("Idle", vm.TrayTooltip);
+        Assert.Empty(_shell.Statuses.Skip(afterStop));
+    }
+
+    // Stop and start again straight away: the old session's late disconnect belongs to a
+    // listener that is gone, so it must not touch the new host or make it relisten.
+    [AvaloniaFact]
+    public async Task Restart_ThenTheOldSessionsLateDisconnect_LeavesTheNewHostAlone()
+    {
+        var vm = Vm();
+        vm.ConsentCallback = _ => Task.FromResult(true);
+        int port = await StartHost(vm);
+        var viewer = await ConnectViewer(port);
+        await WaitUntil(() => _badgeShown == 1, "approval");
+
+        vm.Stop();
+        int afterStop = _shell.Statuses.Count;
+        int port2 = await StartHost(vm);
+        await WaitUntil(() => viewer.Disconnected, "old viewer to be dropped");
+        await Settle();
+
+        Assert.DoesNotContain("Client disconnected", _shell.Statuses.Skip(afterStop));
+        Assert.DoesNotContain("Waiting for next connection…", _shell.Statuses.Skip(afterStop));
+        Assert.True(vm.IsHostRunning);
+
+        var viewer2 = await ConnectViewer(port2);
+        await WaitUntil(() => _badgeShown == 2, "the new viewer's approval");
+        await WaitUntil(() => Volatile.Read(ref viewer2.Frames) > 0, "frames at the new viewer");
+    }
 }

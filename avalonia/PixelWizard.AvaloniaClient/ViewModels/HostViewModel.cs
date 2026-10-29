@@ -287,8 +287,12 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
             HostStatus    = "Viewer connecting — authenticating…";
             _shell.Status = "Authenticating viewer…";
         });
+        // The handler is posted, so it can run after Stop (or after a restart). Stop already
+        // reset everything; only the listener that created this session may act on it.
+        var owner = _hostListener;
         session.Disconnected += () => Dispatcher.UIThread.Post(async () =>
         {
+            if (_hostListener != owner) return;
             _sessionWatchdog?.Stop();
             HideViewingBadgeCallback?.Invoke();
             TrayTooltip = "Hosting — waiting for viewer";
