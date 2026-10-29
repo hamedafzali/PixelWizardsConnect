@@ -34,6 +34,15 @@ namespace PixelWizard.Tests
             return server;
         }
 
+        // Polls instead of sleeping a fixed time: a loaded CI runner can take longer than any fixed
+        // delay to deliver a frame. Returns on timeout too, so the test's own assertions report it.
+        private static async Task WaitUntilAsync(Func<bool> condition)
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+            while (!condition() && DateTime.UtcNow < deadline)
+                await Task.Delay(10);
+        }
+
         [Fact]
         public async Task UnknownMessageType_IsSkipped_SessionSurvives_NextValidMessageProcessed()
         {
@@ -49,13 +58,13 @@ namespace PixelWizard.Tests
 
             using var client = new TcpTransport();
             await client.ConnectAsync("127.0.0.1", port, useTls: false);
-            await Task.Delay(50);
+            await WaitUntilAsync(() => server.IsConnected);
 
             await client.SendMessageAsync(new NetworkMessage { Type = (MessageType)250, Data = new byte[] { 9, 9 } });
-            await Task.Delay(50);
+            await WaitUntilAsync(() => skipped.Count == 1);
 
             await client.SendMessageAsync(new NetworkMessage { Type = MessageType.Ping, Data = Array.Empty<byte>() });
-            await Task.Delay(50);
+            await WaitUntilAsync(() => received.Count == 1);
 
             Assert.Equal(new byte[] { 250 }, skipped);
             Assert.Single(received);
@@ -80,7 +89,7 @@ namespace PixelWizard.Tests
             using var raw = new TcpClient();
             await raw.ConnectAsync("127.0.0.1", port);
             await raw.GetStream().WriteAsync(BitConverter.GetBytes(0)); // zero outer length: unrecoverable
-            await Task.Delay(100);
+            await WaitUntilAsync(() => disconnected && error != null);
 
             Assert.Empty(skipped);
             Assert.IsType<FramingException>(error);
@@ -107,12 +116,12 @@ namespace PixelWizard.Tests
 
             using var client = new TcpTransport();
             await client.ConnectAsync("127.0.0.1", port, useTls: false);
-            await Task.Delay(50);
+            await WaitUntilAsync(() => server.IsConnected);
 
             await client.SendMessageAsync(new NetworkMessage { Type = MessageType.Ping, Data = Array.Empty<byte>() });
-            await Task.Delay(50);
+            await WaitUntilAsync(() => received.Count == 1);
             await client.SendMessageAsync(new NetworkMessage { Type = MessageType.Ping, Data = Array.Empty<byte>() });
-            await Task.Delay(50);
+            await WaitUntilAsync(() => received.Count == 2);
 
             Assert.Single(handlerErrors);
             Assert.IsType<InvalidOperationException>(handlerErrors[0]);
@@ -137,14 +146,15 @@ namespace PixelWizard.Tests
 
             using var client = new TcpTransport();
             await client.ConnectAsync("127.0.0.1", port, useTls: false);
-            await Task.Delay(50);
+            await WaitUntilAsync(() => server.IsConnected);
 
             for (int i = 0; i < TcpTransport.MaxConsecutiveHandlerFailures; i++)
             {
                 await client.SendMessageAsync(new NetworkMessage { Type = MessageType.Ping, Data = Array.Empty<byte>() });
-                await Task.Delay(30);
+                int expected = i + 1;
+                await WaitUntilAsync(() => handlerErrors.Count == expected);
             }
-            await Task.Delay(50);
+            await WaitUntilAsync(() => disconnected && error != null);
 
             Assert.Equal(TcpTransport.MaxConsecutiveHandlerFailures, handlerErrors.Count);
             Assert.IsType<RepeatedHandlerFailureException>(error);
