@@ -49,6 +49,14 @@ jobs:
           --no-build -c Release -f net9.0
           --logger "console;verbosity=normal"
 
+      # Avalonia client view models, on Avalonia's headless platform. One TFM per OS
+      # like the client itself (net9.0-windows on Windows, net9.0 on macOS), so no -f.
+      - name: Test (Avalonia client)
+        run: >
+          dotnet test tests/PixelWizard.AvaloniaClient.Tests/PixelWizard.AvaloniaClient.Tests.csproj
+          --no-build -c Release
+          --logger "console;verbosity=normal"
+
       # The System.Drawing (WinForms) detector suite only builds/executes on
       # the net9.0-windows TFM. Before T8, PixelWizard.WindowsHost's
       # UseWindowsForms=true pulled in Microsoft.WindowsDesktop.App, which has no
