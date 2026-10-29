@@ -798,7 +798,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         _captureLoop = new CaptureLoop(
             capture,
             () => StreamingSettings.FromPresetIndex(HostQualityIndex),
-            () => _hostListener?.Current?.IsConnected == true);
+            () => _hostListener?.Current?.IsApproved == true);
         _captureLoop.DeltaCapturedAsync = async (delta, full) =>
         {
             await _hostListener!.Current!.SendFrameAsync(delta, full);
@@ -904,6 +904,7 @@ public class MainViewModel : ReactiveObject, IDisposable
                     return;
                 }
 
+                session.Approve();
                 StartSessionWatchdog();
                 HostStatus    = "Client connected — sharing screen";
                 IsHostRunning = true;
@@ -1033,7 +1034,7 @@ public class MainViewModel : ReactiveObject, IDisposable
 
         if (_viewerSession?.IsConnected == true)
             await _viewerSession.SendClipboardAsync(text);
-        else if (_hostListener?.Current?.IsConnected == true)
+        else if (_hostListener?.Current?.IsApproved == true)
             await _hostListener!.Current!.SendClipboardAsync(text);
     }
 
@@ -1045,12 +1046,12 @@ public class MainViewModel : ReactiveObject, IDisposable
         if (string.IsNullOrEmpty(text)) return;
         ChatInput = "";
 
-        bool isHost = _hostListener?.Current?.IsConnected == true;
+        bool isHost = _hostListener?.Current?.IsApproved == true;
         ChatMessages.Add(new ChatEntry(DateTime.Now, isHost, text));
 
         if (_viewerSession?.IsConnected == true)
             _ = _viewerSession.SendChatAsync(text);
-        else if (_hostListener?.Current?.IsConnected == true)
+        else if (_hostListener?.Current?.IsApproved == true)
             _ = _hostListener!.Current!.SendChatAsync(text);
     }
 

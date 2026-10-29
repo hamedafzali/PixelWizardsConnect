@@ -344,7 +344,7 @@ public class HostSessionTests
     }
 
     [Fact]
-    public void PostHandshake_MouseMove_FiresMouseMoveReceived_AndPostHandshakeMessageReceived()
+    public void Approved_MouseMove_FiresMouseMoveReceived_AndPostHandshakeMessageReceived()
     {
         var fake = new FakeSessionTransport();
         var session = new HostSession(fake, TestHello, expectedSessionSecret: "s3cr3t");
@@ -359,6 +359,7 @@ public class HostSessionTests
             Type = MessageType.Handshake,
             Data = Encoding.UTF8.GetBytes("s3cr3t")
         });
+        session.Approve();
         fake.RaiseMessageReceived(new NetworkMessage
         {
             Type = MessageType.MouseMove,
@@ -372,7 +373,7 @@ public class HostSessionTests
     }
 
     [Fact]
-    public void PostHandshake_Ping_SendsPongDirectly_NoEventNeeded()
+    public void Approved_Ping_SendsPongDirectly_NoEventNeeded()
     {
         var fake = new FakeSessionTransport();
         var session = new HostSession(fake, TestHello, expectedSessionSecret: "s3cr3t");
@@ -383,6 +384,7 @@ public class HostSessionTests
             Type = MessageType.Handshake,
             Data = Encoding.UTF8.GetBytes("s3cr3t")
         });
+        session.Approve();
         var pingData = new byte[] { 9, 9 };
         fake.RaiseMessageReceived(new NetworkMessage { Type = MessageType.Ping, Data = pingData });
 
@@ -404,6 +406,7 @@ public class HostSessionTests
             Type = MessageType.Handshake,
             Data = Encoding.UTF8.GetBytes("s3cr3t")
         });
+        session.Approve();
 
         fake.RaiseConnected();
         bool mouseMoveFired = false;
@@ -415,5 +418,135 @@ public class HostSessionTests
         });
 
         Assert.False(mouseMoveFired);
+    }
+
+    // Consent gate: between HandshakeVerified and Approve() the viewer is pending -- nothing
+    // goes out to it and nothing it sends is acted on.
+
+    private static (HostSession, FakeSessionTransport) Verified()
+    {
+        var fake = new FakeSessionTransport { IsConnected = true };
+        var session = new HostSession(fake, TestHello);
+        fake.RaiseMessageReceived(HelloMsg(TestHello));
+        fake.RaiseMessageReceived(new NetworkMessage { Type = MessageType.Handshake, Data = Array.Empty<byte>() });
+        Assert.Equal(MessageType.HandshakeOk, fake.LastSentMessage!.Type);
+        return (session, fake);
+    }
+
+    private static readonly ScreenDelta OnePixel = new() { Width = 1, Height = 1, ImageData = new byte[] { 1 } };
+
+    [Fact]
+    public async System.Threading.Tasks.Task Pending_FramesClipboardChat_AreNotSent()
+    {
+        var (session, fake) = Verified();
+
+        await session.SendFrameAsync(OnePixel, full: true);
+        await session.SendFrameAsync(OnePixel, full: false);
+        await session.SendClipboardAsync("secret");
+        await session.SendChatAsync("hi");
+
+        Assert.False(session.IsApproved);
+        Assert.Equal(MessageType.HandshakeOk, fake.LastSentMessage!.Type); // nothing after it
+    }
+
+    [Fact]
+    public void Pending_ViewerMessages_RaiseNothing_AndPingIsNotAnswered()
+    {
+        var (session, fake) = Verified();
+        int raised = 0;
+        session.PostHandshakeMessageReceived += () => raised++;
+        session.MouseMoveReceived += _ => raised++;
+        session.MouseClickReceived += _ => raised++;
+        session.MouseButtonDownReceived += _ => raised++;
+        session.MouseButtonUpReceived += _ => raised++;
+        session.KeyPressReceived += _ => raised++;
+        session.KeyReleaseReceived += _ => raised++;
+        session.QualityChanged += _ => raised++;
+        session.ClipboardReceived += _ => raised++;
+        session.ChatReceived += _ => raised++;
+
+        var click = new MouseClickMessage { X = 1, Y = 2, LeftButton = true }.Serialize();
+        var key = new KeyMessage { VirtualKey = 0x0D }.Serialize();
+        foreach (var msg in new[]
+        {
+            new NetworkMessage { Type = MessageType.MouseMove, Data = new MouseMoveMessage { X = 1, Y = 2 }.Serialize() },
+            new NetworkMessage { Type = MessageType.MouseClick, Data = click },
+            new NetworkMessage { Type = MessageType.MouseButtonDown, Data = click },
+            new NetworkMessage { Type = MessageType.MouseButtonUp, Data = click },
+            new NetworkMessage { Type = MessageType.KeyPress, Data = key },
+            new NetworkMessage { Type = MessageType.KeyRelease, Data = key },
+            new NetworkMessage { Type = MessageType.QualityPreset, Data = BitConverter.GetBytes(1) },
+            new NetworkMessage { Type = MessageType.ClipboardText, Data = Encoding.UTF8.GetBytes("x") },
+            new NetworkMessage { Type = MessageType.ChatMessage, Data = Encoding.UTF8.GetBytes("x") },
+            new NetworkMessage { Type = MessageType.Ping, Data = new byte[] { 9 } },
+        })
+            fake.RaiseMessageReceived(msg);
+
+        Assert.Equal(0, raised);
+        Assert.Equal(MessageType.HandshakeOk, fake.LastSentMessage!.Type); // no Pong
+        Assert.Equal(0, fake.DisconnectCallCount);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Approve_OpensBothDirections()
+    {
+        var (session, fake) = Verified();
+        bool moved = false;
+        session.MouseMoveReceived += _ => moved = true;
+
+        session.Approve();
+        await session.SendFrameAsync(OnePixel, full: true);
+        fake.RaiseMessageReceived(new NetworkMessage
+        {
+            Type = MessageType.MouseMove,
+            Data = new MouseMoveMessage { X = 1, Y = 2 }.Serialize()
+        });
+
+        Assert.True(session.IsApproved);
+        Assert.Equal(MessageType.FullScreen, fake.LastSentMessage!.Type);
+        Assert.True(moved);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Approve_BeforeHandshake_IsIgnored()
+    {
+        var fake = new FakeSessionTransport { IsConnected = true };
+        var session = new HostSession(fake, TestHello);
+
+        session.Approve(); // before Hello
+        fake.RaiseMessageReceived(HelloMsg(TestHello));
+        session.Approve(); // after Hello, before Handshake
+        fake.RaiseMessageReceived(new NetworkMessage { Type = MessageType.Handshake, Data = Array.Empty<byte>() });
+        await session.SendFrameAsync(OnePixel, full: true);
+
+        Assert.False(session.IsApproved);
+        Assert.Equal(MessageType.HandshakeOk, fake.LastSentMessage!.Type);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task Reconnect_ClearsApproval()
+    {
+        var (session, fake) = Verified();
+        session.Approve();
+
+        fake.RaiseConnected();
+        fake.RaiseMessageReceived(HelloMsg(TestHello));
+        fake.RaiseMessageReceived(new NetworkMessage { Type = MessageType.Handshake, Data = Array.Empty<byte>() });
+        await session.SendFrameAsync(OnePixel, full: true);
+
+        Assert.False(session.IsApproved);
+        Assert.Equal(MessageType.HandshakeOk, fake.LastSentMessage!.Type);
+    }
+
+    [Fact]
+    public void IsApproved_FalseOnceTransportDrops()
+    {
+        var (session, fake) = Verified();
+        session.Approve();
+        Assert.True(session.IsApproved);
+
+        fake.IsConnected = false;
+
+        Assert.False(session.IsApproved);
     }
 }

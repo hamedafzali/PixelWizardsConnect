@@ -38,6 +38,10 @@ public sealed class HostSession : IDisposable
     private readonly string _expectedSessionSecret;
     private bool _helloComplete;
     private bool _handshakeComplete;
+    // Set only by Approve(), i.e. after the host explicitly allowed this viewer. Until then
+    // nothing is sent to the viewer and nothing it sends is acted on -- otherwise a viewer
+    // could watch the screen, or click the host's own consent dialog, while it is open.
+    private volatile bool _approved;
 
     public HostSession(ISessionTransport transport, HelloMessage ourHello, string expectedSessionSecret = "")
     {
@@ -48,6 +52,7 @@ public sealed class HostSession : IDisposable
         {
             _helloComplete = false;
             _handshakeComplete = false;
+            _approved = false;
             Connected?.Invoke();
         };
         _transport.Disconnected += () => Disconnected?.Invoke();
@@ -59,6 +64,18 @@ public sealed class HostSession : IDisposable
     }
 
     public bool IsConnected => _transport.IsConnected;
+
+    /// <summary>True once the host approved this viewer and the connection is still up.</summary>
+    public bool IsApproved => _approved && _transport.IsConnected;
+
+    /// <summary>
+    /// The host's consent decision: from here frames/clipboard/chat go out and viewer input
+    /// is raised. Ignored before the handshake is verified, so approval can't precede it.
+    /// </summary>
+    public void Approve()
+    {
+        if (_handshakeComplete) _approved = true;
+    }
 
     public event Action? Connected;
     public event Action? Disconnected;
@@ -99,14 +116,16 @@ public sealed class HostSession : IDisposable
 
     // Outbound frames/clipboard/chat (formerly inline in MainViewModel, moved here in T9.4).
     // A full frame goes out as the raw image bytes; a delta as its serialized form.
+    // All three are silently dropped until the session is approved.
     public Task SendFrameAsync(ScreenDelta delta, bool full) => full
         ? Send(MessageType.FullScreen, delta.ImageData)
         : Send(MessageType.ScreenDelta, delta.Serialize());
     public Task SendClipboardAsync(string text) => Send(MessageType.ClipboardText, Encoding.UTF8.GetBytes(text));
     public Task SendChatAsync(string text) => Send(MessageType.ChatMessage, Encoding.UTF8.GetBytes(text));
 
-    private Task Send(MessageType type, byte[] data) =>
-        _transport.SendMessageAsync(new NetworkMessage { Type = type, Data = data });
+    private Task Send(MessageType type, byte[] data) => _approved
+        ? _transport.SendMessageAsync(new NetworkMessage { Type = type, Data = data })
+        : Task.CompletedTask;
 
     private void OnTransportMessageReceived(NetworkMessage msg)
     {
@@ -121,6 +140,9 @@ public sealed class HostSession : IDisposable
             HandleHandshake(msg);
             return;
         }
+
+        // Pending consent: drop everything (input, clipboard, chat, quality, ping).
+        if (!_approved) return;
 
         PostHandshakeMessageReceived?.Invoke();
 

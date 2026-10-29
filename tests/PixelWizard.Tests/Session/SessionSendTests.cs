@@ -28,10 +28,16 @@ public class SessionSendTests
         return (new ViewerSession(() => fake, TestHello), fake);
     }
 
+    // Host sends are dropped until the host approves the viewer, so drive the session
+    // through Hello, Handshake and Approve first; the byte checks below are unchanged.
     private static (HostSession, FakeSessionTransport) Host()
     {
         var fake = new FakeSessionTransport();
-        return (new HostSession(fake, TestHello), fake);
+        var session = new HostSession(fake, TestHello);
+        fake.RaiseMessageReceived(new NetworkMessage { Type = MessageType.Hello, Data = TestHello.Serialize() });
+        fake.RaiseMessageReceived(new NetworkMessage { Type = MessageType.Handshake, Data = Array.Empty<byte>() });
+        session.Approve();
+        return (session, fake);
     }
 
     [Fact]
