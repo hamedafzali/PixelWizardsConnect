@@ -42,7 +42,7 @@ public class App : Application
             };
 
             // ── Consent dialog ────────────────────────────────────────────────
-            _vm.ConsentCallback = async endpoint =>
+            _vm.Host.ConsentCallback = async endpoint =>
             {
                 var tcs    = new TaskCompletionSource<bool>();
                 var dialog = new ConsentDialog(endpoint);
@@ -65,16 +65,16 @@ public class App : Application
             var trayIcon = SetupTrayIcon(_mainWindow, _vm);
 
             // Update tray tooltip when TrayTooltip property changes.
-            _vm.PropertyChanged += (_, e) =>
+            _vm.Host.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(MainViewModel.TrayTooltip) && trayIcon != null)
-                    trayIcon.ToolTipText = _vm.TrayTooltip;
+                if (e.PropertyName == nameof(HostViewModel.TrayTooltip) && trayIcon != null)
+                    trayIcon.ToolTipText = _vm.Host.TrayTooltip;
             };
 
             // Feature 7: hide to tray on close while hosting instead of exiting.
             _mainWindow.Closing += (_, e) =>
             {
-                if (_vm.IsHostRunning)
+                if (_vm.Host.IsHostRunning)
                 {
                     e.Cancel = true;
                     _mainWindow.Hide();
@@ -82,7 +82,7 @@ public class App : Application
             };
 
             // ── Feature 8: Viewing badge callbacks ────────────────────────────
-            _vm.ShowViewingBadgeCallback = () =>
+            _vm.Host.ShowViewingBadgeCallback = () =>
             {
                 if (_badgeWindow != null) return;
                 _badgeWindow = new ViewingBadgeWindow();
@@ -99,7 +99,7 @@ public class App : Application
                 _badgeWindow.Show();
             };
 
-            _vm.HideViewingBadgeCallback = () =>
+            _vm.Host.HideViewingBadgeCallback = () =>
             {
                 _badgeWindow?.Close();
                 _badgeWindow = null;
