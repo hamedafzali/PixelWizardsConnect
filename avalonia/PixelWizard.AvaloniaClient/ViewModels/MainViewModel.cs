@@ -892,9 +892,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         {
             _ = Dispatcher.UIThread.InvokeAsync(async () =>
             {
-                bool allowed = ConsentCallback != null
-                    ? await ConsentCallback("incoming viewer")
-                    : true;
+                bool allowed = await ConsentGate.DecideAsync(ConsentCallback, "incoming viewer");
 
                 if (!allowed)
                 {
