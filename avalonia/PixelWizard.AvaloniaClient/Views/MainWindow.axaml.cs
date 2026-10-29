@@ -9,7 +9,7 @@ namespace PixelWizard.AvaloniaClient.Views;
 
 public partial class MainWindow : Window
 {
-    private MainViewModel? _subscribedVm;
+    private ViewerViewModel? _subscribedVm;
 
     public MainWindow()
     {
@@ -22,7 +22,7 @@ public partial class MainWindow : Window
         };
     }
 
-    private MainViewModel? VM => DataContext as MainViewModel;
+    private ViewerViewModel? VM => (DataContext as MainViewModel)?.Viewer;
 
     // Frames are drawn into the same bitmap in place, so the Images must be told to repaint.
     private void OnFrameRendered()

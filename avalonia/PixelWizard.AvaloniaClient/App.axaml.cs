@@ -52,7 +52,7 @@ public class App : Application
             };
 
             // ── Pin-mismatch dialog (T12) ─────────────────────────────────────
-            _vm.PinMismatchCallback = async (key, expected, actual) =>
+            _vm.Viewer.PinMismatchCallback = async (key, expected, actual) =>
             {
                 var tcs    = new TaskCompletionSource<bool>();
                 var dialog = new PinMismatchDialog(key, expected, actual);

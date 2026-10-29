@@ -57,21 +57,21 @@
                                 <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
                                     <TextBlock Grid.Column="0" Text="FPS"
                                                FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding FpsText}"
+                                    <TextBlock Grid.Column="1" Text="{Binding Viewer.FpsText}"
                                                FontSize="12" FontWeight="SemiBold"
                                                Foreground="{StaticResource Brush.Text.OnDark}"/>
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
                                     <TextBlock Grid.Column="0" Text="Latency"
                                                FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding LatencyText}"
+                                    <TextBlock Grid.Column="1" Text="{Binding Viewer.LatencyText}"
                                                FontSize="12" FontWeight="SemiBold"
                                                Foreground="{StaticResource Brush.Text.OnDark}"/>
                                 </Grid>
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBlock Grid.Column="0" Text="Down"
                                                FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
-                                    <TextBlock Grid.Column="1" Text="{Binding BandwidthText}"
+                                    <TextBlock Grid.Column="1" Text="{Binding Viewer.BandwidthText}"
                                                FontSize="12" FontWeight="SemiBold"
                                                Foreground="{StaticResource Brush.Text.OnDark}"/>
                                 </Grid>
@@ -80,7 +80,7 @@
 
                         <!-- Keyboard badge -->
                         <Border Background="#14532D" CornerRadius="6" Padding="10,7"
-                                IsVisible="{Binding KeyboardActive}">
+                                IsVisible="{Binding Viewer.KeyboardActive}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <Ellipse Width="6" Height="6" Fill="#10B981" VerticalAlignment="Center"/>
                                 <TextBlock Text="Keyboard captured"
@@ -224,7 +224,7 @@
 
                             <!-- Loading indicator while connecting -->
                             <ProgressBar IsIndeterminate="True" Height="2"
-                                         IsVisible="{Binding IsConnecting}"
+                                         IsVisible="{Binding Viewer.IsConnecting}"
                                          Margin="0,0,0,8"/>
 
                             <!-- Direct IP -->
@@ -233,15 +233,15 @@
                                        Margin="0,0,0,10"/>
 
                             <!-- Recent hosts -->
-                            <StackPanel IsVisible="{Binding HasRecentHosts}" Margin="0,0,0,12">
+                            <StackPanel IsVisible="{Binding Viewer.HasRecentHosts}" Margin="0,0,0,12">
                                 <TextBlock Text="Recent" FontSize="12" FontWeight="SemiBold"
                                            Foreground="{StaticResource Brush.Text.Secondary}"
                                            Margin="0,0,0,4"/>
-                                <ComboBox ItemsSource="{Binding RecentHosts}"
-                                          SelectedItem="{Binding SelectedRecentHost}"
+                                <ComboBox ItemsSource="{Binding Viewer.RecentHosts}"
+                                          SelectedItem="{Binding Viewer.SelectedRecentHost}"
                                           HorizontalAlignment="Stretch"
                                           FontSize="13"
-                                          IsEnabled="{Binding InputEnabled}"
+                                          IsEnabled="{Binding Viewer.InputEnabled}"
                                           ToolTip.Tip="Recently connected hosts"
                                           AutomationProperties.Name="Recent hosts"/>
                             </StackPanel>
@@ -250,38 +250,38 @@
                                        Foreground="{StaticResource Brush.Text.Secondary}"
                                        Margin="0,0,0,4"/>
                             <Grid ColumnDefinitions="*,10,120" Margin="0,0,0,12">
-                                <TextBox Grid.Column="0" Text="{Binding HostAddress}"
-                                         Watermark="192.168.1.10" IsEnabled="{Binding InputEnabled}"
+                                <TextBox Grid.Column="0" Text="{Binding Viewer.HostAddress}"
+                                         Watermark="192.168.1.10" IsEnabled="{Binding Viewer.InputEnabled}"
                                          KeyDown="OnAddressKeyDown"
                                          AutomationProperties.Name="Remote host IP address"/>
                                 <Button Grid.Column="2" Classes="Primary" Content="Connect"
-                                        Command="{Binding ConnectDirectCommand}"
-                                        IsEnabled="{Binding InputEnabled}"
+                                        Command="{Binding Viewer.ConnectDirectCommand}"
+                                        IsEnabled="{Binding Viewer.InputEnabled}"
                                         HorizontalAlignment="Stretch"
                                         AutomationProperties.Name="Connect via IP address"/>
                             </Grid>
 
                             <!-- Network discovery -->
                             <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4"
-                                        IsVisible="{Binding !IsConnecting}">
+                                        IsVisible="{Binding !Viewer.IsConnecting}">
                                 <Button Classes="Secondary" Content="Scan network"
-                                        IsVisible="{Binding !IsScanning}"
-                                        Command="{Binding ScanNetworkCommand}"
+                                        IsVisible="{Binding !Viewer.IsScanning}"
+                                        Command="{Binding Viewer.ScanNetworkCommand}"
                                         AutomationProperties.Name="Scan local network"
                                         ToolTip.Tip="Scan local network for PixelWizard hosts (10 s)"/>
                                 <Button Classes="Secondary" Content="Stop scan"
-                                        IsVisible="{Binding IsScanning}"
-                                        Command="{Binding ScanNetworkCommand}"
+                                        IsVisible="{Binding Viewer.IsScanning}"
+                                        Command="{Binding Viewer.ScanNetworkCommand}"
                                         AutomationProperties.Name="Stop scanning"/>
-                                <TextBlock Text="{Binding DiscoveredHosts.Count, StringFormat='{}{0} found'}"
+                                <TextBlock Text="{Binding Viewer.DiscoveredHosts.Count, StringFormat='{}{0} found'}"
                                            FontSize="12" Foreground="{StaticResource Brush.Text.Muted}"
                                            VerticalAlignment="Center"
-                                           IsVisible="{Binding IsScanning}"/>
+                                           IsVisible="{Binding Viewer.IsScanning}"/>
                             </StackPanel>
 
-                            <ListBox ItemsSource="{Binding DiscoveredHosts}"
-                                     IsVisible="{Binding DiscoveredHosts.Count}"
-                                     SelectedItem="{Binding SelectedDiscoveredHost}"
+                            <ListBox ItemsSource="{Binding Viewer.DiscoveredHosts}"
+                                     IsVisible="{Binding Viewer.DiscoveredHosts.Count}"
+                                     SelectedItem="{Binding Viewer.SelectedDiscoveredHost}"
                                      Margin="0,0,0,16" MaxHeight="120"
                                      BorderBrush="{StaticResource Brush.Border}"
                                      BorderThickness="1" CornerRadius="8"
@@ -306,37 +306,37 @@
                             <TextBlock Text="Router Address" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Secondary}"
                                        Margin="0,0,0,4"/>
-                            <TextBox Text="{Binding RouterAddress}"
+                            <TextBox Text="{Binding Viewer.RouterAddress}"
                                      Watermark="router.example.com:9000"
-                                     IsEnabled="{Binding InputEnabled}"
+                                     IsEnabled="{Binding Viewer.InputEnabled}"
                                      Margin="0,0,0,14"
                                      AutomationProperties.Name="Router address"/>
                             <TextBlock Text="Connection Code" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Secondary}"
                                        Margin="0,0,0,4"/>
                             <Grid ColumnDefinitions="*,10,120" Margin="0,0,0,20">
-                                <TextBox Grid.Column="0" Text="{Binding ConnectionCode}"
-                                         Watermark="AB12CD" IsEnabled="{Binding InputEnabled}"
+                                <TextBox Grid.Column="0" Text="{Binding Viewer.ConnectionCode}"
+                                         Watermark="AB12CD" IsEnabled="{Binding Viewer.InputEnabled}"
                                          FontSize="18" FontWeight="SemiBold"
                                          KeyDown="OnCodeKeyDown"
                                          AutomationProperties.Name="Connection code"/>
                                 <Button Grid.Column="2" Classes="Primary" Content="Connect"
-                                        Command="{Binding ConnectViaCodeCommand}"
-                                        IsEnabled="{Binding InputEnabled}"
+                                        Command="{Binding Viewer.ConnectViaCodeCommand}"
+                                        IsEnabled="{Binding Viewer.InputEnabled}"
                                         HorizontalAlignment="Stretch"
                                         AutomationProperties.Name="Connect via code"/>
                             </Grid>
 
                             <!-- Advanced expander with TLS -->
                             <Expander Header="Advanced" Margin="0,0,0,16">
-                                <CheckBox IsChecked="{Binding UseTls}" Margin="0,8,0,0">
+                                <CheckBox IsChecked="{Binding Viewer.UseTls}" Margin="0,8,0,0">
                                     <TextBlock Text="Use TLS (recommended)" FontSize="12"
                                                Foreground="{StaticResource Brush.Text.Muted}"/>
                                 </CheckBox>
                             </Expander>
 
                             <!-- Connecting status -->
-                            <Border IsVisible="{Binding IsConnecting}"
+                            <Border IsVisible="{Binding Viewer.IsConnecting}"
                                     Background="#EFF6FF" BorderBrush="#BFDBFE"
                                     BorderThickness="1" CornerRadius="8" Padding="16,12">
                                 <StackPanel Orientation="Horizontal" Spacing="10">
@@ -559,17 +559,17 @@
                                                    FontWeight="SemiBold" FontSize="12"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
-                                    <TextBlock Text="{Binding FpsText}"
+                                    <TextBlock Text="{Binding Viewer.FpsText}"
                                                Foreground="{StaticResource Brush.Text.OnDarkMuted}"
                                                FontSize="12" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding LatencyText}"
+                                    <TextBlock Text="{Binding Viewer.LatencyText}"
                                                Foreground="{StaticResource Brush.Text.OnDarkMuted}"
                                                FontSize="12" VerticalAlignment="Center"/>
-                                    <TextBlock Text="{Binding BandwidthText}"
+                                    <TextBlock Text="{Binding Viewer.BandwidthText}"
                                                Foreground="{StaticResource Brush.Text.OnDarkMuted}"
                                                FontSize="12" VerticalAlignment="Center"/>
                                     <TextBlock Text="⌨ Keyboard captured"
-                                               IsVisible="{Binding KeyboardActive}"
+                                               IsVisible="{Binding Viewer.KeyboardActive}"
                                                Foreground="#6EE7B7"
                                                FontSize="12" VerticalAlignment="Center"/>
                                 </StackPanel>
@@ -585,7 +585,7 @@
                                             AutomationProperties.Name="Toggle side panel"/>
 
                                     <!-- Feature 9: Quality preset ComboBox -->
-                                    <ComboBox SelectedIndex="{Binding ViewerQualityIndex}"
+                                    <ComboBox SelectedIndex="{Binding Viewer.ViewerQualityIndex}"
                                               Height="28" FontSize="11"
                                               Foreground="#E2E8F0" Background="#1E293B"
                                               Width="84"
@@ -622,7 +622,7 @@
                                     </Panel>
 
                                     <!-- Zoom ComboBox -->
-                                    <ComboBox SelectedIndex="{Binding ZoomPresetIndex}"
+                                    <ComboBox SelectedIndex="{Binding Viewer.ZoomPresetIndex}"
                                               Height="28" Width="76" FontSize="11"
                                               Foreground="#E2E8F0" Background="#1E293B"
                                               VerticalAlignment="Center"
@@ -638,19 +638,19 @@
 
                                     <!-- Zoom In -->
                                     <Button Classes="Toolbar" Content="+"
-                                            Command="{Binding ZoomInCommand}" Width="28"
+                                            Command="{Binding Viewer.ZoomInCommand}" Width="28"
                                             ToolTip.Tip="Zoom in"
                                             AutomationProperties.Name="Zoom in"/>
 
                                     <!-- Zoom Out -->
                                     <Button Classes="Toolbar" Content="−"
-                                            Command="{Binding ZoomOutCommand}" Width="28"
+                                            Command="{Binding Viewer.ZoomOutCommand}" Width="28"
                                             ToolTip.Tip="Zoom out"
                                             AutomationProperties.Name="Zoom out"/>
 
                                     <!-- Disconnect -->
                                     <Button Classes="Danger" Content="Disconnect"
-                                            Command="{Binding DisconnectCommand}"
+                                            Command="{Binding Viewer.DisconnectCommand}"
                                             Height="28" FontSize="11" Padding="10,0"
                                             ToolTip.Tip="End session and disconnect"
                                             AutomationProperties.Name="Disconnect from session"/>
@@ -660,7 +660,7 @@
 
                         <!-- Feature 3: No-frames warning banner -->
                         <Border Grid.Row="1"
-                                IsVisible="{Binding ShowNoFramesBanner}"
+                                IsVisible="{Binding Viewer.ShowNoFramesBanner}"
                                 Background="{StaticResource Brush.Warning.Bg}"
                                 BorderBrush="#F59E0B"
                                 BorderThickness="0,0,0,1" Padding="16,8">
@@ -678,10 +678,10 @@
                         <!-- Screen area -->
                         <Grid Grid.Row="2">
                             <!-- Fit mode -->
-                            <Border IsVisible="{Binding IsFitMode}" Background="#020617">
+                            <Border IsVisible="{Binding Viewer.IsFitMode}" Background="#020617">
                                 <Grid>
                                     <Image x:Name="FitScreenImage" Stretch="Uniform"
-                                           Source="{Binding RemoteScreen}"
+                                           Source="{Binding Viewer.RemoteScreen}"
                                            HorizontalAlignment="Stretch"
                                            VerticalAlignment="Stretch"
                                            Cursor="Cross"
@@ -691,7 +691,7 @@
                                            PointerEntered="OnScreenPointerEntered"
                                            PointerExited="OnScreenPointerExited"/>
                                     <!-- Empty state -->
-                                    <StackPanel IsVisible="{Binding RemoteScreen, Converter={x:Static ObjectConverters.IsNull}}"
+                                    <StackPanel IsVisible="{Binding Viewer.RemoteScreen, Converter={x:Static ObjectConverters.IsNull}}"
                                                 HorizontalAlignment="Center" VerticalAlignment="Center">
                                         <TextBlock Text="Waiting for screen…" FontSize="13"
                                                    Foreground="#475569" HorizontalAlignment="Center"/>
@@ -704,14 +704,14 @@
                             </Border>
 
                             <!-- Zoom mode -->
-                            <ScrollViewer IsVisible="{Binding !IsFitMode}"
+                            <ScrollViewer IsVisible="{Binding !Viewer.IsFitMode}"
                                           Background="#020617"
                                           HorizontalScrollBarVisibility="Auto"
                                           VerticalScrollBarVisibility="Auto">
-                                <Image x:Name="ZoomScreenImage" Source="{Binding RemoteScreen}"
+                                <Image x:Name="ZoomScreenImage" Source="{Binding Viewer.RemoteScreen}"
                                        Stretch="None"
-                                       Width="{Binding ScaledImageWidth}"
-                                       Height="{Binding ScaledImageHeight}"
+                                       Width="{Binding Viewer.ScaledImageWidth}"
+                                       Height="{Binding Viewer.ScaledImageHeight}"
                                        HorizontalAlignment="Left"
                                        VerticalAlignment="Top"
                                        Cursor="Cross"
