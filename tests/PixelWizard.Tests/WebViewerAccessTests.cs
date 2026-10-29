@@ -97,4 +97,24 @@ public class WebViewerAccessTests
 
         Assert.False(await TryOpenStreamAsync(lanIp.ToString(), port, origin: null));
     }
+
+    // Stop runs on the host's UI thread, so a browser that never answers the close (still
+    // open but not reading, or already gone) must not hold it up.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Stop_WithAClientThatNeverAnswersTheClose_FinishesPromptly(bool clientGone)
+    {
+        int port = GetFreePort();
+        var server = new WebSocketHostServer(port);
+        server.Start();
+        using var ws = new ClientWebSocket();
+        ws.Options.SetRequestHeader("Origin", $"http://localhost:{port}");
+        await ws.ConnectAsync(new Uri($"ws://localhost:{port}/stream"), CancellationToken.None);
+        if (clientGone) ws.Abort();
+
+        var stop = Task.Run(server.Stop);
+        Assert.Same(stop, await Task.WhenAny(stop, Task.Delay(TimeSpan.FromSeconds(10))));
+        await stop;
+    }
 }

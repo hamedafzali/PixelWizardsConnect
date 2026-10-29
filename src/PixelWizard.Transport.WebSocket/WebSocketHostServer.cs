@@ -51,13 +51,19 @@ namespace PixelWizard.Transport.WebSocket
             Task.Run(() => AcceptLoop(_cts.Token));
         }
 
+        // How long Stop waits to send each client the close frame.
+        private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(2);
+
         public void Stop()
         {
             _cts?.Cancel();
+            // Send the close frame but don't wait for the browser's reply: a client that has
+            // gone or never reads would never answer, and Stop runs on the UI thread.
             foreach (var ws in _clients.Values)
             {
-                try { ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Server stopping", CancellationToken.None).GetAwaiter().GetResult(); }
+                try { ws.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "Server stopping", CancellationToken.None).Wait(CloseTimeout); }
                 catch { /* ignore */ }
+                ws.Abort();
             }
             _clients.Clear();
             _listener?.Stop();
