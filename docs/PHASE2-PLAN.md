@@ -93,6 +93,7 @@ T12 Pin-mismatch recovery UI (backlog item 3)
     [as executed (314930c): PinMismatchDialog, refuse-by-default, Trust = ForgetPin;
      MainViewModel +29 lines (1,210 -> 1,239) -- new UI wiring, not a move]
 T13 Split MainViewModel/XAML into thin per-mode views; delete the god object
+    [split into T13.0-T13.8 before starting -- see the T13 breakdown below]
 ```
 
 **T4 note:** this plan's own intro (above) describes the `PixelWizard.Core` split — wire
@@ -313,7 +314,7 @@ Rationale for the order:
   thread -- a delegate awaited inside Session would still need that marshal
   on the MainViewModel side. The consent gate is instead proven by
   `HostSessionTests` (HandshakeVerified never fires on any rejection path,
-  exactly once on success). Revisit if/when consent moves out with T13.
+  exactly once on success). Revisit if/when consent moves out with T13 (planned as T13.1).
 
   T9.2's original single-commit shape (35 call sites, ~250-line drop) was the
   one sub-task most likely to overrun on its own terms, so it's split again,
@@ -334,6 +335,82 @@ Rationale for the order:
   lands. If any sub-task's actual line-count delta misses its target by a
   wide margin, that's the signal to stop and re-split rather than push through
   (Hard Rule: larger than described → stop and report).
+
+## T13 breakdown
+
+Written at T13.0 with the code in hand. Starting point: `MainViewModel.cs`
+1,263 lines, `MainWindow.axaml` 891 lines (39 hex colour literals, 111 literal
+Margin/Padding/Spacing values), `MainWindow.axaml.cs` 138 lines (keyboard and
+pointer forwarding into the view model). Rough sizes of what moves, from the
+file's own section headers: viewer role ~520 lines, host role ~370, chat and
+clipboard ~70. What remains is navigation, onboarding, window title, the
+constructor and commands, so the <300 gate is reachable but not by much.
+
+```
+T13.0 Safety prerequisites (done, before any move):
+        8f6b62a  HostSession.Approve()/IsApproved: no frames/clipboard/chat out
+                 and no viewer input acted on until Allow. Before this, frames
+                 went out from TLS accept and a pending viewer could click the
+                 host's own Allow button (reproduced Windows -> Mac).
+        d6b8a6c  ConsentGate: consent fails closed (no dialog, throw, fault,
+                 cancel all deny). Previously a null callback approved.
+        391e217  Browser viewer: localhost-only, foreign Origin refused.
+        18894f6  Compiled bindings by default: a binding path broken by a move
+                 is a build error (AVLN2000), not a silently dead control.
+T13.1 Consent orchestration into Session: HostSession.ResolveConsentAsync(
+        decider) runs ConsentGate then Approve() or Disconnect(). The view
+        model keeps only the UI-thread marshal inside the decider it passes.
+        Gate: fake-transport tests for allow / deny / throw / null decider
+        (approved vs. disconnected), so the consent branch is no longer code
+        that has to survive the HostViewModel move by being copied correctly.
+T13.2 ChatViewModel (messages, input, visibility, unread count, send/receive)
+        plus clipboard send, shared by both roles through a send delegate.
+        (a) add with unit tests, unused; (b) MainViewModel exposes it as
+        Chat, XAML binds Chat.*, old members deleted. Target: ~-70 lines.
+T13.3 ViewerViewModel: connect/disconnect, ViewerSession wiring, canvas
+        (ApplyFullScreen/ApplyDelta/EnsureCanvas), zoom, metrics and ping,
+        frame-timeout banner, viewer quality, recent hosts, discovery, pin
+        mismatch offer, input forwarding. (a) add, (b) switch and delete.
+        Target: ~-500 lines.
+T13.4 HostViewModel: start/stop (direct and router), HostListener and
+        HostSession wiring, capture loop, monitors, web viewer, session
+        notes, watchdog, consent via T13.1. (a) add, (b) switch and delete.
+        Gate in addition to the suite: HostApprovalEndToEndTests,
+        ConsentGateTests and the T13.1 tests unchanged and green.
+        Target: ~-350 lines.
+T13.5 Literal consolidation (per the backlog note below): the 39 colours and
+        repeated spacing values in MainWindow.axaml into the existing
+        Styles/ ResourceDictionaries. No visual value changes. Done before the
+        XAML split so the literals are moved once, already named.
+T13.6 XAML split into UserControls, each with x:DataType on its own view
+        model: ModeSelectionView, ViewerConnectView, HostView, LiveScreenView
+        (toolbar, screen, chat overlay; takes the pointer/keyboard code-behind
+        with it), SidebarView, StatusBar, OnboardingOverlay. One commit per
+        view or small group. MainWindow becomes a shell of ContentControls.
+T13.7 Composition root in App: App constructs settings, host provider,
+        known-hosts store and dialog callbacks and passes them into the view
+        models' constructors (hand-written, no container package unless the
+        number of services makes one pay for itself). Remaining MainViewModel
+        is the shell: navigation, window title, onboarding, child VMs.
+        Gate: MainViewModel < 300 lines (the phase exit gate).
+T13.8 Manual smoke on Mac and Windows, both directions, before calling T13
+        done: LAN connect; consent Allow / Deny / Escape / close and that a
+        pending viewer sees nothing and cannot move the mouse; screen share,
+        input, clipboard, chat, zoom, quality; disconnect and reconnect;
+        router-code path; browser viewer on localhost.
+```
+
+Each (a)/(b) pair follows the Risk table's T13 rule: the replacement lands
+and works while the original still exists, and the delete is its own commit,
+so reverting (b) alone restores the old wiring. Every sub-task reports the
+`MainViewModel` line count at its commit and the CI per-platform counts; a
+target missed by a wide margin means stop and re-split.
+
+**Not in T13:** the remote screen in its own window (requested during T12
+testing). After T13.6 the live screen is a self-contained `LiveScreenView`
+on `ViewerViewModel`, so a separate window becomes a small follow-up that
+hosts that view in a second `Window` -- it is placed after T13, not folded
+in, so T13 stays a no-behaviour-change refactor.
 
 ## Intermediate milestone
 
@@ -375,7 +452,8 @@ carried forward from a prior report: 1,463 (T1) → 1,463 (T2) → 1,469 (T3) �
 1,438 (T5) → 1,438 (T6) → 1,439 (T7) → 1,439 (T8) → 1,439 (T9.1) →
 1,418 (T9.2a) → 1,295 (T9.2b) → 1,295 (T9.2c) → 1,274 (T9.3a) →
 1,254 (T9.3b) → 1,254 (43a4097, transport fix) → 1,210 (T9.4) →
-1,210 (T9.5) → 1,210 (T10, T11) → 1,239 (T12, adds UI). Not flat
+1,210 (T9.5) → 1,210 (T10, T11) → 1,239 (T12, adds UI) → 1,264 (viewer
+fixes 8082ac9–ac76982, adds UI) → 1,263 (T13.0, consent fixes). Not flat
 throughout, as an earlier version of this section claimed: T5's extraction of
 `PixelWizard.Media` dropped 31 lines (capture-loop plumbing and `using`
 directives that moved with it) despite T5's own description not naming
