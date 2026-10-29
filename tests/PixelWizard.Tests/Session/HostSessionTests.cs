@@ -549,4 +549,61 @@ public class HostSessionTests
 
         Assert.False(session.IsApproved);
     }
+
+    // ResolveConsentAsync: the whole consent branch (decide, then approve or disconnect)
+    // lives here, so the view model can't lose half of it in a move.
+
+    [Fact]
+    public async System.Threading.Tasks.Task ResolveConsent_Allow_Approves_NoDisconnect()
+    {
+        var (session, fake) = Verified();
+        string? asked = null;
+
+        bool result = await session.ResolveConsentAsync(v => { asked = v; return System.Threading.Tasks.Task.FromResult(true); }, "incoming viewer");
+
+        Assert.True(result);
+        Assert.True(session.IsApproved);
+        Assert.Equal(0, fake.DisconnectCallCount);
+        Assert.Equal("incoming viewer", asked);
+    }
+
+    public static TheoryData<string> DenyingDeciders => new() { "deny", "null", "throws", "faults" };
+
+    private static Func<string, System.Threading.Tasks.Task<bool>>? Decider(string kind) => kind switch
+    {
+        "deny" => _ => System.Threading.Tasks.Task.FromResult(false),
+        "null" => null,
+        "throws" => _ => throw new InvalidOperationException("dialog failed"),
+        "faults" => _ => System.Threading.Tasks.Task.FromException<bool>(new InvalidOperationException("dialog failed")),
+        _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+    };
+
+    [Theory]
+    [MemberData(nameof(DenyingDeciders))]
+    public async System.Threading.Tasks.Task ResolveConsent_AnythingButAllow_Disconnects_AndStaysClosed(string kind)
+    {
+        var (session, fake) = Verified();
+
+        bool result = await session.ResolveConsentAsync(Decider(kind), "incoming viewer");
+        await session.SendFrameAsync(OnePixel, full: true);
+
+        Assert.False(result);
+        Assert.False(session.IsApproved);
+        Assert.Equal(1, fake.DisconnectCallCount);
+        Assert.Equal(MessageType.HandshakeOk, fake.LastSentMessage!.Type);
+    }
+
+    [Fact]
+    public async System.Threading.Tasks.Task ResolveConsent_AllowBeforeHandshake_Disconnects()
+    {
+        var fake = new FakeSessionTransport { IsConnected = true };
+        var session = new HostSession(fake, TestHello);
+        fake.RaiseMessageReceived(HelloMsg(TestHello)); // Hello done, no Handshake yet
+
+        bool result = await session.ResolveConsentAsync(_ => System.Threading.Tasks.Task.FromResult(true), "incoming viewer");
+
+        Assert.False(result);
+        Assert.False(session.IsApproved);
+        Assert.Equal(1, fake.DisconnectCallCount);
+    }
 }

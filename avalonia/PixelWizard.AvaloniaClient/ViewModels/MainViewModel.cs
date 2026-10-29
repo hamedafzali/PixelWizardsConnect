@@ -892,17 +892,15 @@ public class MainViewModel : ReactiveObject, IDisposable
         {
             _ = Dispatcher.UIThread.InvokeAsync(async () =>
             {
-                bool allowed = await ConsentGate.DecideAsync(ConsentCallback, "incoming viewer");
+                bool allowed = await session.ResolveConsentAsync(ConsentCallback, "incoming viewer");
 
                 if (!allowed)
                 {
                     HostStatus = "Connection denied";
                     Status     = "Connection denied";
-                    session.Disconnect();
                     return;
                 }
 
-                session.Approve();
                 StartSessionWatchdog();
                 HostStatus    = "Client connected — sharing screen";
                 IsHostRunning = true;

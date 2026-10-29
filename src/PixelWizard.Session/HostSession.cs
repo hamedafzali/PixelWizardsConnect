@@ -77,6 +77,20 @@ public sealed class HostSession : IDisposable
         if (_handshakeComplete) _approved = true;
     }
 
+    /// <summary>
+    /// Asks <paramref name="decider"/> (the host's consent dialog) about this verified viewer
+    /// and acts on the answer: an explicit allow approves the session, anything else -- deny,
+    /// no decider, a throw or fault (see <see cref="ConsentGate"/>) -- disconnects it. Returns
+    /// whether the session ended up approved. Thread affinity is the decider's business: the
+    /// app passes one that shows its dialog on the UI thread.
+    /// </summary>
+    public async Task<bool> ResolveConsentAsync(Func<string, Task<bool>>? decider, string viewer)
+    {
+        if (await ConsentGate.DecideAsync(decider, viewer)) Approve();
+        if (!_approved) Disconnect();
+        return _approved;
+    }
+
     public event Action? Connected;
     public event Action? Disconnected;
     public event Action<Exception>? Error;
