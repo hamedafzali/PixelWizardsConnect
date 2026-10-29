@@ -281,35 +281,9 @@ public class MainViewModel : ReactiveObject, IDisposable
 
     private System.Timers.Timer? _frameTimeoutTimer;
 
-    // ── Feature 4: Chat ───────────────────────────────────────────────────────
+    // ── Feature 4: Chat (and clipboard send) ──────────────────────────────────
 
-    public ObservableCollection<ChatEntry> ChatMessages { get; } = new();
-
-    private bool _chatVisible;
-    public bool ChatVisible
-    {
-        get => _chatVisible;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _chatVisible, value);
-            if (value) UnreadChatCount = 0;
-        }
-    }
-
-    private int _unreadChatCount;
-    public int UnreadChatCount
-    {
-        get => _unreadChatCount;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _unreadChatCount, value);
-            this.RaisePropertyChanged(nameof(HasUnreadChat));
-        }
-    }
-    public bool HasUnreadChat => _unreadChatCount > 0;
-
-    private string _chatInput = "";
-    public string ChatInput { get => _chatInput; set => this.RaiseAndSetIfChanged(ref _chatInput, value); }
+    public ChatViewModel Chat { get; }
 
     // ── Feature 6: Session notes ──────────────────────────────────────────────
 
@@ -413,10 +387,7 @@ public class MainViewModel : ReactiveObject, IDisposable
     public ReactiveCommand<Unit, Unit> Zoom100Command            { get; }
     public ReactiveCommand<Unit, Unit> ZoomInCommand             { get; }
     public ReactiveCommand<Unit, Unit> ZoomOutCommand            { get; }
-    public ReactiveCommand<Unit, Unit> SendClipboardCommand      { get; }
-    public ReactiveCommand<Unit, Unit> ToggleChatCommand         { get; }
     public ReactiveCommand<Unit, Unit> ToggleSidebarCommand      { get; }
-    public ReactiveCommand<Unit, Unit> SendChatCommand           { get; }
     public ReactiveCommand<Unit, Unit> ToggleSessionNotesCommand { get; }
     public ReactiveCommand<Unit, Unit> ScanNetworkCommand        { get; }
 
@@ -498,14 +469,13 @@ public class MainViewModel : ReactiveObject, IDisposable
                 if (_zoomPresets[i] < _viewScale || (_zoomPresets[i] <= _viewScale && i > 0)) { prev = i - 1; break; }
             ZoomPresetIndex = Math.Max(prev, 0);
         });
-        SendClipboardCommand      = ReactiveCommand.CreateFromTask(SendClipboardAsync);
-        ToggleChatCommand         = ReactiveCommand.Create(() => { ChatVisible = !ChatVisible; });
         ToggleSidebarCommand      = ReactiveCommand.Create(() =>
         {
             _sidebarCollapsedWhileViewing = !_sidebarCollapsedWhileViewing;
             this.RaisePropertyChanged(nameof(ShowSidebar));
         });
-        SendChatCommand           = ReactiveCommand.Create(SendChatMessage);
+        Chat = new ChatViewModel(ActiveChatLink,
+            () => GetClipboardCallback?.Invoke() ?? Task.FromResult<string?>(null));
         ToggleSessionNotesCommand = ReactiveCommand.Create(() => { SessionNotesVisible = !SessionNotesVisible; });
         ScanNetworkCommand        = ReactiveCommand.Create(ToggleScan);
         DismissOnboardingCommand  = ReactiveCommand.Create(DismissOnboarding);
@@ -679,7 +649,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             if (ClipboardCallback != null)
                 Dispatcher.UIThread.Post(() => _ = ClipboardCallback(text));
         };
-        session.ChatReceived += text => Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: true, text: text));
+        session.ChatReceived += text => Dispatcher.UIThread.Post(() => Chat.Receive(isFromHost: true, text));
         return session;
     }
 
@@ -698,9 +668,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         _canvasHeight = 0;
         toDispose?.Dispose();
         KeyboardActive  = false;
-        ChatMessages.Clear();
-        ChatVisible     = false;
-        UnreadChatCount = 0;
+        Chat.Reset();
         if (Screen == AppScreen.LiveScreen) Screen = AppScreen.Viewer;
     }
 
@@ -922,7 +890,7 @@ public class MainViewModel : ReactiveObject, IDisposable
             if (ClipboardCallback != null)
                 Dispatcher.UIThread.Post(() => _ = ClipboardCallback(text));
         };
-        session.ChatReceived += text => Dispatcher.UIThread.Post(() => ReceiveChatMessage(isFromHost: false, text: text));
+        session.ChatReceived += text => Dispatcher.UIThread.Post(() => Chat.Receive(isFromHost: false, text));
     }
 
     private void StopHost()
@@ -947,9 +915,7 @@ public class MainViewModel : ReactiveObject, IDisposable
         Status         = "Host stopped";
         TrayTooltip    = "Idle";
         HideViewingBadgeCallback?.Invoke();
-        ChatMessages.Clear();
-        ChatVisible     = false;
-        UnreadChatCount = 0;
+        Chat.Reset();
         SessionNotesVisible = false;
     }
 
@@ -1019,43 +985,15 @@ public class MainViewModel : ReactiveObject, IDisposable
     // to PixelWizard.Session's ViewerSession (T9.2a) and HostSession (T9.2b) -- see
     // BuildViewerSession/WireHostSession for the event wiring.
 
-    // ── Feature 1: Clipboard sync ─────────────────────────────────────────────
+    // ── Feature 1/4: Clipboard and chat go to whichever session is live ───────
 
-    private async Task SendClipboardAsync()
+    private ChatLink? ActiveChatLink()
     {
-        string? text = null;
-        if (GetClipboardCallback != null)
-            text = await GetClipboardCallback();
-        if (string.IsNullOrEmpty(text)) return;
-
-        if (_viewerSession?.IsConnected == true)
-            await _viewerSession.SendClipboardAsync(text);
-        else if (_hostListener?.Current?.IsApproved == true)
-            await _hostListener!.Current!.SendClipboardAsync(text);
-    }
-
-    // ── Feature 4: Chat ───────────────────────────────────────────────────────
-
-    private void SendChatMessage()
-    {
-        string text = ChatInput.Trim();
-        if (string.IsNullOrEmpty(text)) return;
-        ChatInput = "";
-
-        bool isHost = _hostListener?.Current?.IsApproved == true;
-        ChatMessages.Add(new ChatEntry(DateTime.Now, isHost, text));
-
-        if (_viewerSession?.IsConnected == true)
-            _ = _viewerSession.SendChatAsync(text);
-        else if (_hostListener?.Current?.IsApproved == true)
-            _ = _hostListener!.Current!.SendChatAsync(text);
-    }
-
-    private void ReceiveChatMessage(bool isFromHost, string text)
-    {
-        ChatMessages.Add(new ChatEntry(DateTime.Now, isFromHost, text));
-        if (!ChatVisible)
-            UnreadChatCount++;
+        if (_viewerSession is { IsConnected: true } viewer)
+            return new ChatLink(IsHost: false, viewer.SendChatAsync, viewer.SendClipboardAsync);
+        if (_hostListener?.Current is { IsApproved: true } host)
+            return new ChatLink(IsHost: true, host.SendChatAsync, host.SendClipboardAsync);
+        return null;
     }
 
     // ── Feature 9: Viewer quality preset ─────────────────────────────────────

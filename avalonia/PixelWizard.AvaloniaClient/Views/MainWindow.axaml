@@ -600,22 +600,22 @@
 
                                     <!-- Feature 1: Clipboard -->
                                     <Button Classes="Toolbar" Content="Clipboard"
-                                            Command="{Binding SendClipboardCommand}" Width="70"
+                                            Command="{Binding Chat.SendClipboardCommand}" Width="70"
                                             ToolTip.Tip="Sync clipboard with host"
                                             AutomationProperties.Name="Sync clipboard with host"/>
 
                                     <!-- Feature 4: Chat toggle with unread badge -->
                                     <Panel>
                                         <Button Classes="Toolbar" Content="Chat"
-                                                Command="{Binding ToggleChatCommand}" Width="44"
+                                                Command="{Binding Chat.ToggleCommand}" Width="44"
                                                 ToolTip.Tip="Toggle chat panel"
                                                 AutomationProperties.Name="Toggle chat panel"/>
                                         <Border Background="#EF4444" CornerRadius="8"
                                                 Padding="4,1"
                                                 HorizontalAlignment="Right" VerticalAlignment="Top"
                                                 Margin="0,-4,-4,0"
-                                                IsVisible="{Binding HasUnreadChat}">
-                                            <TextBlock Text="{Binding UnreadChatCount}"
+                                                IsVisible="{Binding Chat.HasUnread}">
+                                            <TextBlock Text="{Binding Chat.UnreadCount}"
                                                        FontSize="9" Foreground="White"
                                                        FontWeight="Bold"/>
                                         </Border>
@@ -725,7 +725,7 @@
 
                         <!-- Feature 4: Chat panel (overlay at bottom) -->
                         <Border Grid.Row="2"
-                                IsVisible="{Binding ChatVisible}"
+                                IsVisible="{Binding Chat.Visible}"
                                 Background="#CC0F172A"
                                 BorderBrush="#1E293B"
                                 BorderThickness="0,1,0,0"
@@ -740,7 +740,7 @@
                                                Foreground="#94A3B8" VerticalAlignment="Center"/>
                                     <Button Grid.Column="1" Classes="Toolbar" Content="✕"
                                             Width="22" Height="22" Padding="0"
-                                            Command="{Binding ToggleChatCommand}"
+                                            Command="{Binding Chat.ToggleCommand}"
                                             AutomationProperties.Name="Close chat panel"/>
                                 </Grid>
                                 <!-- Chat messages -->
@@ -748,7 +748,7 @@
                                               VerticalScrollBarVisibility="Auto"
                                               HorizontalScrollBarVisibility="Disabled"
                                               Padding="12,4">
-                                    <ItemsControl ItemsSource="{Binding ChatMessages}">
+                                    <ItemsControl ItemsSource="{Binding Chat.Messages}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding Display}"
@@ -763,7 +763,7 @@
                                 <!-- Chat input -->
                                 <Grid Grid.Row="2" ColumnDefinitions="*,80" Margin="8,4,8,8">
                                     <TextBox Grid.Column="0"
-                                             Text="{Binding ChatInput}"
+                                             Text="{Binding Chat.Input}"
                                              Watermark="Type a message…"
                                              Background="#1E293B"
                                              Foreground="#F1F5F9"
@@ -775,7 +775,7 @@
                                     <Button Grid.Column="1" Classes="Primary"
                                             Content="Send"
                                             Height="36"
-                                            Command="{Binding SendChatCommand}"
+                                            Command="{Binding Chat.SendCommand}"
                                             AutomationProperties.Name="Send chat message"/>
                                 </Grid>
                             </Grid>
