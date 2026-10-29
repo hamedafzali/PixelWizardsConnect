@@ -13,7 +13,7 @@ public sealed class AppSettings
     public List<string> RecentRouters { get; set; } = new();
     public string LastRouterAddress   { get; set; } = "";
 
-    private static readonly string Dir = Path.Combine(
+    internal static readonly string Dir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "PixelWizardConnect");
     private static readonly string FilePath = Path.Combine(Dir, "settings.json");
