@@ -16,25 +16,33 @@ public sealed class AppSettings
     internal static readonly string Dir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "PixelWizardConnect");
-    private static readonly string FilePath = Path.Combine(Dir, "settings.json");
+    private static readonly string DefaultFilePath = Path.Combine(Dir, "settings.json");
 
-    public static AppSettings Load()
+    private string _filePath = DefaultFilePath;
+
+    public static AppSettings Load() => Load(DefaultFilePath);
+
+    /// <summary>Loads from, and later saves to, <paramref name="filePath"/> (tests use a temp file).</summary>
+    public static AppSettings Load(string filePath)
     {
+        AppSettings settings;
         try
         {
-            if (File.Exists(FilePath))
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath)) ?? new AppSettings();
+            settings = File.Exists(filePath)
+                ? JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(filePath)) ?? new AppSettings()
+                : new AppSettings();
         }
-        catch { /* corrupt or missing — start fresh */ }
-        return new AppSettings();
+        catch { settings = new AppSettings(); /* corrupt or missing — start fresh */ }
+        settings._filePath = filePath;
+        return settings;
     }
 
     public void Save()
     {
         try
         {
-            Directory.CreateDirectory(Dir);
-            File.WriteAllText(FilePath, JsonSerializer.Serialize(this,
+            Directory.CreateDirectory(Path.GetDirectoryName(_filePath)!);
+            File.WriteAllText(_filePath, JsonSerializer.Serialize(this,
                 new JsonSerializerOptions { WriteIndented = true }));
         }
         catch { /* best effort */ }
