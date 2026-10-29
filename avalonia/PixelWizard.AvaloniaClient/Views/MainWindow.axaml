@@ -18,7 +18,7 @@
         <Grid Grid.Row="0" Margin="16" ColumnDefinitions="Auto,*">
 
             <!-- ══ Sidebar (collapsible while viewing) ══ -->
-            <Border Grid.Column="0" Width="224" Margin="0,0,16,0"
+            <Border Grid.Column="0" Width="224" Margin="{StaticResource Space.Right.16}"
                     IsVisible="{Binding ShowSidebar}"
                     Background="{StaticResource Brush.Sidebar.Bg}" CornerRadius="12">
                 <DockPanel Margin="20" LastChildFill="False">
@@ -44,24 +44,24 @@
                     </StackPanel>
 
                     <!-- Footer -->
-                    <StackPanel DockPanel.Dock="Bottom" Spacing="8">
+                    <StackPanel DockPanel.Dock="Bottom" Spacing="{StaticResource Space.8}">
 
                         <!-- Session stats when viewing -->
                         <Border Background="{StaticResource Brush.Sidebar.Surface}" CornerRadius="8"
-                                Padding="16,12"
+                                Padding="{StaticResource Space.16x12}"
                                 IsVisible="{Binding ShowScreenDisplay}">
                             <StackPanel Spacing="0">
                                 <TextBlock Text="SESSION" FontSize="9" FontWeight="SemiBold"
                                            Foreground="{StaticResource Brush.Neutral.400}"
-                                           Margin="0,0,0,10"/>
-                                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                                           Margin="{StaticResource Space.Bottom.10}"/>
+                                <Grid ColumnDefinitions="*,Auto" Margin="{StaticResource Space.Bottom.8}">
                                     <TextBlock Grid.Column="0" Text="FPS"
                                                FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
                                     <TextBlock Grid.Column="1" Text="{Binding Viewer.FpsText}"
                                                FontSize="12" FontWeight="SemiBold"
                                                Foreground="{StaticResource Brush.Text.OnDark}"/>
                                 </Grid>
-                                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                                <Grid ColumnDefinitions="*,Auto" Margin="{StaticResource Space.Bottom.8}">
                                     <TextBlock Grid.Column="0" Text="Latency"
                                                FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
                                     <TextBlock Grid.Column="1" Text="{Binding Viewer.LatencyText}"
@@ -79,9 +79,9 @@
                         </Border>
 
                         <!-- Keyboard badge -->
-                        <Border Background="{StaticResource Brush.Badge.Keyboard.Bg}" CornerRadius="6" Padding="10,7"
+                        <Border Background="{StaticResource Brush.Badge.Keyboard.Bg}" CornerRadius="6" Padding="{StaticResource Space.10x7}"
                                 IsVisible="{Binding Viewer.KeyboardActive}">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}">
                                 <Ellipse Width="6" Height="6" Fill="{StaticResource Brush.Indicator.On}" VerticalAlignment="Center"/>
                                 <TextBlock Text="Keyboard captured"
                                            FontSize="11" Foreground="{StaticResource Brush.Badge.Keyboard.Text}" VerticalAlignment="Center"/>
@@ -89,8 +89,8 @@
                         </Border>
 
                         <!-- TLS badge -->
-                        <Border Background="{StaticResource Brush.Sidebar.Surface}" CornerRadius="6" Padding="10,7">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Background="{StaticResource Brush.Sidebar.Surface}" CornerRadius="6" Padding="{StaticResource Space.10x7}">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}">
                                 <Ellipse Width="6" Height="6" Fill="{StaticResource Brush.Indicator.On}" VerticalAlignment="Center"/>
                                 <TextBlock Text="TLS encrypted"
                                            FontSize="11"
@@ -123,18 +123,18 @@
                         <TextBlock Text="Get started"
                                    FontSize="26" FontWeight="Bold"
                                    Foreground="{StaticResource Brush.Text.Primary}"
-                                   Margin="0,0,0,4"/>
+                                   Margin="{StaticResource Space.Bottom.4}"/>
                         <TextBlock Text="What would you like to do?"
                                    FontSize="14"
                                    Foreground="{StaticResource Brush.Text.Muted}"
                                    Margin="0,0,0,32"/>
 
                         <!-- HOST card -->
-                        <Button Classes="Card" Margin="0,0,0,12"
+                        <Button Classes="Card" Margin="{StaticResource Space.Bottom.12}"
                                 Command="{Binding GoHostCommand}"
                                 IsEnabled="{Binding CanHost}"
                                 AutomationProperties.Name="Host this computer">
-                            <Grid Margin="20,18">
+                            <Grid Margin="{StaticResource Space.20x18}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -142,7 +142,7 @@
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Width="44" Height="44"
                                         Background="{StaticResource Brush.Success.Bg}"
-                                        CornerRadius="10" Margin="0,0,16,0"
+                                        CornerRadius="10" Margin="{StaticResource Space.Right.16}"
                                         BorderBrush="{StaticResource Brush.Primary}" BorderThickness="3,0,0,0">
                                     <Path Width="20" Height="20" Stretch="Uniform"
                                           StrokeThickness="1.5" Stroke="{StaticResource Brush.Success}" Fill="Transparent"
@@ -155,18 +155,18 @@
                                                Foreground="{StaticResource Brush.Text.Primary}"/>
                                     <TextBlock Text="{Binding HostCardSubtitle}" FontSize="12"
                                                Foreground="{StaticResource Brush.Text.Muted}"
-                                               Margin="0,4,0,0"/>
+                                               Margin="{StaticResource Space.Top.4}"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" Text="›" FontSize="20"
                                            Foreground="{StaticResource Brush.Neutral.300}"
-                                           VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                           VerticalAlignment="Center" Margin="{StaticResource Space.Left.12}"/>
                             </Grid>
                         </Button>
 
                         <!-- VIEWER card -->
                         <Button Classes="Card" Command="{Binding GoViewerCommand}"
                                 AutomationProperties.Name="Connect to remote computer">
-                            <Grid Margin="20,18">
+                            <Grid Margin="{StaticResource Space.20x18}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
@@ -174,7 +174,7 @@
                                 </Grid.ColumnDefinitions>
                                 <Border Grid.Column="0" Width="44" Height="44"
                                         Background="{StaticResource Brush.Info.Bg}" CornerRadius="10"
-                                        Margin="0,0,16,0">
+                                        Margin="{StaticResource Space.Right.16}">
                                     <Path Width="20" Height="20" Stretch="Uniform"
                                           StrokeThickness="1.5" Stroke="{StaticResource Brush.Primary}" Fill="Transparent"
                                           Data="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25z"
@@ -187,11 +187,11 @@
                                     <TextBlock Text="View and control another machine"
                                                FontSize="12"
                                                Foreground="{StaticResource Brush.Text.Muted}"
-                                               Margin="0,4,0,0"/>
+                                               Margin="{StaticResource Space.Top.4}"/>
                                 </StackPanel>
                                 <TextBlock Grid.Column="2" Text="›" FontSize="20"
                                            Foreground="{StaticResource Brush.Neutral.300}"
-                                           VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                           VerticalAlignment="Center" Margin="{StaticResource Space.Left.12}"/>
                             </Grid>
                         </Button>
 
@@ -206,37 +206,37 @@
                                 <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut"/>
                             </Transitions>
                         </ScrollViewer.Transitions>
-                        <StackPanel Margin="32,24" Spacing="0" MaxWidth="520">
+                        <StackPanel Margin="{StaticResource Space.32x24}" Spacing="0" MaxWidth="520">
 
-                            <DockPanel Margin="0,0,0,24">
+                            <DockPanel Margin="{StaticResource Space.Bottom.24}">
                                 <Button Classes="Ghost" Content="← Back" Width="80" Height="32"
                                         DockPanel.Dock="Left" Command="{Binding BackCommand}"/>
-                                <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                                <StackPanel Margin="{StaticResource Space.Left.16}" VerticalAlignment="Center">
                                     <TextBlock Text="Connect to Remote"
                                                FontSize="20" FontWeight="Bold"
                                                Foreground="{StaticResource Brush.Text.Primary}"/>
                                     <TextBlock Text="IP address or router connection code"
                                                FontSize="12"
                                                Foreground="{StaticResource Brush.Text.Muted}"
-                                               Margin="0,4,0,0"/>
+                                               Margin="{StaticResource Space.Top.4}"/>
                                 </StackPanel>
                             </DockPanel>
 
                             <!-- Loading indicator while connecting -->
                             <ProgressBar IsIndeterminate="True" Height="2"
                                          IsVisible="{Binding Viewer.IsConnecting}"
-                                         Margin="0,0,0,8"/>
+                                         Margin="{StaticResource Space.Bottom.8}"/>
 
                             <!-- Direct IP -->
                             <TextBlock Text="DIRECT IP" FontSize="11" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Muted}"
-                                       Margin="0,0,0,10"/>
+                                       Margin="{StaticResource Space.Bottom.10}"/>
 
                             <!-- Recent hosts -->
-                            <StackPanel IsVisible="{Binding Viewer.HasRecentHosts}" Margin="0,0,0,12">
+                            <StackPanel IsVisible="{Binding Viewer.HasRecentHosts}" Margin="{StaticResource Space.Bottom.12}">
                                 <TextBlock Text="Recent" FontSize="12" FontWeight="SemiBold"
                                            Foreground="{StaticResource Brush.Text.Secondary}"
-                                           Margin="0,0,0,4"/>
+                                           Margin="{StaticResource Space.Bottom.4}"/>
                                 <ComboBox ItemsSource="{Binding Viewer.RecentHosts}"
                                           SelectedItem="{Binding Viewer.SelectedRecentHost}"
                                           HorizontalAlignment="Stretch"
@@ -248,8 +248,8 @@
 
                             <TextBlock Text="Host IP Address" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Secondary}"
-                                       Margin="0,0,0,4"/>
-                            <Grid ColumnDefinitions="*,10,120" Margin="0,0,0,12">
+                                       Margin="{StaticResource Space.Bottom.4}"/>
+                            <Grid ColumnDefinitions="*,10,120" Margin="{StaticResource Space.Bottom.12}">
                                 <TextBox Grid.Column="0" Text="{Binding Viewer.HostAddress}"
                                          Watermark="192.168.1.10" IsEnabled="{Binding Viewer.InputEnabled}"
                                          KeyDown="OnAddressKeyDown"
@@ -262,7 +262,7 @@
                             </Grid>
 
                             <!-- Network discovery -->
-                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4"
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}" Margin="{StaticResource Space.Bottom.4}"
                                         IsVisible="{Binding !Viewer.IsConnecting}">
                                 <Button Classes="Secondary" Content="Scan network"
                                         IsVisible="{Binding !Viewer.IsScanning}"
@@ -282,13 +282,13 @@
                             <ListBox ItemsSource="{Binding Viewer.DiscoveredHosts}"
                                      IsVisible="{Binding Viewer.DiscoveredHosts.Count}"
                                      SelectedItem="{Binding Viewer.SelectedDiscoveredHost}"
-                                     Margin="0,0,0,16" MaxHeight="120"
+                                     Margin="{StaticResource Space.Bottom.16}" MaxHeight="120"
                                      BorderBrush="{StaticResource Brush.Border}"
                                      BorderThickness="1" CornerRadius="8"
                                      FontSize="13"/>
 
                             <!-- Divider -->
-                            <Grid ColumnDefinitions="*,Auto,*" Margin="0,0,0,28">
+                            <Grid ColumnDefinitions="*,Auto,*" Margin="{StaticResource Space.Bottom.28}">
                                 <Separator Grid.Column="0" VerticalAlignment="Center"
                                            Background="{StaticResource Brush.Border}" Height="1"/>
                                 <TextBlock Grid.Column="1" Text="  or via code  "
@@ -302,10 +302,10 @@
                             <!-- Router + Code -->
                             <TextBlock Text="VIA ROUTER" FontSize="11" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Muted}"
-                                       Margin="0,0,0,10"/>
+                                       Margin="{StaticResource Space.Bottom.10}"/>
                             <TextBlock Text="Router Address" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Secondary}"
-                                       Margin="0,0,0,4"/>
+                                       Margin="{StaticResource Space.Bottom.4}"/>
                             <TextBox Text="{Binding Viewer.RouterAddress}"
                                      Watermark="router.example.com:9000"
                                      IsEnabled="{Binding Viewer.InputEnabled}"
@@ -313,8 +313,8 @@
                                      AutomationProperties.Name="Router address"/>
                             <TextBlock Text="Connection Code" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Secondary}"
-                                       Margin="0,0,0,4"/>
-                            <Grid ColumnDefinitions="*,10,120" Margin="0,0,0,20">
+                                       Margin="{StaticResource Space.Bottom.4}"/>
+                            <Grid ColumnDefinitions="*,10,120" Margin="{StaticResource Space.Bottom.20}">
                                 <TextBox Grid.Column="0" Text="{Binding Viewer.ConnectionCode}"
                                          Watermark="AB12CD" IsEnabled="{Binding Viewer.InputEnabled}"
                                          FontSize="18" FontWeight="SemiBold"
@@ -328,8 +328,8 @@
                             </Grid>
 
                             <!-- Advanced expander with TLS -->
-                            <Expander Header="Advanced" Margin="0,0,0,16">
-                                <CheckBox IsChecked="{Binding Viewer.UseTls}" Margin="0,8,0,0">
+                            <Expander Header="Advanced" Margin="{StaticResource Space.Bottom.16}">
+                                <CheckBox IsChecked="{Binding Viewer.UseTls}" Margin="{StaticResource Space.Top.8}">
                                     <TextBlock Text="Use TLS (recommended)" FontSize="12"
                                                Foreground="{StaticResource Brush.Text.Muted}"/>
                                 </CheckBox>
@@ -338,8 +338,8 @@
                             <!-- Connecting status -->
                             <Border IsVisible="{Binding Viewer.IsConnecting}"
                                     Background="{StaticResource Brush.Info.Bg}" BorderBrush="{StaticResource Brush.Info.Border}"
-                                    BorderThickness="1" CornerRadius="8" Padding="16,12">
-                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    BorderThickness="1" CornerRadius="8" Padding="{StaticResource Space.16x12}">
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.10}">
                                     <Ellipse Width="7" Height="7" Fill="{StaticResource Brush.Info}" VerticalAlignment="Center"/>
                                     <TextBlock Text="Connecting…" FontSize="13" Foreground="{StaticResource Brush.Info.Text}"
                                                VerticalAlignment="Center"/>
@@ -358,31 +358,31 @@
                                 <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut"/>
                             </Transitions>
                         </ScrollViewer.Transitions>
-                        <StackPanel Margin="32,24" Spacing="0" MaxWidth="520">
+                        <StackPanel Margin="{StaticResource Space.32x24}" Spacing="0" MaxWidth="520">
 
-                            <DockPanel Margin="0,0,0,24">
+                            <DockPanel Margin="{StaticResource Space.Bottom.24}">
                                 <Button Classes="Ghost" Content="← Back" Width="80" Height="32"
                                         DockPanel.Dock="Left" Command="{Binding BackCommand}"/>
-                                <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                                <StackPanel Margin="{StaticResource Space.Left.16}" VerticalAlignment="Center">
                                     <TextBlock Text="Host This Computer"
                                                FontSize="20" FontWeight="Bold"
                                                Foreground="{StaticResource Brush.Text.Primary}"/>
                                     <TextBlock Text="Share your screen with an incoming viewer"
                                                FontSize="12"
                                                Foreground="{StaticResource Brush.Text.Muted}"
-                                               Margin="0,4,0,0"/>
+                                               Margin="{StaticResource Space.Top.4}"/>
                                 </StackPanel>
                             </DockPanel>
 
                             <!-- Feature 2: Monitor dropdown -->
                             <TextBlock Text="Monitor" FontSize="12" FontWeight="SemiBold"
                                        Foreground="{StaticResource Brush.Text.Secondary}"
-                                       Margin="0,0,0,4"/>
+                                       Margin="{StaticResource Space.Bottom.4}"/>
                             <ComboBox SelectedIndex="{Binding Host.SelectedMonitorIndex}"
                                       ItemsSource="{Binding Host.AvailableMonitors}"
                                       IsEnabled="{Binding !Host.IsHostRunning}"
                                       Width="300" Height="36" FontSize="12"
-                                      Margin="0,0,0,16"
+                                      Margin="{StaticResource Space.Bottom.16}"
                                       AutomationProperties.Name="Select monitor to share">
                                 <ComboBox.ItemTemplate>
                                     <DataTemplate>
@@ -393,22 +393,22 @@
 
                             <!-- Method toggle -->
                             <Border Background="{StaticResource Brush.Segmented.Bg}" CornerRadius="9" Padding="3"
-                                    Margin="0,0,0,20" HorizontalAlignment="Left">
+                                    Margin="{StaticResource Space.Bottom.20}" HorizontalAlignment="Left">
                                 <StackPanel Orientation="Horizontal" Spacing="2">
                                     <RadioButton Content="Direct" GroupName="HostMethod"
                                                  IsChecked="{Binding Host.ShowDirectHostPanel}"
-                                                 Padding="14,7" CornerRadius="7"
+                                                 Padding="{StaticResource Space.14x7}" CornerRadius="7"
                                                  FontSize="13" Cursor="Hand"/>
                                     <RadioButton Content="Via Router" GroupName="HostMethod"
                                                  IsChecked="{Binding Host.UseRouterForHost}"
-                                                 Padding="14,7" CornerRadius="7"
+                                                 Padding="{StaticResource Space.14x7}" CornerRadius="7"
                                                  FontSize="13" Cursor="Hand"/>
                                 </StackPanel>
                             </Border>
 
                             <!-- Options row: quality + TLS -->
-                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,20">
-                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="10">
+                            <Grid ColumnDefinitions="Auto,*,Auto" Margin="{StaticResource Space.Bottom.20}">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="{StaticResource Space.10}">
                                     <TextBlock Text="Quality" FontSize="12" FontWeight="SemiBold"
                                                Foreground="{StaticResource Brush.Text.Secondary}"
                                                VerticalAlignment="Center"/>
@@ -432,7 +432,7 @@
                             <StackPanel IsVisible="{Binding Host.ShowDirectHostPanel}">
                                 <TextBlock Text="Port" FontSize="12" FontWeight="SemiBold"
                                            Foreground="{StaticResource Brush.Text.Secondary}"
-                                           Margin="0,0,0,4"/>
+                                           Margin="{StaticResource Space.Bottom.4}"/>
                                 <Grid ColumnDefinitions="110,10,Auto" Margin="0,0,0,0">
                                     <TextBox Grid.Column="0" Text="{Binding Host.HostPort}"
                                              IsEnabled="{Binding !Host.IsHostRunning}"/>
@@ -447,7 +447,7 @@
                             <StackPanel IsVisible="{Binding Host.ShowRouterHostPanel}">
                                 <TextBlock Text="Router Address" FontSize="12" FontWeight="SemiBold"
                                            Foreground="{StaticResource Brush.Text.Secondary}"
-                                           Margin="0,0,0,4"/>
+                                           Margin="{StaticResource Space.Bottom.4}"/>
                                 <Grid ColumnDefinitions="*,10,Auto">
                                     <TextBox Grid.Column="0" Text="{Binding Host.HostRouterAddress}"
                                              IsEnabled="{Binding !Host.IsHostRunning}"/>
@@ -467,7 +467,7 @@
                                     <StackPanel Grid.Column="0">
                                         <TextBlock Text="SHARE THIS CODE"
                                                    FontSize="10" FontWeight="SemiBold"
-                                                   Foreground="{StaticResource Brush.Info}" Margin="0,0,0,4"/>
+                                                   Foreground="{StaticResource Brush.Info}" Margin="{StaticResource Space.Bottom.4}"/>
                                         <TextBlock Text="{Binding Host.HostConnectionCode}"
                                                    FontSize="32" FontWeight="Bold"
                                                    Foreground="{StaticResource Brush.Info.TextStrong}"/>
@@ -481,15 +481,15 @@
                             <TextBlock Text="One-time use · Valid for 30 minutes · Share this code with your viewer"
                                        FontSize="11"
                                        Foreground="{StaticResource Brush.Text.Muted}"
-                                       Margin="0,8,0,0"
+                                       Margin="{StaticResource Space.Top.8}"
                                        IsVisible="{Binding Host.ShowCodeCard}"/>
 
                             <!-- Web viewer hint -->
                             <Border IsVisible="{Binding Host.ShowWebViewer}"
                                     Background="{StaticResource Brush.Success.Bg}" BorderBrush="{StaticResource Brush.Success.Border}"
                                     BorderThickness="1" CornerRadius="8"
-                                    Padding="16,8" Margin="0,8,0,0">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    Padding="{StaticResource Space.16x8}" Margin="{StaticResource Space.Top.8}">
+                                <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}">
                                     <TextBlock Text="{Binding Host.WebViewerUrl}"
                                                FontSize="12" Foreground="{StaticResource Brush.Success.Text}"
                                                VerticalAlignment="Center"/>
@@ -500,11 +500,11 @@
                             <Grid ColumnDefinitions="Auto,*" Margin="0,14,0,0">
                                 <Ellipse Grid.Column="0" Width="7" Height="7"
                                          Fill="{StaticResource Brush.Indicator.On}"
-                                         VerticalAlignment="Center" Margin="0,0,8,0"
+                                         VerticalAlignment="Center" Margin="{StaticResource Space.Right.8}"
                                          IsVisible="{Binding Host.IsHostRunning}"/>
                                 <Ellipse Grid.Column="0" Width="7" Height="7"
                                          Fill="{StaticResource Brush.Indicator.Off}"
-                                         VerticalAlignment="Center" Margin="0,0,8,0"
+                                         VerticalAlignment="Center" Margin="{StaticResource Space.Right.8}"
                                          IsVisible="{Binding !Host.IsHostRunning}"/>
                                 <TextBlock Grid.Column="1" Text="{Binding Host.HostStatus}"
                                            FontSize="12"
@@ -524,7 +524,7 @@
                                     Background="{StaticResource Brush.Warning.Bg}"
                                     BorderBrush="{StaticResource Brush.Warning.Border}"
                                     BorderThickness="1" CornerRadius="8"
-                                    Padding="12,10" Margin="0,4,0,0">
+                                    Padding="12,10" Margin="{StaticResource Space.Top.4}">
                                 <TextBox Text="{Binding Host.SessionNotes}"
                                          Watermark="Session notes (saved on disconnect)…"
                                          AcceptsReturn="True"
@@ -552,7 +552,7 @@
                             <DockPanel VerticalAlignment="Center">
                                 <!-- Left: live indicator + stats -->
                                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Spacing="16">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}">
                                         <Ellipse Width="7" Height="7" Fill="{StaticResource Brush.Indicator.On}" VerticalAlignment="Center"/>
                                         <TextBlock Text="Live"
                                                    Foreground="{StaticResource Brush.Text.OnDark}"
@@ -663,8 +663,8 @@
                                 IsVisible="{Binding Viewer.ShowNoFramesBanner}"
                                 Background="{StaticResource Brush.Warning.Bg}"
                                 BorderBrush="{StaticResource Brush.Warning.Strong}"
-                                BorderThickness="0,0,0,1" Padding="16,8">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                BorderThickness="0,0,0,1" Padding="{StaticResource Space.16x8}">
+                            <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}">
                                 <Path Width="16" Height="16" Stretch="Uniform"
                                       StrokeThickness="1.5" Stroke="{StaticResource Brush.Warning}" Fill="Transparent"
                                       Data="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
@@ -698,7 +698,7 @@
                                         <TextBlock Text="The remote screen will appear here once the host starts streaming."
                                                    FontSize="11" Foreground="{StaticResource Brush.Screen.EmptySubtext}"
                                                    TextAlignment="Center" TextWrapping="Wrap"
-                                                   MaxWidth="280" Margin="0,8,0,0"/>
+                                                   MaxWidth="280" Margin="{StaticResource Space.Top.8}"/>
                                     </StackPanel>
                                 </Grid>
                             </Border>
@@ -805,7 +805,7 @@
                            Foreground="{StaticResource Brush.Neutral.300}"
                            IsVisible="{Binding ShowScreenDisplay}"
                            VerticalAlignment="Center"
-                           Margin="0,0,16,0"/>
+                           Margin="{StaticResource Space.Right.16}"/>
                 <TextBlock Text="{Binding Status}"
                            FontSize="13"
                            Foreground="{StaticResource Brush.Text.Secondary}"
@@ -831,15 +831,15 @@
                                FontSize="22" FontWeight="Bold"
                                Foreground="{StaticResource Brush.Text.Primary}"
                                TextWrapping="Wrap"
-                               Margin="0,0,0,8"/>
+                               Margin="{StaticResource Space.Bottom.8}"/>
                     <TextBlock Text="Secure, consent-first remote desktop in three steps."
                                FontSize="13"
                                Foreground="{StaticResource Brush.Text.Muted}"
                                TextWrapping="Wrap"
-                               Margin="0,0,0,24"/>
+                               Margin="{StaticResource Space.Bottom.24}"/>
 
                     <!-- Step 1 -->
-                    <Grid ColumnDefinitions="32,*" Margin="0,0,0,16">
+                    <Grid ColumnDefinitions="32,*" Margin="{StaticResource Space.Bottom.16}">
                         <Border Grid.Column="0" Width="24" Height="24"
                                 Background="{StaticResource Brush.Primary}" CornerRadius="12"
                                 VerticalAlignment="Top">
@@ -852,7 +852,7 @@
                     </Grid>
 
                     <!-- Step 2 -->
-                    <Grid ColumnDefinitions="32,*" Margin="0,0,0,16">
+                    <Grid ColumnDefinitions="32,*" Margin="{StaticResource Space.Bottom.16}">
                         <Border Grid.Column="0" Width="24" Height="24"
                                 Background="{StaticResource Brush.Primary}" CornerRadius="12"
                                 VerticalAlignment="Top">
@@ -865,7 +865,7 @@
                     </Grid>
 
                     <!-- Step 3 -->
-                    <Grid ColumnDefinitions="32,*" Margin="0,0,0,28">
+                    <Grid ColumnDefinitions="32,*" Margin="{StaticResource Space.Bottom.28}">
                         <Border Grid.Column="0" Width="24" Height="24"
                                 Background="{StaticResource Brush.Primary}" CornerRadius="12"
                                 VerticalAlignment="Top">

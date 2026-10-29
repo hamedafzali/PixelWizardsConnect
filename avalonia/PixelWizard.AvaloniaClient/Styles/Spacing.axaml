@@ -1,0 +1,31 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Spacing used more than once in MainWindow.axaml (T13.5), values unchanged.
+         Thickness keys name the side and size: Space.Bottom.4 is 0,0,0,4; Space.16x8 is 16,8. -->
+    <x:Double x:Key="Space.8">8</x:Double>
+    <x:Double x:Key="Space.10">10</x:Double>
+
+    <Thickness x:Key="Space.Bottom.4">0,0,0,4</Thickness>
+    <Thickness x:Key="Space.Bottom.8">0,0,0,8</Thickness>
+    <Thickness x:Key="Space.Bottom.10">0,0,0,10</Thickness>
+    <Thickness x:Key="Space.Bottom.12">0,0,0,12</Thickness>
+    <Thickness x:Key="Space.Bottom.16">0,0,0,16</Thickness>
+    <Thickness x:Key="Space.Bottom.20">0,0,0,20</Thickness>
+    <Thickness x:Key="Space.Bottom.24">0,0,0,24</Thickness>
+    <Thickness x:Key="Space.Bottom.28">0,0,0,28</Thickness>
+    <Thickness x:Key="Space.Left.12">12,0,0,0</Thickness>
+    <Thickness x:Key="Space.Left.16">16,0,0,0</Thickness>
+    <Thickness x:Key="Space.Right.8">0,0,8,0</Thickness>
+    <Thickness x:Key="Space.Right.16">0,0,16,0</Thickness>
+    <Thickness x:Key="Space.Top.4">0,4,0,0</Thickness>
+    <Thickness x:Key="Space.Top.8">0,8,0,0</Thickness>
+
+    <Thickness x:Key="Space.10x7">10,7</Thickness>
+    <Thickness x:Key="Space.14x7">14,7</Thickness>
+    <Thickness x:Key="Space.16x8">16,8</Thickness>
+    <Thickness x:Key="Space.16x12">16,12</Thickness>
+    <Thickness x:Key="Space.20x18">20,18</Thickness>
+    <Thickness x:Key="Space.32x24">32,24</Thickness>
+
+</ResourceDictionary>

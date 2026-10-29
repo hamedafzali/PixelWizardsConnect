@@ -8,6 +8,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://PixelWizard.AvaloniaClient/Styles/Colors.axaml"/>
                 <ResourceInclude Source="avares://PixelWizard.AvaloniaClient/Styles/Radius.axaml"/>
+                <ResourceInclude Source="avares://PixelWizard.AvaloniaClient/Styles/Spacing.axaml"/>
                 <ResourceInclude Source="avares://PixelWizard.AvaloniaClient/Styles/Typography.axaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
