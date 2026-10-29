@@ -19,6 +19,11 @@ namespace PixelWizard.Transport.WebSocket
     ///   GET /         → serves the embedded web viewer HTML
     ///   GET /stream   → upgrades to WebSocket and streams JPEG frames
     /// Consumers call <see cref="BroadcastFrameAsync"/> to push frames to all connected browser clients.
+    ///
+    /// Local-only: it listens on loopback, and /stream refuses a browser page from any other
+    /// origin. The stream has no consent of its own, and browsers apply no same-origin rule
+    /// to WebSockets, so without the origin check any website open in the host's browser
+    /// could watch the screen.
     /// </summary>
     public class WebSocketHostServer : IDisposable
     {
@@ -38,16 +43,9 @@ namespace PixelWizard.Transport.WebSocket
         {
             _cts = new CancellationTokenSource();
             _listener = new HttpListener();
-            _listener.Prefixes.Add($"http://+:{_port}/");
-
-            try { _listener.Start(); }
-            catch
-            {
-                // Fall back to localhost-only if binding to + fails without elevation
-                _listener = new HttpListener();
-                _listener.Prefixes.Add($"http://localhost:{_port}/");
-                _listener.Start();
-            }
+            // "localhost" only: on Windows it is the one prefix a non-admin process may register.
+            _listener.Prefixes.Add($"http://localhost:{_port}/");
+            _listener.Start();
 
             Log?.Invoke($"Web viewer available at http://localhost:{_port}/");
             Task.Run(() => AcceptLoop(_cts.Token));
@@ -146,6 +144,13 @@ namespace PixelWizard.Transport.WebSocket
 
             if (ctx.Request.IsWebSocketRequest && path == "/stream")
             {
+                if (!IsAllowedOrigin(ctx.Request.Headers["Origin"], _port))
+                {
+                    Log?.Invoke("Web viewer refused: foreign origin");
+                    ctx.Response.StatusCode = 403;
+                    ctx.Response.Close();
+                    return;
+                }
                 var wsCtx = await ctx.AcceptWebSocketAsync(null);
                 string id = Guid.NewGuid().ToString("N");
                 _clients[id] = wsCtx.WebSocket;
@@ -166,6 +171,15 @@ namespace PixelWizard.Transport.WebSocket
                 ctx.Response.Close();
             }
         }
+
+        /// <summary>
+        /// True for the viewer page this server serves itself, or for a client that sends no
+        /// Origin (not a browser page, so a local process).
+        /// </summary>
+        public static bool IsAllowedOrigin(string? origin, int port) =>
+            string.IsNullOrEmpty(origin) ||
+            string.Equals(origin, $"http://localhost:{port}", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(origin, $"http://127.0.0.1:{port}", StringComparison.OrdinalIgnoreCase);
 
         private async Task DrainWebSocket(string id, WsSocket ws, CancellationToken token)
         {

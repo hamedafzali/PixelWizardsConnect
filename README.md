@@ -36,7 +36,7 @@ router-server/            — Go HTTP relay server
 - **Screen delta streaming** — only changed 32×32 pixel tiles are sent each frame
 - **Mouse and keyboard input** — forwarded over the encrypted TCP channel
 - **TLS** — self-signed certificate generated on first run; the viewer pins each host's certificate fingerprint on first connect and refuses any later connection presenting a different one (see [Security notes](#security-notes))
-- **WebSocket viewer** — built-in local WebSocket server lets a browser watch the session on port 9001
+- **WebSocket viewer** — built-in local WebSocket server lets a browser on the host machine watch the session at http://localhost:9001 (loopback only; other origins are refused)
 - **LAN host discovery** — the viewer's **Scan network** button finds PixelWizard hosts on the local network without typing an IP
 
 ## Quick start
