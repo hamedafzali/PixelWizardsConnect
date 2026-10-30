@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PixelWizard.AvaloniaClient.ViewModels"
+             x:Class="PixelWizard.AvaloniaClient.Views.OnboardingOverlay"
+             x:DataType="vm:MainViewModel">
+    <Border Background="{StaticResource Brush.Overlay.Scrim}">
+        <Border Background="{StaticResource Brush.Surface}"
+                CornerRadius="14"
+                BoxShadow="{StaticResource Shadow.Dialog}"
+                MaxWidth="460"
+                Margin="32"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Padding="32,28">
+            <StackPanel Spacing="0">
+
+                <TextBlock Text="Welcome to PixelWizard Connect"
+                           FontSize="22" FontWeight="Bold"
+                           Foreground="{StaticResource Brush.Text.Primary}"
+                           TextWrapping="Wrap"
+                           Margin="{StaticResource Space.Bottom.8}"/>
+                <TextBlock Text="Secure, consent-first remote desktop in three steps."
+                           FontSize="13"
+                           Foreground="{StaticResource Brush.Text.Muted}"
+                           TextWrapping="Wrap"
+                           Margin="{StaticResource Space.Bottom.24}"/>
+
+                <!-- Step 1 -->
+                <Grid ColumnDefinitions="32,*" Margin="{StaticResource Space.Bottom.16}">
+                    <Border Grid.Column="0" Width="24" Height="24"
+                            Background="{StaticResource Brush.Primary}" CornerRadius="12"
+                            VerticalAlignment="Top">
+                        <TextBlock Text="1" FontSize="12" FontWeight="Bold" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                               FontSize="13" Foreground="{StaticResource Brush.Text.Secondary}"
+                               Text="Host a machine — choose Host, then share the connection code or your local IP."/>
+                </Grid>
+
+                <!-- Step 2 -->
+                <Grid ColumnDefinitions="32,*" Margin="{StaticResource Space.Bottom.16}">
+                    <Border Grid.Column="0" Width="24" Height="24"
+                            Background="{StaticResource Brush.Primary}" CornerRadius="12"
+                            VerticalAlignment="Top">
+                        <TextBlock Text="2" FontSize="12" FontWeight="Bold" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                               FontSize="13" Foreground="{StaticResource Brush.Text.Secondary}"
+                               Text="Connect from another machine — choose Connect, enter the code or scan your network."/>
+                </Grid>
+
+                <!-- Step 3 -->
+                <Grid ColumnDefinitions="32,*" Margin="{StaticResource Space.Bottom.28}">
+                    <Border Grid.Column="0" Width="24" Height="24"
+                            Background="{StaticResource Brush.Primary}" CornerRadius="12"
+                            VerticalAlignment="Top">
+                        <TextBlock Text="3" FontSize="12" FontWeight="Bold" Foreground="White"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Grid.Column="1" TextWrapping="Wrap"
+                               FontSize="13" Foreground="{StaticResource Brush.Text.Secondary}"
+                               Text="Stay in control — the host approves every session and can stop sharing anytime."/>
+                </Grid>
+
+                <Button Classes="Primary" Content="Get started"
+                        Height="42"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding DismissOnboardingCommand}"
+                        AutomationProperties.Name="Dismiss onboarding"/>
+
+            </StackPanel>
+        </Border>
+    </Border>
+</UserControl>

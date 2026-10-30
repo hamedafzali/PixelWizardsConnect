@@ -1,0 +1,89 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PixelWizard.AvaloniaClient.ViewModels"
+             x:Class="PixelWizard.AvaloniaClient.Views.ModeSelectionView"
+             x:DataType="vm:MainViewModel">
+    <StackPanel VerticalAlignment="Center" Margin="40,0">
+        <StackPanel.Transitions>
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="CubicEaseOut"/>
+            </Transitions>
+        </StackPanel.Transitions>
+
+        <TextBlock Text="Get started"
+                   FontSize="26" FontWeight="Bold"
+                   Foreground="{StaticResource Brush.Text.Primary}"
+                   Margin="{StaticResource Space.Bottom.4}"/>
+        <TextBlock Text="What would you like to do?"
+                   FontSize="14"
+                   Foreground="{StaticResource Brush.Text.Muted}"
+                   Margin="0,0,0,32"/>
+
+        <!-- HOST card -->
+        <Button Classes="Card" Margin="{StaticResource Space.Bottom.12}"
+                Command="{Binding GoHostCommand}"
+                IsEnabled="{Binding CanHost}"
+                AutomationProperties.Name="Host this computer">
+            <Grid Margin="{StaticResource Space.20x18}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="44" Height="44"
+                        Background="{StaticResource Brush.Success.Bg}"
+                        CornerRadius="10" Margin="{StaticResource Space.Right.16}"
+                        BorderBrush="{StaticResource Brush.Primary}" BorderThickness="3,0,0,0">
+                    <Path Width="20" Height="20" Stretch="Uniform"
+                          StrokeThickness="1.5" Stroke="{StaticResource Brush.Success}" Fill="Transparent"
+                          Data="M8.288 15.038a5.25 5.25 0 0 1 7.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12 20.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Host this computer"
+                               FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource Brush.Text.Primary}"/>
+                    <TextBlock Text="{Binding HostCardSubtitle}" FontSize="12"
+                               Foreground="{StaticResource Brush.Text.Muted}"
+                               Margin="{StaticResource Space.Top.4}"/>
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="›" FontSize="20"
+                           Foreground="{StaticResource Brush.Neutral.300}"
+                           VerticalAlignment="Center" Margin="{StaticResource Space.Left.12}"/>
+            </Grid>
+        </Button>
+
+        <!-- VIEWER card -->
+        <Button Classes="Card" Command="{Binding GoViewerCommand}"
+                AutomationProperties.Name="Connect to remote computer">
+            <Grid Margin="{StaticResource Space.20x18}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="44" Height="44"
+                        Background="{StaticResource Brush.Info.Bg}" CornerRadius="10"
+                        Margin="{StaticResource Space.Right.16}">
+                    <Path Width="20" Height="20" Stretch="Uniform"
+                          StrokeThickness="1.5" Stroke="{StaticResource Brush.Primary}" Fill="Transparent"
+                          Data="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25z"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Connect to remote"
+                               FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource Brush.Text.Primary}"/>
+                    <TextBlock Text="View and control another machine"
+                               FontSize="12"
+                               Foreground="{StaticResource Brush.Text.Muted}"
+                               Margin="{StaticResource Space.Top.4}"/>
+                </StackPanel>
+                <TextBlock Grid.Column="2" Text="›" FontSize="20"
+                           Foreground="{StaticResource Brush.Neutral.300}"
+                           VerticalAlignment="Center" Margin="{StaticResource Space.Left.12}"/>
+            </Grid>
+        </Button>
+
+    </StackPanel>
+</UserControl>
