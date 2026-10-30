@@ -1,0 +1,29 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PixelWizard.AvaloniaClient.ViewModels"
+             x:Class="PixelWizard.AvaloniaClient.Views.StatusBar"
+             x:DataType="vm:MainViewModel">
+    <Border Background="{StaticResource Brush.Surface}"
+            BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0">
+        <DockPanel Margin="24,0" VerticalAlignment="Center">
+            <!-- Stop Hosting button — persistent, right side -->
+            <Button DockPanel.Dock="Right" Classes="Danger" Content="Stop hosting"
+                    Height="24" FontSize="11" Padding="12,0"
+                    IsVisible="{Binding Host.IsHostRunning}"
+                    Command="{Binding Host.StopHostCommand}"
+                    AutomationProperties.Name="Stop hosting session"
+                    Margin="0,0,0,0"/>
+            <TextBlock DockPanel.Dock="Right"
+                       Text="Hover screen to capture keyboard"
+                       FontSize="11"
+                       Foreground="{StaticResource Brush.Neutral.300}"
+                       IsVisible="{Binding ShowScreenDisplay}"
+                       VerticalAlignment="Center"
+                       Margin="{StaticResource Space.Right.16}"/>
+            <TextBlock Text="{Binding Status}"
+                       FontSize="13"
+                       Foreground="{StaticResource Brush.Text.Secondary}"
+                       VerticalAlignment="Center"/>
+        </DockPanel>
+    </Border>
+</UserControl>

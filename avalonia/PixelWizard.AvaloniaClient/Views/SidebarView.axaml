@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PixelWizard.AvaloniaClient.ViewModels"
+             x:Class="PixelWizard.AvaloniaClient.Views.SidebarView"
+             x:DataType="vm:MainViewModel">
+    <Border Width="224" Margin="{StaticResource Space.Right.16}"
+            Background="{StaticResource Brush.Sidebar.Bg}" CornerRadius="12">
+        <DockPanel Margin="20" LastChildFill="False">
+
+            <!-- Logo -->
+            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,0">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                    <Border Width="30" Height="30" Background="{StaticResource Brush.Primary}"
+                            CornerRadius="8" Margin="0,0,10,0">
+                        <TextBlock Text="PW" FontSize="12" FontWeight="Bold"
+                                   Foreground="White"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="PixelWizard"
+                               FontSize="15" FontWeight="SemiBold"
+                               Foreground="{StaticResource Brush.Text.OnDark}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="Connect" FontSize="11"
+                           Foreground="{StaticResource Brush.Text.OnDarkMuted}"
+                           Margin="40,0,0,12"/>
+            </StackPanel>
+
+            <!-- Footer -->
+            <StackPanel DockPanel.Dock="Bottom" Spacing="{StaticResource Space.8}">
+
+                <!-- Session stats when viewing -->
+                <Border Background="{StaticResource Brush.Sidebar.Surface}" CornerRadius="8"
+                        Padding="{StaticResource Space.16x12}"
+                        IsVisible="{Binding ShowScreenDisplay}">
+                    <StackPanel Spacing="0">
+                        <TextBlock Text="SESSION" FontSize="9" FontWeight="SemiBold"
+                                   Foreground="{StaticResource Brush.Neutral.400}"
+                                   Margin="{StaticResource Space.Bottom.10}"/>
+                        <Grid ColumnDefinitions="*,Auto" Margin="{StaticResource Space.Bottom.8}">
+                            <TextBlock Grid.Column="0" Text="FPS"
+                                       FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Viewer.FpsText}"
+                                       FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.Text.OnDark}"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" Margin="{StaticResource Space.Bottom.8}">
+                            <TextBlock Grid.Column="0" Text="Latency"
+                                       FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Viewer.LatencyText}"
+                                       FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.Text.OnDark}"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Down"
+                                       FontSize="12" Foreground="{StaticResource Brush.Text.OnDarkMuted}"/>
+                            <TextBlock Grid.Column="1" Text="{Binding Viewer.BandwidthText}"
+                                       FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.Text.OnDark}"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Keyboard badge -->
+                <Border Background="{StaticResource Brush.Badge.Keyboard.Bg}" CornerRadius="6" Padding="{StaticResource Space.10x7}"
+                        IsVisible="{Binding Viewer.KeyboardActive}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}">
+                        <Ellipse Width="6" Height="6" Fill="{StaticResource Brush.Indicator.On}" VerticalAlignment="Center"/>
+                        <TextBlock Text="Keyboard captured"
+                                   FontSize="11" Foreground="{StaticResource Brush.Badge.Keyboard.Text}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- TLS badge -->
+                <Border Background="{StaticResource Brush.Sidebar.Surface}" CornerRadius="6" Padding="{StaticResource Space.10x7}">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}">
+                        <Ellipse Width="6" Height="6" Fill="{StaticResource Brush.Indicator.On}" VerticalAlignment="Center"/>
+                        <TextBlock Text="TLS encrypted"
+                                   FontSize="11"
+                                   Foreground="{StaticResource Brush.Text.OnDarkMuted}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="v0.1 · self-hosted" FontSize="10"
+                           Foreground="{StaticResource Brush.Neutral.500}"/>
+            </StackPanel>
+
+        </DockPanel>
+    </Border>
+</UserControl>
