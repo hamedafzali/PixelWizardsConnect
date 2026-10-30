@@ -16,7 +16,7 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
 {
     // ── Settings ──────────────────────────────────────────────────────────────
 
-    private readonly AppSettings _settings = AppSettings.Load();
+    private readonly AppSettings _settings;
 
     // ── Window title ──────────────────────────────────────────────────────────
 
@@ -135,8 +135,12 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
-    public MainViewModel()
+    public MainViewModel() : this(AppSettings.Load()) { }
+
+    // Tests pass their own settings so they never touch the user's settings file.
+    public MainViewModel(AppSettings settings)
     {
+        _settings = settings;
         GoHostCommand             = ReactiveCommand.Create(GoHost);
         GoViewerCommand           = ReactiveCommand.Create(() => { Screen = AppScreen.Viewer; });
         BackCommand               = ReactiveCommand.Create(GoBack);
