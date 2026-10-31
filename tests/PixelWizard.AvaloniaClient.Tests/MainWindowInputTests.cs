@@ -286,6 +286,28 @@ public sealed class MainWindowInputTests : IDisposable
         lock (_keyUps) Assert.Equal(new[] { 0x41 }, _keyUps);
     }
 
+    // Keys typed over the screen go to the host; if the chat box kept focus they would
+    // also be typed into chat.
+    [AvaloniaFact]
+    public async Task HoveringTheScreen_TakesFocusFromTheChatBox()
+    {
+        await GoLive();
+        _vm.Chat.ToggleCommand.Execute().Subscribe();
+        Settle();
+        var chat = TextBoxNamed("Chat message");
+        chat.Focus();
+        Assert.Same(chat, _window.FocusManager?.GetFocusedElement());
+
+        _window.MouseMove(WindowPointOf(ScreenImage("FitScreenImage"), 100, 50), RawInputModifiers.None);
+        Assert.True(_vm.Viewer.KeyboardActive);
+        Assert.NotSame(chat, _window.FocusManager?.GetFocusedElement());
+
+        _window.KeyPressQwerty(PhysicalKey.B, RawInputModifiers.None);
+        _window.KeyTextInput("b");
+        await WaitUntil(() => { lock (_keyDowns) return _keyDowns.Count > 0; }, "key down on host");
+        Assert.True(string.IsNullOrEmpty(_vm.Chat.Input));
+    }
+
     // ── Repaint ───────────────────────────────────────────────────────────────
 
     // A delta is drawn into the same bitmap in place, so the screen shows it only if the

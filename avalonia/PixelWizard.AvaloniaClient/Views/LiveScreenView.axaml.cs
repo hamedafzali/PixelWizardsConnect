@@ -124,7 +124,9 @@ public partial class LiveScreenView : UserControl
     private void OnScreenPointerEntered(object? sender, PointerEventArgs e)
     {
         if (VM is { } vm) vm.KeyboardActive = true;
-        _keyboardSource?.Focus();
+        // With nothing focused, keys go to the window, so a focused chat box doesn't also
+        // get the letters meant for the host.
+        _keyboardSource?.FocusManager?.ClearFocus();
     }
 
     private void OnScreenPointerExited(object? sender, PointerEventArgs e)
