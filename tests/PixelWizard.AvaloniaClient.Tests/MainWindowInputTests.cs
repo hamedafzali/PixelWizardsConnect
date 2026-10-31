@@ -321,6 +321,27 @@ public sealed class MainWindowInputTests : IDisposable
         Assert.True(string.IsNullOrEmpty(_vm.Chat.Input));
     }
 
+    // ── Navigation ────────────────────────────────────────────────────────────
+
+    // Back ends the session; its Disconnected event arrives afterwards and must not pull the
+    // window back to the Viewer screen.
+    [AvaloniaFact]
+    public async Task BackFromTheLiveScreen_StaysOnModeSelection()
+    {
+        bool hostSawDrop = false;
+        _host.Disconnected += () => hostSawDrop = true;
+        await GoLive();
+
+        _vm.BackCommand.Execute().Subscribe();
+        await WaitUntil(() => hostSawDrop, "host to see the viewer leave");
+        await Task.Delay(100);
+        Settle();
+
+        Assert.True(_vm.ShowModeSelection);
+        Assert.False(_vm.ShowViewerPanel);
+        Assert.NotEqual("Disconnected", _vm.Status);
+    }
+
     // ── Repaint ───────────────────────────────────────────────────────────────
 
     // A delta is drawn into the same bitmap in place, so the screen shows it only if the

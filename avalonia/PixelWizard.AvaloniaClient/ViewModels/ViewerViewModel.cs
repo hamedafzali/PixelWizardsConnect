@@ -372,6 +372,9 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
             certFailure = null;
             Dispatcher.UIThread.Post(() =>
             {
+                // The user left this session (Back, Disconnect) or started another one;
+                // Disconnect() has already reset the view, and the screen is theirs to pick.
+                if (_session != session) return;
                 StopFrameTimeoutTimer();
                 IsConnected  = false;
                 IsConnecting = false;
