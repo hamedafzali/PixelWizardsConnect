@@ -13,6 +13,7 @@ using PixelWizard.Core.Models;
 using PixelWizard.Media;
 using PixelWizard.Protocol;
 using PixelWizard.Session;
+using PixelWizard.Signaling;
 using PixelWizard.Transport.Tcp;
 using PixelWizard.Transport.WebSocket;
 

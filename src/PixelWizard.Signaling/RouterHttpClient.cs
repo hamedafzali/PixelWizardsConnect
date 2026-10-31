@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using PixelWizard.Core.Interfaces;
 
-namespace PixelWizard.Transport.Tcp
+namespace PixelWizard.Signaling
 {
     public class RouterHttpClient : IRouterClient
     {

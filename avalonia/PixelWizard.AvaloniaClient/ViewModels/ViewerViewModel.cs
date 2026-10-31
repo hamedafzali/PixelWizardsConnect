@@ -13,6 +13,7 @@ using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
 using PixelWizard.Protocol;
 using PixelWizard.Session;
+using PixelWizard.Signaling;
 using PixelWizard.Transport.Tcp;
 
 namespace PixelWizard.AvaloniaClient.ViewModels;

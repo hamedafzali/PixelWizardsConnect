@@ -6,7 +6,7 @@ using PixelWizard.AvaloniaClient.Platform;
 using PixelWizard.AvaloniaClient.Services;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Protocol;
-using PixelWizard.Transport.Tcp;
+using PixelWizard.Signaling;
 
 namespace PixelWizard.AvaloniaClient.ViewModels;
 

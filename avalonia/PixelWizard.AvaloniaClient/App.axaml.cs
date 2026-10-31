@@ -12,7 +12,7 @@ using PixelWizard.AvaloniaClient.Platform;
 using PixelWizard.AvaloniaClient.Services;
 using PixelWizard.AvaloniaClient.ViewModels;
 using PixelWizard.AvaloniaClient.Views;
-using PixelWizard.Transport.Tcp;
+using PixelWizard.Signaling;
 
 namespace PixelWizard.AvaloniaClient;
 
