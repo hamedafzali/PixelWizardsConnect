@@ -122,7 +122,8 @@ New `docs/SIGNALING.md`, versioned like `PROTOCOL.md`. It covers:
 - **Transport:** WSS at `/signal`. JSON text frames carrying `{"v":1,"type":...}`. Unknown
   `type` values are ignored, never fatal, for the same reason as the Phase 1 envelope.
 - **Roles and pairing:**
-  - The host sends `register` and gets back `registered {code, turn}`.
+  - The host sends `register` and gets back `registered {code}`. TURN credentials go out at
+    pairing time instead, in `joined` and `peer-joined` (refined in SIGNALING.md).
   - The viewer sends `join {code}` and gets back `joined {turn}`.
   - The host is told `peer-joined`.
   - The code stays one-time use, as it is today.
@@ -173,7 +174,7 @@ Gate: you review SIGNALING.md. No code until it is accepted.
   - username = `<expiry-unix>:<random-id>`;
   - password = base64(HMAC-SHA1(secret, username)).
 - The router is configured with `TURN_URLS`, `TURN_SECRET` and `TURN_CREDENTIAL_TTL`.
-- Credentials go out in `registered` and `joined` as `{urls, username, credential}`. They are
+- Credentials go out in `peer-joined` and `joined` as `{urls, username, credential}`. They are
   issued per socket and never logged.
 - Tests:
   - a fixed-input vector checks the HMAC;
