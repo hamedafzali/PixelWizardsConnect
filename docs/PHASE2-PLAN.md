@@ -82,6 +82,8 @@ T7  Extract PixelWizard.Transport.WebSocket + Playwright browser smoke test
 T8  WinForms removal + paired macOS CI assertion flip              [independent, same commit]
 T5b Detector relocation: ScreenChangeDetector + both SkiaScreenChangeDetector
     copies into PixelWizard.Media (deferred half of T5 — see note below)
+    [as executed after T13 (87f84f3, de617c0, b37dba0): the Skia detector only;
+     the System.Drawing one stays in WindowsHost — see "T5b as executed" below]
 T9  PixelWizard.Session: HostSession/ViewerSession, zero Dispatcher refs
     [split into T9.1-T9.5 at T8 — see the sub-task breakdown below]
 T10 Live end-to-end Hello-flow socket test (backlog item 4, unblocked by T9)
@@ -141,6 +143,25 @@ correctly at runtime). What blocker 2 still requires is the **namespace scheme**
 Linux/Mac `SkiaScreenChangeDetector` name collision — that half is unchanged by T8. Net effect:
 T5b's scope shrinks (one fewer real blocker to design around), but T5b is not mechanical yet —
 blocker 1 (harness coupling) and the namespace collision both still need solving first.
+
+**T5b as executed** (after T13, in three commits):
+
+1. 87f84f3 — `SkiaDetectorHarness` constructs the detector directly instead of loading it by
+   assembly and type name; the detector became `public` for that. Blocker 1 is gone: the moves
+   below are checked by the compiler. A mutant (threshold 0.10 → 0.99) fails 2 of the 13 Skia
+   tests, so the harness really drives the detector.
+2. de617c0 — the Linux `SkiaScreenChangeDetector` moves to `PixelWizard.Media` unchanged but
+   for its namespace. Media gains SkiaSharp and `AllowUnsafeBlocks`.
+3. b37dba0 — the Mac copy is deleted and MacHost uses Media's. With whitespace ignored the two
+   copies differed only by one inlined local, so the namespace collision (blocker 2) is solved
+   by having one class, not a naming scheme. The Mac capture path is covered by the Skia suite
+   for the first time.
+
+**Deviation:** the System.Drawing `ScreenChangeDetector` stays in `PixelWizard.WindowsHost`.
+Moving it would put `System.Drawing.Common`, a Windows-only package, into Media and so into
+the macOS and Linux builds, and co-locating it does not remove the duplicate algorithm
+(BACKLOG row 3) — it is a separate implementation either way. It is Windows platform code
+and stays with the Windows platform project.
 
 Rationale for the order:
 
@@ -431,7 +452,7 @@ target missed by a wide margin means stop and re-split.
 testing). After T13.6 the live screen is a self-contained `LiveScreenView`
 on `ViewerViewModel`, so a separate window becomes a small follow-up that
 hosts that view in a second `Window` -- it is placed after T13, not folded
-in, so T13 stays a no-behaviour-change refactor.
+in, so T13 stays a no-behaviour-change refactor. Done in a77aaa4.
 
 ## Intermediate milestone
 
