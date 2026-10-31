@@ -58,10 +58,17 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
             this.RaisePropertyChanged(nameof(ShowModeSelection));
             this.RaisePropertyChanged(nameof(ShowViewerPanel));
             this.RaisePropertyChanged(nameof(ShowHostPanel));
-            this.RaisePropertyChanged(nameof(ShowScreenDisplay));
-            this.RaisePropertyChanged(nameof(ShowSidebar));
+            this.RaisePropertyChanged(nameof(IsViewing));
+            RaiseScreenPlacementChanged();
             UpdateWindowTitle();
         }
+    }
+
+    private void RaiseScreenPlacementChanged()
+    {
+        this.RaisePropertyChanged(nameof(ShowScreenDisplay));
+        this.RaisePropertyChanged(nameof(ShowScreenWindow));
+        this.RaisePropertyChanged(nameof(ShowSidebar));
     }
 
     void IViewerShell.ShowLiveScreen() => Screen = AppScreen.LiveScreen;
@@ -80,7 +87,25 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
     public bool ShowModeSelection => _screen == AppScreen.ModeSelection;
     public bool ShowViewerPanel   => _screen == AppScreen.Viewer;
     public bool ShowHostPanel     => _screen == AppScreen.Host;
-    public bool ShowScreenDisplay => _screen == AppScreen.LiveScreen;
+    // Live on a remote screen, whether it is shown in this window or in its own.
+    public bool IsViewing         => _screen == AppScreen.LiveScreen;
+    public bool ShowScreenDisplay => IsViewing && !_screenInOwnWindow;
+    public bool ShowScreenWindow  => IsViewing && _screenInOwnWindow;
+
+    // Pop out puts the remote screen in its own window. The choice lasts for the app run, so
+    // the next connection opens the same way; closing that window brings the screen back.
+    private bool _screenInOwnWindow;
+    public bool ScreenInOwnWindow
+    {
+        get => _screenInOwnWindow;
+        set
+        {
+            if (_screenInOwnWindow == value) return;
+            _screenInOwnWindow = value;
+            this.RaisePropertyChanged();
+            RaiseScreenPlacementChanged();
+        }
+    }
 
     // The sidebar is collapsed while viewing so the remote screen gets the full width; the
     // toolbar's Panel button brings it back. Its live stats are duplicated in the toolbar.
@@ -117,6 +142,8 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
     public ReactiveCommand<Unit, Unit> GoViewerCommand           { get; }
     public ReactiveCommand<Unit, Unit> BackCommand               { get; }
     public ReactiveCommand<Unit, Unit> ToggleSidebarCommand      { get; }
+    public ReactiveCommand<Unit, Unit> PopOutScreenCommand       { get; }
+    public ReactiveCommand<Unit, Unit> DockScreenCommand         { get; }
 
     // ── Internal state ────────────────────────────────────────────────────────
 
@@ -149,6 +176,8 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
             _sidebarCollapsedWhileViewing = !_sidebarCollapsedWhileViewing;
             this.RaisePropertyChanged(nameof(ShowSidebar));
         });
+        PopOutScreenCommand       = ReactiveCommand.Create(() => { ScreenInOwnWindow = true; });
+        DockScreenCommand         = ReactiveCommand.Create(() => { ScreenInOwnWindow = false; });
         Chat = new ChatViewModel(ActiveChatLink,
             () => GetClipboardCallback?.Invoke() ?? Task.FromResult<string?>(null));
         Viewer = new ViewerViewModel(this, Chat, _settings, router, OurHello);

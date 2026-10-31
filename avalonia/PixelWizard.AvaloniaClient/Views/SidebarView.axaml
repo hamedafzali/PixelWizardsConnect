@@ -33,7 +33,7 @@
                 <!-- Session stats when viewing -->
                 <Border Background="{StaticResource Brush.Sidebar.Surface}" CornerRadius="8"
                         Padding="{StaticResource Space.16x12}"
-                        IsVisible="{Binding ShowScreenDisplay}">
+                        IsVisible="{Binding IsViewing}">
                     <StackPanel Spacing="0">
                         <TextBlock Text="SESSION" FontSize="9" FontWeight="SemiBold"
                                    Foreground="{StaticResource Brush.Neutral.400}"

@@ -42,7 +42,28 @@
                     <views:LiveScreenView DataContext="{Binding Viewer}"
                                           IsVisible="{Binding $parent.((vm:MainViewModel)DataContext).ShowScreenDisplay}"
                                           Chat="{Binding $parent.((vm:MainViewModel)DataContext).Chat}"
-                                          ToggleSidebarCommand="{Binding $parent.((vm:MainViewModel)DataContext).ToggleSidebarCommand}"/>
+                                          ToggleSidebarCommand="{Binding $parent.((vm:MainViewModel)DataContext).ToggleSidebarCommand}"
+                                          PopOutCommand="{Binding $parent.((vm:MainViewModel)DataContext).PopOutScreenCommand}"/>
+
+                    <!-- ─── SCREEN IN ITS OWN WINDOW ─── -->
+                    <StackPanel IsVisible="{Binding ShowScreenWindow}"
+                                HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="{StaticResource Space.8}">
+                        <TextBlock Text="The remote screen is open in its own window"
+                                   FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center"
+                                   Foreground="{StaticResource Brush.Text.Primary}"/>
+                        <TextBlock Text="Close that window to bring it back here."
+                                   FontSize="12" HorizontalAlignment="Center"
+                                   Foreground="{StaticResource Brush.Text.Muted}"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                    Spacing="{StaticResource Space.8}" Margin="0,8,0,0">
+                            <Button Classes="Secondary" Content="Bring it back" Height="32" Padding="14,0"
+                                    Command="{Binding DockScreenCommand}"
+                                    AutomationProperties.Name="Bring the remote screen back into this window"/>
+                            <Button Classes="Danger" Content="Disconnect" Height="32" Padding="14,0"
+                                    Command="{Binding Viewer.DisconnectCommand}"
+                                    AutomationProperties.Name="Disconnect from session"/>
+                        </StackPanel>
+                    </StackPanel>
 
                 </Grid>
             </Border>

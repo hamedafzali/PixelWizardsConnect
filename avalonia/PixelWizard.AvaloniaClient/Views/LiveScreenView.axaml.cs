@@ -10,12 +10,16 @@ namespace PixelWizard.AvaloniaClient.Views;
 
 public partial class LiveScreenView : UserControl
 {
-    // The chat panel and the sidebar toggle belong to the shell, not to the viewer.
+    // The chat panel, the sidebar toggle and pop out belong to the shell, not to the viewer.
+    // A button whose command is not set is hidden.
     public static readonly StyledProperty<ChatViewModel?> ChatProperty =
         AvaloniaProperty.Register<LiveScreenView, ChatViewModel?>(nameof(Chat));
 
     public static readonly StyledProperty<ICommand?> ToggleSidebarCommandProperty =
         AvaloniaProperty.Register<LiveScreenView, ICommand?>(nameof(ToggleSidebarCommand));
+
+    public static readonly StyledProperty<ICommand?> PopOutCommandProperty =
+        AvaloniaProperty.Register<LiveScreenView, ICommand?>(nameof(PopOutCommand));
 
     public ChatViewModel? Chat
     {
@@ -27,6 +31,12 @@ public partial class LiveScreenView : UserControl
     {
         get => GetValue(ToggleSidebarCommandProperty);
         set => SetValue(ToggleSidebarCommandProperty, value);
+    }
+
+    public ICommand? PopOutCommand
+    {
+        get => GetValue(PopOutCommandProperty);
+        set => SetValue(PopOutCommandProperty, value);
     }
 
     private ViewerViewModel? _subscribedVm;

@@ -43,11 +43,17 @@
                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"
                             Spacing="4" VerticalAlignment="Center">
 
-                    <!-- Sidebar toggle -->
+                    <!-- Sidebar toggle and pop out: only where the view is given them -->
                     <Button Classes="Toolbar" Content="Panel"
                             Command="{Binding $parent[views:LiveScreenView].ToggleSidebarCommand}" Width="48"
+                            IsVisible="{Binding $parent[views:LiveScreenView].ToggleSidebarCommand, Converter={x:Static ObjectConverters.IsNotNull}}"
                             ToolTip.Tip="Show or hide the side panel"
                             AutomationProperties.Name="Toggle side panel"/>
+                    <Button Classes="Toolbar" Content="Pop out"
+                            Command="{Binding $parent[views:LiveScreenView].PopOutCommand}" Width="66"
+                            IsVisible="{Binding $parent[views:LiveScreenView].PopOutCommand, Converter={x:Static ObjectConverters.IsNotNull}}"
+                            ToolTip.Tip="Open the remote screen in its own window"
+                            AutomationProperties.Name="Open remote screen in its own window"/>
 
                     <!-- Feature 9: Quality preset ComboBox -->
                     <ComboBox SelectedIndex="{Binding ViewerQualityIndex}"

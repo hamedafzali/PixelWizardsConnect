@@ -17,7 +17,7 @@
                        Text="Hover screen to capture keyboard"
                        FontSize="11"
                        Foreground="{StaticResource Brush.Neutral.300}"
-                       IsVisible="{Binding ShowScreenDisplay}"
+                       IsVisible="{Binding IsViewing}"
                        VerticalAlignment="Center"
                        Margin="{StaticResource Space.Right.16}"/>
             <TextBlock Text="{Binding Status}"

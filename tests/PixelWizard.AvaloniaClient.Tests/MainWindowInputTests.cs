@@ -98,20 +98,31 @@ public sealed class MainWindowInputTests : IDisposable
 
     // Runs posted work, lays out and renders: a panel that just became visible then has its
     // controls, and pointer hit-testing (which uses the rendered composition tree) finds them.
-    private void Settle()
+    private void Settle(Window? window = null)
     {
+        window ??= _window;
         Dispatcher.UIThread.RunJobs();
-        _window.UpdateLayout();
-        _window.CaptureRenderedFrame()?.Dispose();
+        window.UpdateLayout();
+        window.CaptureRenderedFrame()?.Dispose();
     }
 
-    private T Find<T>(Func<T, bool> match) where T : Control =>
-        _window.GetVisualDescendants().OfType<T>().Single(match);
+    private T Find<T>(Func<T, bool> match, Window? window = null) where T : Control =>
+        (window ?? _window).GetVisualDescendants().OfType<T>().Single(match);
 
     private TextBox TextBoxNamed(string automationName) =>
         Find<TextBox>(t => AutomationProperties.GetName(t) == automationName);
 
-    private Image ScreenImage(string name) => Find<Image>(i => i.Name == name);
+    private Image ScreenImage(string name, Window? window = null) => Find<Image>(i => i.Name == name, window);
+
+    private Button ButtonNamed(string automationName, Window? window = null) =>
+        Find<Button>(b => AutomationProperties.GetName(b) == automationName, window);
+
+    private static void Click(Window window, Control control)
+    {
+        var centre = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window)!.Value;
+        window.MouseDown(centre, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(centre, MouseButton.Left, RawInputModifiers.None);
+    }
 
     // Press only, like a user whose Return is still down as the connection goes live; the
     // key-up test releases it later.
@@ -154,21 +165,25 @@ public sealed class MainWindowInputTests : IDisposable
         return ms.ToArray();
     }
 
-    // Window position of the centre of remote pixel (rx, ry) in an Image showing the
-    // remote screen with uniform stretch.
-    private Point WindowPointOf(Image img, int rx, int ry)
+    // Position, in the Image's own window, of the centre of remote pixel (rx, ry) in an Image
+    // showing the remote screen with uniform stretch.
+    private static Point WindowPointOf(Image img, int rx, int ry)
     {
         double scale = Math.Min(img.Bounds.Width / RemoteW, img.Bounds.Height / RemoteH);
         double offX = (img.Bounds.Width - RemoteW * scale) / 2;
         double offY = (img.Bounds.Height - RemoteH * scale) / 2;
         var local = new Point(offX + (rx + 0.5) * scale, offY + (ry + 0.5) * scale);
-        return img.TranslatePoint(local, _window) ?? throw new InvalidOperationException("image not in window");
+        return img.TranslatePoint(local, WindowOf(img)) ?? throw new InvalidOperationException("image not in window");
     }
 
-    private Color PixelAtCentreOf(Image img)
+    private static Window WindowOf(Control control) =>
+        TopLevel.GetTopLevel(control) as Window ?? throw new InvalidOperationException("not in a window");
+
+    private static Color PixelAtCentreOf(Image img)
     {
-        using var frame = _window.CaptureRenderedFrame() ?? throw new InvalidOperationException("no frame");
-        var centre = img.TranslatePoint(new Point(img.Bounds.Width / 2, img.Bounds.Height / 2), _window)!.Value;
+        var window = WindowOf(img);
+        using var frame = window.CaptureRenderedFrame() ?? throw new InvalidOperationException("no frame");
+        var centre = img.TranslatePoint(new Point(img.Bounds.Width / 2, img.Bounds.Height / 2), window)!.Value;
         var px = new byte[4];
         var buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(4);
         try
@@ -340,6 +355,109 @@ public sealed class MainWindowInputTests : IDisposable
         Assert.True(_vm.ShowModeSelection);
         Assert.False(_vm.ShowViewerPanel);
         Assert.NotEqual("Disconnected", _vm.Status);
+    }
+
+    // ── The remote screen in its own window ───────────────────────────────────
+
+    private RemoteScreenWindow PopOut()
+    {
+        Click(_window, ButtonNamed("Open remote screen in its own window"));
+        Settle();
+        var screen = _window.ScreenWindow ?? throw new InvalidOperationException("no screen window");
+        Settle(screen);
+        return screen;
+    }
+
+    // Pop out moves the screen into its own window: frames show there, and the pointer and
+    // keys over it reach the host. The main window shows the sidebar and a way back.
+    [AvaloniaFact]
+    public async Task PopOut_ShowsTheScreenInItsOwnWindow_WhereInputReachesTheHost()
+    {
+        await GoLive();
+        var screen = PopOut();
+
+        Assert.True(screen.IsVisible);
+        Assert.Equal(_vm.WindowTitle, screen.Title);
+        Assert.False(_vm.ShowScreenDisplay);
+        Assert.True(_vm.ShowSidebar);
+        Assert.True(ButtonNamed("Bring the remote screen back into this window").IsEffectivelyVisible);
+        Assert.False(ButtonNamed("Open remote screen in its own window", screen).IsEffectivelyVisible);
+        Assert.False(ButtonNamed("Toggle side panel", screen).IsEffectivelyVisible);
+
+        var img = ScreenImage("FitScreenImage", screen);
+        await WaitUntil(() => PixelAtCentreOf(img) == Colors.Red, "screen window to show the frame");
+
+        screen.MouseMove(WindowPointOf(img, 150, 25), RawInputModifiers.None);
+        await WaitUntil(() => { lock (_moves) return _moves.Contains((150, 25)); }, "move on host");
+        Assert.True(_vm.Viewer.KeyboardActive);
+        screen.KeyPressQwerty(PhysicalKey.B, RawInputModifiers.None);
+        screen.KeyReleaseQwerty(PhysicalKey.B, RawInputModifiers.None);
+        await WaitUntil(() => { lock (_keyUps) return _keyUps.Contains(0x42); }, "key up on host");
+        lock (_keyDowns) Assert.Equal(new[] { 0x42 }, _keyDowns);
+    }
+
+    // Closing the screen window, or Bring it back, puts the screen back in the main window.
+    // The session carries on and the pointer there still reaches the host.
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheScreenComesBack_AndTheSessionCarriesOn(bool byButton)
+    {
+        await GoLive();
+        var screen = PopOut();
+        bool closed = false;
+        screen.Closed += (_, _) => closed = true;
+
+        if (byButton) Click(_window, ButtonNamed("Bring the remote screen back into this window"));
+        else screen.Close();
+        Settle();
+
+        Assert.True(closed);
+        Assert.Null(_window.ScreenWindow);
+        Assert.False(_vm.ScreenInOwnWindow);
+        Assert.True(_vm.ShowScreenDisplay);
+        Assert.True(_vm.Viewer.IsConnected);
+        _window.MouseMove(WindowPointOf(ScreenImage("FitScreenImage"), 30, 40), RawInputModifiers.None);
+        await WaitUntil(() => { lock (_moves) return _moves.Contains((30, 40)); }, "move on host");
+    }
+
+    // Disconnecting closes the screen window. Pop out is remembered for the app run, so the
+    // next connection opens in its own window again.
+    [AvaloniaFact]
+    public async Task Disconnect_ClosesTheScreenWindow_AndTheNextConnectionPopsOutAgain()
+    {
+        await GoLive();
+        var screen = PopOut();
+        bool closed = false;
+        screen.Closed += (_, _) => closed = true;
+
+        Click(screen, ButtonNamed("Disconnect from session", screen));
+        Settle();
+
+        Assert.True(closed);
+        Assert.Null(_window.ScreenWindow);
+        Assert.False(_vm.Viewer.IsConnected);
+        Assert.True(_vm.ShowViewerPanel);
+        Assert.True(_vm.ScreenInOwnWindow);
+
+        ((IViewerShell)_vm).ShowLiveScreen(); // what the next connection's handshake does
+        Settle();
+        Assert.NotNull(_window.ScreenWindow);
+        Assert.False(_vm.ShowScreenDisplay);
+    }
+
+    // An open screen window would keep the app running after the main window closed.
+    [AvaloniaFact]
+    public async Task ClosingTheMainWindow_ClosesTheScreenWindow()
+    {
+        await GoLive();
+        var screen = PopOut();
+        bool closed = false;
+        screen.Closed += (_, _) => closed = true;
+
+        _window.Close();
+
+        Assert.True(closed);
     }
 
     // ── Repaint ───────────────────────────────────────────────────────────────
