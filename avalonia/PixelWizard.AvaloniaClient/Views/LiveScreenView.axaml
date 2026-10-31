@@ -1,0 +1,250 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PixelWizard.AvaloniaClient.ViewModels"
+             xmlns:views="using:PixelWizard.AvaloniaClient.Views"
+             x:Class="PixelWizard.AvaloniaClient.Views.LiveScreenView"
+             x:DataType="vm:ViewerViewModel">
+    <Grid RowDefinitions="48,Auto,*,Auto">
+        <Grid.Transitions>
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut"/>
+            </Transitions>
+        </Grid.Transitions>
+
+        <!-- Toolbar -->
+        <Border Grid.Row="0" Background="{StaticResource Brush.Toolbar.Bg}"
+                CornerRadius="12,12,0,0" Padding="16,0">
+            <DockPanel VerticalAlignment="Center">
+                <!-- Left: live indicator + stats -->
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" Spacing="16">
+                    <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}">
+                        <Ellipse Width="7" Height="7" Fill="{StaticResource Brush.Indicator.On}" VerticalAlignment="Center"/>
+                        <TextBlock Text="Live"
+                                   Foreground="{StaticResource Brush.Text.OnDark}"
+                                   FontWeight="SemiBold" FontSize="12"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding FpsText}"
+                               Foreground="{StaticResource Brush.Text.OnDarkMuted}"
+                               FontSize="12" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding LatencyText}"
+                               Foreground="{StaticResource Brush.Text.OnDarkMuted}"
+                               FontSize="12" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding BandwidthText}"
+                               Foreground="{StaticResource Brush.Text.OnDarkMuted}"
+                               FontSize="12" VerticalAlignment="Center"/>
+                    <TextBlock Text="⌨ Keyboard captured"
+                               IsVisible="{Binding KeyboardActive}"
+                               Foreground="{StaticResource Brush.Badge.Keyboard.Text}"
+                               FontSize="12" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Right: [Quality] [Clipboard] [Chat] [Zoom ComboBox] [+] [−] [Disconnect] -->
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"
+                            Spacing="4" VerticalAlignment="Center">
+
+                    <!-- Sidebar toggle -->
+                    <Button Classes="Toolbar" Content="Panel"
+                            Command="{Binding $parent[views:LiveScreenView].ToggleSidebarCommand}" Width="48"
+                            ToolTip.Tip="Show or hide the side panel"
+                            AutomationProperties.Name="Toggle side panel"/>
+
+                    <!-- Feature 9: Quality preset ComboBox -->
+                    <ComboBox SelectedIndex="{Binding ViewerQualityIndex}"
+                              Height="28" FontSize="11"
+                              Foreground="{StaticResource Brush.Toolbar.Text}" Background="{StaticResource Brush.Toolbar.Surface}"
+                              Width="84"
+                              VerticalAlignment="Center"
+                              ToolTip.Tip="Stream quality"
+                              AutomationProperties.Name="Stream quality">
+                        <ComboBoxItem Content="Low"/>
+                        <ComboBoxItem Content="Balanced"/>
+                        <ComboBoxItem Content="High"/>
+                        <ComboBoxItem Content="Fast"/>
+                    </ComboBox>
+
+                    <!-- Feature 1: Clipboard -->
+                    <Button Classes="Toolbar" Content="Clipboard"
+                            Command="{Binding $parent[views:LiveScreenView].Chat.SendClipboardCommand}" Width="70"
+                            ToolTip.Tip="Sync clipboard with host"
+                            AutomationProperties.Name="Sync clipboard with host"/>
+
+                    <!-- Feature 4: Chat toggle with unread badge -->
+                    <Panel>
+                        <Button Classes="Toolbar" Content="Chat"
+                                Command="{Binding $parent[views:LiveScreenView].Chat.ToggleCommand}" Width="44"
+                                ToolTip.Tip="Toggle chat panel"
+                                AutomationProperties.Name="Toggle chat panel"/>
+                        <Border Background="{StaticResource Brush.Badge.Unread}" CornerRadius="8"
+                                Padding="4,1"
+                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                Margin="0,-4,-4,0"
+                                IsVisible="{Binding $parent[views:LiveScreenView].Chat.HasUnread}">
+                            <TextBlock Text="{Binding $parent[views:LiveScreenView].Chat.UnreadCount}"
+                                       FontSize="9" Foreground="White"
+                                       FontWeight="Bold"/>
+                        </Border>
+                    </Panel>
+
+                    <!-- Zoom ComboBox -->
+                    <ComboBox SelectedIndex="{Binding ZoomPresetIndex}"
+                              Height="28" Width="76" FontSize="11"
+                              Foreground="{StaticResource Brush.Toolbar.Text}" Background="{StaticResource Brush.Toolbar.Surface}"
+                              VerticalAlignment="Center"
+                              ToolTip.Tip="Zoom level"
+                              AutomationProperties.Name="Zoom level">
+                        <ComboBoxItem Content="Fit"/>
+                        <ComboBoxItem Content="50%"/>
+                        <ComboBoxItem Content="75%"/>
+                        <ComboBoxItem Content="100%"/>
+                        <ComboBoxItem Content="150%"/>
+                        <ComboBoxItem Content="200%"/>
+                    </ComboBox>
+
+                    <!-- Zoom In -->
+                    <Button Classes="Toolbar" Content="+"
+                            Command="{Binding ZoomInCommand}" Width="28"
+                            ToolTip.Tip="Zoom in"
+                            AutomationProperties.Name="Zoom in"/>
+
+                    <!-- Zoom Out -->
+                    <Button Classes="Toolbar" Content="−"
+                            Command="{Binding ZoomOutCommand}" Width="28"
+                            ToolTip.Tip="Zoom out"
+                            AutomationProperties.Name="Zoom out"/>
+
+                    <!-- Disconnect -->
+                    <Button Classes="Danger" Content="Disconnect"
+                            Command="{Binding DisconnectCommand}"
+                            Height="28" FontSize="11" Padding="10,0"
+                            ToolTip.Tip="End session and disconnect"
+                            AutomationProperties.Name="Disconnect from session"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Feature 3: No-frames warning banner -->
+        <Border Grid.Row="1"
+                IsVisible="{Binding ShowNoFramesBanner}"
+                Background="{StaticResource Brush.Warning.Bg}"
+                BorderBrush="{StaticResource Brush.Warning.Strong}"
+                BorderThickness="0,0,0,1" Padding="{StaticResource Space.16x8}">
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}">
+                <Path Width="16" Height="16" Stretch="Uniform"
+                      StrokeThickness="1.5" Stroke="{StaticResource Brush.Warning}" Fill="Transparent"
+                      Data="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+                      VerticalAlignment="Center"/>
+                <TextBlock Text="No frames received — check connection"
+                           FontSize="12" Foreground="{StaticResource Brush.Warning.Text}"
+                           VerticalAlignment="Center"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Screen area -->
+        <Grid Grid.Row="2">
+            <!-- Fit mode -->
+            <Border IsVisible="{Binding IsFitMode}" Background="{StaticResource Brush.Screen.Bg}">
+                <Grid>
+                    <Image x:Name="FitScreenImage" Stretch="Uniform"
+                           Source="{Binding RemoteScreen}"
+                           HorizontalAlignment="Stretch"
+                           VerticalAlignment="Stretch"
+                           Cursor="Cross"
+                           PointerPressed="OnScreenPointerPressed"
+                           PointerReleased="OnScreenPointerReleased"
+                           PointerMoved="OnScreenPointerMoved"
+                           PointerEntered="OnScreenPointerEntered"
+                           PointerExited="OnScreenPointerExited"/>
+                    <!-- Empty state -->
+                    <StackPanel IsVisible="{Binding RemoteScreen, Converter={x:Static ObjectConverters.IsNull}}"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="Waiting for screen…" FontSize="13"
+                                   Foreground="{StaticResource Brush.Screen.EmptyText}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="The remote screen will appear here once the host starts streaming."
+                                   FontSize="11" Foreground="{StaticResource Brush.Screen.EmptySubtext}"
+                                   TextAlignment="Center" TextWrapping="Wrap"
+                                   MaxWidth="280" Margin="{StaticResource Space.Top.8}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Zoom mode -->
+            <ScrollViewer IsVisible="{Binding !IsFitMode}"
+                          Background="{StaticResource Brush.Screen.Bg}"
+                          HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Auto">
+                <Image x:Name="ZoomScreenImage" Source="{Binding RemoteScreen}"
+                       Stretch="None"
+                       Width="{Binding ScaledImageWidth}"
+                       Height="{Binding ScaledImageHeight}"
+                       HorizontalAlignment="Left"
+                       VerticalAlignment="Top"
+                       Cursor="Cross"
+                       PointerPressed="OnScreenPointerPressed"
+                       PointerReleased="OnScreenPointerReleased"
+                       PointerMoved="OnScreenPointerMoved"
+                       PointerEntered="OnScreenPointerEntered"
+                       PointerExited="OnScreenPointerExited"/>
+            </ScrollViewer>
+        </Grid>
+
+        <!-- Feature 4: Chat panel (overlay at bottom) -->
+        <Border Grid.Row="2"
+                IsVisible="{Binding $parent[views:LiveScreenView].Chat.Visible}"
+                Background="{StaticResource Brush.Chat.Overlay}"
+                BorderBrush="{StaticResource Brush.Chat.Border}"
+                BorderThickness="0,1,0,0"
+                MaxHeight="200"
+                VerticalAlignment="Bottom">
+            <Grid RowDefinitions="Auto,*,44">
+                <!-- Chat header with close button -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto"
+                      Margin="12,6,12,4">
+                    <TextBlock Grid.Column="0" Text="Chat"
+                               FontSize="11" FontWeight="SemiBold"
+                               Foreground="{StaticResource Brush.Text.OnDarkMuted}" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" Classes="Toolbar" Content="✕"
+                            Width="22" Height="22" Padding="0"
+                            Command="{Binding $parent[views:LiveScreenView].Chat.ToggleCommand}"
+                            AutomationProperties.Name="Close chat panel"/>
+                </Grid>
+                <!-- Chat messages -->
+                <ScrollViewer Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Padding="12,4">
+                    <ItemsControl ItemsSource="{Binding $parent[views:LiveScreenView].Chat.Messages}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Display}"
+                                           FontSize="11"
+                                           Foreground="{StaticResource Brush.Chat.Text}"
+                                           TextWrapping="Wrap"
+                                           Margin="0,2"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <!-- Chat input -->
+                <Grid Grid.Row="2" ColumnDefinitions="*,80" Margin="8,4,8,8">
+                    <TextBox Grid.Column="0"
+                             Text="{Binding $parent[views:LiveScreenView].Chat.Input}"
+                             Watermark="Type a message…"
+                             Background="{StaticResource Brush.Chat.Input.Bg}"
+                             Foreground="{StaticResource Brush.Text.OnDark}"
+                             BorderBrush="{StaticResource Brush.Chat.Input.Border}"
+                             Height="36"
+                             FontSize="12"
+                             Margin="0,0,4,0"
+                             AutomationProperties.Name="Chat message"/>
+                    <Button Grid.Column="1" Classes="Primary"
+                            Content="Send"
+                            Height="36"
+                            Command="{Binding $parent[views:LiveScreenView].Chat.SendCommand}"
+                            AutomationProperties.Name="Send chat message"/>
+                </Grid>
+            </Grid>
+        </Border>
+
+    </Grid>
+</UserControl>
