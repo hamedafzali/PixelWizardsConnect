@@ -1,0 +1,156 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:PixelWizard.AvaloniaClient.ViewModels"
+             xmlns:views="using:PixelWizard.AvaloniaClient.Views"
+             x:Class="PixelWizard.AvaloniaClient.Views.ViewerConnectView"
+             x:DataType="vm:ViewerViewModel">
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer.Transitions>
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.18" Easing="CubicEaseOut"/>
+            </Transitions>
+        </ScrollViewer.Transitions>
+        <StackPanel Margin="{StaticResource Space.32x24}" Spacing="0" MaxWidth="520">
+
+            <DockPanel Margin="{StaticResource Space.Bottom.24}">
+                <Button Classes="Ghost" Content="← Back" Width="80" Height="32"
+                        DockPanel.Dock="Left" Command="{Binding $parent[views:ViewerConnectView].BackCommand}"/>
+                <StackPanel Margin="{StaticResource Space.Left.16}" VerticalAlignment="Center">
+                    <TextBlock Text="Connect to Remote"
+                               FontSize="20" FontWeight="Bold"
+                               Foreground="{StaticResource Brush.Text.Primary}"/>
+                    <TextBlock Text="IP address or router connection code"
+                               FontSize="12"
+                               Foreground="{StaticResource Brush.Text.Muted}"
+                               Margin="{StaticResource Space.Top.4}"/>
+                </StackPanel>
+            </DockPanel>
+
+            <!-- Loading indicator while connecting -->
+            <ProgressBar IsIndeterminate="True" Height="2"
+                         IsVisible="{Binding IsConnecting}"
+                         Margin="{StaticResource Space.Bottom.8}"/>
+
+            <!-- Direct IP -->
+            <TextBlock Text="DIRECT IP" FontSize="11" FontWeight="SemiBold"
+                       Foreground="{StaticResource Brush.Text.Muted}"
+                       Margin="{StaticResource Space.Bottom.10}"/>
+
+            <!-- Recent hosts -->
+            <StackPanel IsVisible="{Binding HasRecentHosts}" Margin="{StaticResource Space.Bottom.12}">
+                <TextBlock Text="Recent" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{StaticResource Brush.Text.Secondary}"
+                           Margin="{StaticResource Space.Bottom.4}"/>
+                <ComboBox ItemsSource="{Binding RecentHosts}"
+                          SelectedItem="{Binding SelectedRecentHost}"
+                          HorizontalAlignment="Stretch"
+                          FontSize="13"
+                          IsEnabled="{Binding InputEnabled}"
+                          ToolTip.Tip="Recently connected hosts"
+                          AutomationProperties.Name="Recent hosts"/>
+            </StackPanel>
+
+            <TextBlock Text="Host IP Address" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource Brush.Text.Secondary}"
+                       Margin="{StaticResource Space.Bottom.4}"/>
+            <Grid ColumnDefinitions="*,10,120" Margin="{StaticResource Space.Bottom.12}">
+                <TextBox Grid.Column="0" Text="{Binding HostAddress}"
+                         Watermark="192.168.1.10" IsEnabled="{Binding InputEnabled}"
+                         KeyDown="OnAddressKeyDown"
+                         AutomationProperties.Name="Remote host IP address"/>
+                <Button Grid.Column="2" Classes="Primary" Content="Connect"
+                        Command="{Binding ConnectDirectCommand}"
+                        IsEnabled="{Binding InputEnabled}"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Connect via IP address"/>
+            </Grid>
+
+            <!-- Network discovery -->
+            <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.8}" Margin="{StaticResource Space.Bottom.4}"
+                        IsVisible="{Binding !IsConnecting}">
+                <Button Classes="Secondary" Content="Scan network"
+                        IsVisible="{Binding !IsScanning}"
+                        Command="{Binding ScanNetworkCommand}"
+                        AutomationProperties.Name="Scan local network"
+                        ToolTip.Tip="Scan local network for PixelWizard hosts (10 s)"/>
+                <Button Classes="Secondary" Content="Stop scan"
+                        IsVisible="{Binding IsScanning}"
+                        Command="{Binding ScanNetworkCommand}"
+                        AutomationProperties.Name="Stop scanning"/>
+                <TextBlock Text="{Binding DiscoveredHosts.Count, StringFormat='{}{0} found'}"
+                           FontSize="12" Foreground="{StaticResource Brush.Text.Muted}"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding IsScanning}"/>
+            </StackPanel>
+
+            <ListBox ItemsSource="{Binding DiscoveredHosts}"
+                     IsVisible="{Binding DiscoveredHosts.Count}"
+                     SelectedItem="{Binding SelectedDiscoveredHost}"
+                     Margin="{StaticResource Space.Bottom.16}" MaxHeight="120"
+                     BorderBrush="{StaticResource Brush.Border}"
+                     BorderThickness="1" CornerRadius="8"
+                     FontSize="13"/>
+
+            <!-- Divider -->
+            <Grid ColumnDefinitions="*,Auto,*" Margin="{StaticResource Space.Bottom.28}">
+                <Separator Grid.Column="0" VerticalAlignment="Center"
+                           Background="{StaticResource Brush.Border}" Height="1"/>
+                <TextBlock Grid.Column="1" Text="  or via code  "
+                           FontSize="12"
+                           Foreground="{StaticResource Brush.Text.Muted}"
+                           VerticalAlignment="Center"/>
+                <Separator Grid.Column="2" VerticalAlignment="Center"
+                           Background="{StaticResource Brush.Border}" Height="1"/>
+            </Grid>
+
+            <!-- Router + Code -->
+            <TextBlock Text="VIA ROUTER" FontSize="11" FontWeight="SemiBold"
+                       Foreground="{StaticResource Brush.Text.Muted}"
+                       Margin="{StaticResource Space.Bottom.10}"/>
+            <TextBlock Text="Router Address" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource Brush.Text.Secondary}"
+                       Margin="{StaticResource Space.Bottom.4}"/>
+            <TextBox Text="{Binding RouterAddress}"
+                     Watermark="router.example.com:9000"
+                     IsEnabled="{Binding InputEnabled}"
+                     Margin="0,0,0,14"
+                     AutomationProperties.Name="Router address"/>
+            <TextBlock Text="Connection Code" FontSize="12" FontWeight="SemiBold"
+                       Foreground="{StaticResource Brush.Text.Secondary}"
+                       Margin="{StaticResource Space.Bottom.4}"/>
+            <Grid ColumnDefinitions="*,10,120" Margin="{StaticResource Space.Bottom.20}">
+                <TextBox Grid.Column="0" Text="{Binding ConnectionCode}"
+                         Watermark="AB12CD" IsEnabled="{Binding InputEnabled}"
+                         FontSize="18" FontWeight="SemiBold"
+                         KeyDown="OnCodeKeyDown"
+                         AutomationProperties.Name="Connection code"/>
+                <Button Grid.Column="2" Classes="Primary" Content="Connect"
+                        Command="{Binding ConnectViaCodeCommand}"
+                        IsEnabled="{Binding InputEnabled}"
+                        HorizontalAlignment="Stretch"
+                        AutomationProperties.Name="Connect via code"/>
+            </Grid>
+
+            <!-- Advanced expander with TLS -->
+            <Expander Header="Advanced" Margin="{StaticResource Space.Bottom.16}">
+                <CheckBox IsChecked="{Binding UseTls}" Margin="{StaticResource Space.Top.8}">
+                    <TextBlock Text="Use TLS (recommended)" FontSize="12"
+                               Foreground="{StaticResource Brush.Text.Muted}"/>
+                </CheckBox>
+            </Expander>
+
+            <!-- Connecting status -->
+            <Border IsVisible="{Binding IsConnecting}"
+                    Background="{StaticResource Brush.Info.Bg}" BorderBrush="{StaticResource Brush.Info.Border}"
+                    BorderThickness="1" CornerRadius="8" Padding="{StaticResource Space.16x12}">
+                <StackPanel Orientation="Horizontal" Spacing="{StaticResource Space.10}">
+                    <Ellipse Width="7" Height="7" Fill="{StaticResource Brush.Info}" VerticalAlignment="Center"/>
+                    <TextBlock Text="Connecting…" FontSize="13" Foreground="{StaticResource Brush.Info.Text}"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
