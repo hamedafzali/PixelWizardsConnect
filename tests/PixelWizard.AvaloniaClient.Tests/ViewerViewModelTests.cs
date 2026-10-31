@@ -210,6 +210,47 @@ public sealed class ViewerViewModelTests : IDisposable
 
     // ── Over a real socket ────────────────────────────────────────────────────
 
+    // A live, approved host recording the key-ups it receives.
+    private async Task<(HostSession Host, List<int> KeyUps)> ConnectToNewHost(ViewerViewModel vm)
+    {
+        int port = GetFreePort();
+        var host = new HostSession(new TcpTransport(), OurHello);
+        bool verified = false;
+        var keyUps = new List<int>();
+        host.HandshakeVerified += () => verified = true;
+        host.KeyReleaseReceived += k => { lock (keyUps) keyUps.Add(k.VirtualKey); };
+        _ = host.StartServerAsync(port, useTls: false);
+        await Task.Delay(50); // let the listener bind
+
+        vm.UseTls = false;
+        vm.HostAddress = $"127.0.0.1:{port}";
+        await vm.ConnectDirectCommand.Execute();
+        await WaitUntil(() => vm.IsConnected, "viewer to go live");
+        await WaitUntil(() => verified, "host to verify the handshake");
+        host.Approve();
+        return (host, keyUps);
+    }
+
+    // A key held when the session ended was never pressed on the next host, so its release
+    // is not sent there.
+    [AvaloniaFact]
+    public async Task AKeyHeldOverAReconnect_IsNotReleasedOnTheNewHost()
+    {
+        var vm = Vm();
+        var (first, _) = await ConnectToNewHost(vm);
+        using var _first = first;
+        vm.SendKey(0x41, isDown: true);
+        vm.Disconnect();
+
+        var (second, keyUps) = await ConnectToNewHost(vm);
+        using var _second = second;
+        vm.SendKey(0x41, isDown: false);
+        vm.SendKey(0x42, isDown: true);
+        vm.SendKey(0x42, isDown: false);
+        await WaitUntil(() => { lock (keyUps) return keyUps.Contains(0x42); }, "key up on the new host");
+        lock (keyUps) Assert.Equal(new[] { 0x42 }, keyUps); // TCP keeps order
+    }
+
     [AvaloniaFact]
     public async Task Connect_GoesLive_ChatAndInputFlow_HostDropReturnsToConnect()
     {

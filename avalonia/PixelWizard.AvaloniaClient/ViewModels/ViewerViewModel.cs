@@ -359,6 +359,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         // Dispatcher.UIThread or touches state ViewerSession doesn't own (see ViewerSession's
         // class comment).
         var session = new ViewerSession(() => new TcpTransport(), _ourHello, _sessionSecret);
+        _keysDown.Clear();
         // A certificate failure is raised on Error just before the transport disconnects,
         // while the session is not yet connected -- so the Error handler below would drop it
         // and the user would only see "Disconnected". Keep it for the Disconnected handler.
@@ -570,9 +571,16 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         await _session.SendMouseUpAsync(rx, ry, leftButton);
     }
 
+    // Keys whose key-down reached this session's host. Only their key-ups are sent, so the
+    // release of a key pressed before going live (the Return that connected) never reaches
+    // the host, while a key held as the pointer leaves the screen is still released there.
+    private readonly HashSet<int> _keysDown = new();
+
     public async void SendKey(int vk, bool isDown)
     {
         if (_session?.IsConnected != true || vk == 0 || !_hostPeerRole.AcceptsInput()) return;
+        if (isDown) _keysDown.Add(vk);
+        else if (!_keysDown.Remove(vk)) return;
         await _session.SendKeyAsync(vk, isDown);
     }
 

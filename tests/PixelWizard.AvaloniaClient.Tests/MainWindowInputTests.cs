@@ -113,8 +113,8 @@ public sealed class MainWindowInputTests : IDisposable
 
     private Image ScreenImage(string name) => Find<Image>(i => i.Name == name);
 
-    // Press only: on localhost the connection can go live before a release, and the window
-    // then forwards that Return key-up to the host.
+    // Press only, like a user whose Return is still down as the connection goes live; the
+    // key-up test releases it later.
     private void PressEnterIn(TextBox box)
     {
         box.Focus();
@@ -273,17 +273,30 @@ public sealed class MainWindowInputTests : IDisposable
         lock (_keyDowns) Assert.Equal(new[] { 0x42, 0x44 }, _keyDowns);
     }
 
+    // A key pressed over the screen is released on the host even if the pointer has left by
+    // then. A key-up whose key-down the host never saw, such as the release of the Return
+    // that connected, is not sent.
     [AvaloniaFact]
-    public async Task KeyUps_ReachTheHostWheneverConnected()
+    public async Task KeyUps_ReachTheHostOnlyForKeysItSawGoDown()
     {
         await GoLive();
         var img = ScreenImage("FitScreenImage");
-        _window.MouseMove(img.TranslatePoint(new Point(0, -20), _window)!.Value, RawInputModifiers.None);
-        Assert.False(_vm.Viewer.KeyboardActive);
+        var outside = img.TranslatePoint(new Point(0, -20), _window)!.Value; // the toolbar
 
+        _window.KeyReleaseQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+
+        _window.MouseMove(WindowPointOf(img, 100, 50), RawInputModifiers.None);
+        _window.KeyPressQwerty(PhysicalKey.A, RawInputModifiers.None);
+        _window.MouseMove(outside, RawInputModifiers.None);
+        Assert.False(_vm.Viewer.KeyboardActive);
         _window.KeyReleaseQwerty(PhysicalKey.A, RawInputModifiers.None);
-        await WaitUntil(() => { lock (_keyUps) return _keyUps.Count > 0; }, "key up on host");
-        lock (_keyUps) Assert.Equal(new[] { 0x41 }, _keyUps);
+        _window.KeyReleaseQwerty(PhysicalKey.B, RawInputModifiers.None);
+
+        _window.MouseMove(WindowPointOf(img, 100, 50), RawInputModifiers.None);
+        _window.KeyPressQwerty(PhysicalKey.C, RawInputModifiers.None);
+        _window.KeyReleaseQwerty(PhysicalKey.C, RawInputModifiers.None);
+        await WaitUntil(() => { lock (_keyUps) return _keyUps.Contains(0x43); }, "last key up on host");
+        lock (_keyUps) Assert.Equal(new[] { 0x41, 0x43 }, _keyUps); // TCP keeps order
     }
 
     // Keys typed over the screen go to the host; if the chat box kept focus they would
