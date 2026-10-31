@@ -406,6 +406,27 @@ so reverting (b) alone restores the old wiring. Every sub-task reports the
 `MainViewModel` line count at its commit and the CI per-platform counts; a
 target missed by a wide margin means stop and re-split.
 
+**Where T13.6–T13.7 differ from the plan above:**
+
+- MainWindow is a shell that lays out the seven views and shows or hides
+  them with `IsVisible`, not `ContentControl` navigation. ModeSelectionView, SidebarView, StatusBar and
+  OnboardingOverlay are typed to `MainViewModel` (they show shell state).
+  ViewerConnectView, HostView and LiveScreenView are typed to their role view
+  model and take what they need from the shell (Back, Chat, the sidebar
+  toggle) as properties MainWindow sets.
+- T13.7 is done for settings, host provider and router client only (T13.7a).
+  Two exceptions are deliberate:
+  - The dialog callbacks (consent, pin mismatch, clipboard, viewing badge)
+    are still set by App as properties after construction. Moving consent
+    into a constructor changes safety-critical wiring that no headless test
+    runs, for little gain: `ConsentGate` already denies when the callback is
+    missing.
+  - The known-hosts (pin) store is static inside `TcpTransport`. Passing it
+    in from App needs a transport change, which is not a composition-root
+    change.
+- `MainViewModel(AppSettings)` stays for tests and fills in the default
+  services, so tests never touch the user's settings file.
+
 **Not in T13:** the remote screen in its own window (requested during T12
 testing). After T13.6 the live screen is a self-contained `LiveScreenView`
 on `ViewerViewModel`, so a separate window becomes a small follow-up that
