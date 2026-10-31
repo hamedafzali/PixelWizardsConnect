@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -203,7 +204,7 @@ var startTime = time.Now()
 
 func main() {
 	initConfig()
-	go cleanupExpiredHosts()
+	go cleanupExpiredHosts(context.Background())
 
 	http.HandleFunc("/register", handleRegister)
 	http.HandleFunc("/connect", handleConnect)
@@ -401,10 +402,16 @@ func clientIP(r *http.Request) string {
 	return peer
 }
 
-func cleanupExpiredHosts() {
+// cleanupExpiredHosts sweeps expired registrations until ctx is cancelled.
+func cleanupExpiredHosts(ctx context.Context) {
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
-	for range ticker.C {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
 		hostsMutex.Lock()
 		now := nowFunc()
 		for id, host := range hosts {

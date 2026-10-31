@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -198,6 +199,21 @@ func resetGlobalState() {
 	rateLimitMax = 10
 	codeTTL = 30 * time.Minute
 	trustedProxyCIDRs = nil // secure default: no trusted proxies
+}
+
+// startCleanup runs the cleanup goroutine for one test. It is stopped, and
+// waited for, before the next test resets the globals it reads.
+func startCleanup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		cleanupExpiredHosts(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
 }
 
 func postJSON(handler http.HandlerFunc, path, body string, xff string) *httptest.ResponseRecorder {
@@ -516,7 +532,7 @@ func TestCleanupExpiredHosts_EventuallyRemovesExpiredCode(t *testing.T) {
 
 	reg := registerHost(t, "h1", "")
 
-	go cleanupExpiredHosts()
+	startCleanup(t)
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -805,7 +821,7 @@ func TestRegistrationRacingCleanup(t *testing.T) {
 	codeTTL = time.Hour
 	cleanupInterval = 2 * time.Millisecond
 
-	go cleanupExpiredHosts()
+	startCleanup(t)
 
 	const n = 30
 	var wg sync.WaitGroup
