@@ -6,7 +6,7 @@ using PixelWizard.Protocol;
 
 namespace PixelWizard.LinuxHost;
 
-internal sealed class SkiaScreenChangeDetector : IDisposable
+public sealed class SkiaScreenChangeDetector : IDisposable
 {
     private SKBitmap? _prev;
     private const int    BlockSize       = 32;
