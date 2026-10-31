@@ -6,6 +6,7 @@ using System.Runtime.Versioning;
 using SkiaSharp;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
+using PixelWizard.Media;
 using PixelWizard.Protocol;
 
 namespace PixelWizard.MacHost;

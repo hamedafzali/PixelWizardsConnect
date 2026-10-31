@@ -6,11 +6,15 @@ using PixelWizard.Protocol;
 
 namespace PixelWizard.Media;
 
+/// <summary>
+/// Delta detector that works on SKBitmap — no System.Drawing dependency,
+/// so it runs on macOS, Linux and Windows.
+/// </summary>
 public sealed class SkiaScreenChangeDetector : IDisposable
 {
     private SKBitmap? _prev;
     private const int    BlockSize       = 32;
-    private const double ChangeThreshold = 0.10;
+    private const double ChangeThreshold = 0.10; // 10% of sampled pixels must change
 
     public List<ScreenDelta> DetectChanges(SKBitmap current, bool forceFullFrame, long jpegQuality)
     {
