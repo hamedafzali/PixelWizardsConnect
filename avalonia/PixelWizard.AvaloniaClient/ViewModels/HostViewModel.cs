@@ -290,9 +290,13 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         // The handler is posted, so it can run after Stop (or after a restart). Stop already
         // reset everything; only the listener that created this session may act on it.
         var owner = _hostListener;
+        // Relistening disposes this session, which raises Disconnected a second time while
+        // the host is already waiting for the next viewer. Only the first one is handled.
+        bool disconnectHandled = false;
         session.Disconnected += () => Dispatcher.UIThread.Post(async () =>
         {
-            if (_hostListener != owner) return;
+            if (_hostListener != owner || disconnectHandled) return;
+            disconnectHandled = true;
             _sessionWatchdog?.Stop();
             HideViewingBadgeCallback?.Invoke();
             TrayTooltip = "Hosting — waiting for viewer";

@@ -431,6 +431,30 @@ public sealed class HostViewModelTests : IDisposable
         Assert.Null(vm.ActiveChatLink);
     }
 
+    // Relistening disposes the old session, which raises its Disconnected a second time.
+    // The host reports the viewer leaving once and is left waiting for the next one.
+    [AvaloniaFact]
+    public async Task ViewerLeaves_HandledOnce_HostWaitsForTheNextViewer()
+    {
+        var vm = Vm();
+        vm.ConsentCallback = _ => Task.FromResult(true);
+        int port = await StartHost(vm);
+        var viewer = await ConnectViewer(port);
+        await WaitUntil(() => _badgeShown == 1, "approval");
+        int afterApproval = _shell.Statuses.Count;
+
+        viewer.Session.Disconnect();
+        await WaitUntil(() => _shell.Statuses.Contains("Waiting for next connection…"), "host to notice");
+        await Settle();
+
+        Assert.Equal(new[] { "Client disconnected", "Waiting for next connection…" },
+                     _shell.Statuses.Skip(afterApproval));
+        Assert.Equal("Waiting for next connection…", vm.HostStatus);
+        Assert.Equal("Hosting — waiting for viewer", vm.TrayTooltip);
+        Assert.Equal(1, _badgeHidden);
+        Assert.True(vm.IsHostRunning);
+    }
+
     // ── Stop ──────────────────────────────────────────────────────────────────
 
     [AvaloniaFact]
