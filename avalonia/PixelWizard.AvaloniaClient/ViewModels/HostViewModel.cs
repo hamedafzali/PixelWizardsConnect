@@ -344,12 +344,24 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
             {
                 bool allowed = await session.ResolveConsentAsync(ConsentCallback, "incoming viewer");
 
+                // The dialog can outlive this session. After Stop or a restart its answer
+                // changes nothing; Stop has already reset the host.
+                if (_hostListener != owner)
+                {
+                    session.Disconnect();
+                    return;
+                }
+
                 if (!allowed)
                 {
                     HostStatus    = "Connection denied";
                     _shell.Status = "Connection denied";
                     return;
                 }
+
+                // Allowed, but the viewer left while the dialog was open: Disconnected has
+                // already run and the host is waiting for the next viewer.
+                if (!session.IsApproved) return;
 
                 StartSessionWatchdog();
                 HostStatus    = "Client connected — sharing screen";

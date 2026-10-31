@@ -375,6 +375,62 @@ public sealed class HostViewModelTests : IDisposable
         await WaitUntil(() => Volatile.Read(ref viewer.Frames) > 0, "frames after approval");
     }
 
+    // The consent dialog can outlive its session. Stop while it is open has already reset the
+    // host; the late answer must not bring a session, status or badge back.
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Consent_AnsweredAfterStop_ChangesNothing(bool allow)
+    {
+        var vm = Vm();
+        var decision = new TaskCompletionSource<bool>();
+        int asked = 0;
+        vm.ConsentCallback = _ => { asked++; return decision.Task; };
+        int port = await StartHost(vm);
+        var viewer = await ConnectViewer(port);
+        await WaitUntil(() => asked == 1, "the consent prompt");
+
+        vm.Stop();
+        int afterStop = _shell.Statuses.Count;
+        await WaitUntil(() => viewer.Disconnected, "viewer to be dropped");
+        decision.SetResult(allow);
+        await Settle();
+
+        Assert.False(vm.IsHostRunning);
+        Assert.Equal("Stopped", vm.HostStatus);
+        Assert.Equal("Idle", vm.TrayTooltip);
+        Assert.Equal(0, _badgeShown);
+        Assert.Empty(_shell.Statuses.Skip(afterStop));
+        Assert.Equal(0, Volatile.Read(ref viewer.Frames));
+    }
+
+    // The viewer gives up while the dialog is open. Allowing it afterwards must not claim a
+    // viewer is connected: the host keeps waiting for the next one.
+    [AvaloniaFact]
+    public async Task Consent_AllowedAfterTheViewerLeft_KeepsWaitingForTheNextViewer()
+    {
+        var vm = Vm();
+        var decision = new TaskCompletionSource<bool>();
+        int asked = 0;
+        vm.ConsentCallback = _ => { asked++; return decision.Task; };
+        int port = await StartHost(vm);
+        var viewer = await ConnectViewer(port);
+        await WaitUntil(() => asked == 1, "the consent prompt");
+
+        viewer.Session.Disconnect();
+        await WaitUntil(() => _shell.Statuses.Contains("Waiting for next connection…"), "host to notice");
+        await Settle();
+        int afterLeave = _shell.Statuses.Count;
+        decision.SetResult(true);
+        await Settle();
+
+        Assert.True(vm.IsHostRunning);
+        Assert.Equal("Hosting — waiting for viewer", vm.TrayTooltip);
+        Assert.Equal(0, _badgeShown);
+        Assert.Empty(_shell.Statuses.Skip(afterLeave));
+        Assert.Null(vm.ActiveChatLink);
+    }
+
     // ── Stop ──────────────────────────────────────────────────────────────────
 
     [AvaloniaFact]
