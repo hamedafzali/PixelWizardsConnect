@@ -4,12 +4,12 @@ using SkiaSharp;
 namespace PixelWizard.Tests.ScreenChangeDetector;
 
 /// <summary>
-/// Drives PixelWizard.LinuxHost.SkiaScreenChangeDetector. A direct reference, so moving
+/// Drives PixelWizard.Media.SkiaScreenChangeDetector. A direct reference, so moving
 /// or renaming the detector is a build error here rather than a lookup failing at run time.
 /// </summary>
 public sealed class SkiaDetectorHarness : IDetectorHarness
 {
-    private readonly PixelWizard.LinuxHost.SkiaScreenChangeDetector _detector = new();
+    private readonly PixelWizard.Media.SkiaScreenChangeDetector _detector = new();
 
     public int Width { get; private set; }
     public int Height { get; private set; }

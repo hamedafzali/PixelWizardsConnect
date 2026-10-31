@@ -4,7 +4,7 @@ using System.IO;
 using SkiaSharp;
 using PixelWizard.Protocol;
 
-namespace PixelWizard.LinuxHost;
+namespace PixelWizard.Media;
 
 public sealed class SkiaScreenChangeDetector : IDisposable
 {

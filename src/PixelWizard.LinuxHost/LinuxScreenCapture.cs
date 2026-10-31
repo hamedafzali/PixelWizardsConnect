@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using SkiaSharp;
 using PixelWizard.Core.Interfaces;
+using PixelWizard.Media;
 using PixelWizard.Protocol;
 
 namespace PixelWizard.LinuxHost;
