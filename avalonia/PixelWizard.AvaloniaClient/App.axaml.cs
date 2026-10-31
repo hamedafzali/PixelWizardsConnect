@@ -8,8 +8,11 @@ using Avalonia.Markup.Xaml;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using SkiaSharp;
+using PixelWizard.AvaloniaClient.Platform;
+using PixelWizard.AvaloniaClient.Services;
 using PixelWizard.AvaloniaClient.ViewModels;
 using PixelWizard.AvaloniaClient.Views;
+using PixelWizard.Transport.Tcp;
 
 namespace PixelWizard.AvaloniaClient;
 
@@ -25,7 +28,7 @@ public class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            _vm     = new MainViewModel();
+            _vm     = new MainViewModel(AppSettings.Load(), HostProviderFactory.Create(), new RouterHttpClient());
             _mainWindow = new MainWindow { DataContext = _vm };
 
             // ── Feature 1 / Clipboard read ────────────────────────────────────

@@ -89,7 +89,6 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
 
     // ── Platform ──────────────────────────────────────────────────────────────
 
-    private readonly IHostProvider _hostProvider = HostProviderFactory.Create();
     public bool CanHost => Host.CanHost;
     public string HostCardSubtitle => CanHost
         ? "Share your screen — available on this device"
@@ -121,7 +120,6 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
 
     // ── Internal state ────────────────────────────────────────────────────────
 
-    private readonly IRouterClient _router = new RouterHttpClient();
     private static readonly HelloMessage OurHello = new()
     {
         ProtocolVersion = ProtocolVersions.Current,
@@ -135,10 +133,12 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
 
     // ── Constructor ───────────────────────────────────────────────────────────
 
-    public MainViewModel() : this(AppSettings.Load()) { }
-
     // Tests pass their own settings so they never touch the user's settings file.
     public MainViewModel(AppSettings settings)
+        : this(settings, HostProviderFactory.Create(), new RouterHttpClient()) { }
+
+    // App is the composition root: it builds the services and passes them in.
+    public MainViewModel(AppSettings settings, IHostProvider hostProvider, IRouterClient router)
     {
         _settings = settings;
         GoHostCommand             = ReactiveCommand.Create(GoHost);
@@ -151,8 +151,8 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
         });
         Chat = new ChatViewModel(ActiveChatLink,
             () => GetClipboardCallback?.Invoke() ?? Task.FromResult<string?>(null));
-        Viewer = new ViewerViewModel(this, Chat, _settings, _router, OurHello);
-        Host   = new HostViewModel(this, Chat, _settings, _router, OurHello, _hostProvider);
+        Viewer = new ViewerViewModel(this, Chat, _settings, router, OurHello);
+        Host   = new HostViewModel(this, Chat, _settings, router, OurHello, hostProvider);
         Host.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(HostViewModel.IsHostRunning)) UpdateWindowTitle();
