@@ -55,6 +55,35 @@ public class TcpTransportListenCancelTests
     }
 
     [Fact]
+    public async Task PortInUse_FaultsAtOnce_WithoutErrorOrDisconnected()
+    {
+        var blocker = new TcpListener(IPAddress.Any, 0);
+        blocker.Start();
+        try
+        {
+            int port = ((IPEndPoint)blocker.LocalEndpoint).Port;
+            using var t = new TcpTransport();
+            bool disconnected = false;
+            Exception? error = null;
+            t.Disconnected += () => disconnected = true;
+            t.Error += ex => error = ex;
+
+            var listening = t.StartServerAsync(port, useTls: false);
+
+            Assert.True(listening.IsFaulted, "a bind failure must fault before StartServerAsync returns");
+            var ex = await Assert.ThrowsAsync<SocketException>(() => listening);
+            Assert.Equal(SocketError.AddressAlreadyInUse, ex.SocketErrorCode);
+            Assert.False(disconnected);
+            Assert.Null(error);
+            Assert.False(t.IsConnected);
+        }
+        finally
+        {
+            blocker.Stop();
+        }
+    }
+
+    [Fact]
     public async Task PortIsReusable_AfterCancellingAPendingAccept()
     {
         int port = GetFreePort();

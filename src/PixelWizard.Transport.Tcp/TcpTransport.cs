@@ -104,10 +104,13 @@ namespace PixelWizard.Transport.Tcp
 
         public async Task StartServerAsync(int port, bool useTls = true)
         {
+            // Outside the try: a port that can't be bound faults the returned task before
+            // anything is awaited, instead of looking like a session that connected and dropped.
+            var listener = new TcpListener(IPAddress.Any, port);
+            try { listener.Start(); }
+            catch { listener.Stop(); throw; }
             try
             {
-                var listener = new TcpListener(IPAddress.Any, port);
-                listener.Start();
                 _pendingListener = listener;
                 TcpClient accepted;
                 try
