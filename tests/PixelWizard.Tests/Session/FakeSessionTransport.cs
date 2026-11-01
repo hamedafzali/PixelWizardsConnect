@@ -47,9 +47,13 @@ public sealed class FakeSessionTransport : ISessionTransport
     // TcpTransport, whose StartServerAsync only returns once a client connects.
     public TaskCompletionSource<bool>? StartServerGate { get; set; }
 
+    // When set, StartServerAsync faults at once, as TcpTransport does for a port it can't bind.
+    public Exception? BindFailure { get; set; }
+
     public Task StartServerAsync(int port, bool useTls = true)
     {
         LastStartServerArgs = (port, useTls);
+        if (BindFailure != null) return Task.FromException(BindFailure);
         return StartServerGate?.Task ?? Task.CompletedTask;
     }
 

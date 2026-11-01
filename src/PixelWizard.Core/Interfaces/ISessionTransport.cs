@@ -33,7 +33,8 @@ namespace PixelWizard.Core.Interfaces
         /// <summary>
         /// Listens on <paramref name="port"/> and completes once one viewer has connected.
         /// A port that can't be bound faults the returned task before the method returns,
-        /// and raises neither <see cref="Error"/> nor <see cref="Disconnected"/>. Failures
+        /// raises neither <see cref="Error"/> nor <see cref="Disconnected"/>, and leaves the
+        /// transport holding nothing, so it need not be disposed. Failures
         /// after that are reported through <see cref="Error"/>, as for a connected session.
         /// </summary>
         Task StartServerAsync(int port, bool useTls = true);

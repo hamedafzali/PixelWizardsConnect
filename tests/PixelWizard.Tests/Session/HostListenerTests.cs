@@ -149,6 +149,39 @@ public class HostListenerTests
     }
 
     [Fact]
+    public async Task StartAsync_PortCannotBeBound_FaultsAtOnce_ClearsCurrent_DoesNotDispose()
+    {
+        var factory = new FakeFactory();
+        factory.Make = () => new FakeSessionTransport { BindFailure = new InvalidOperationException("in use") };
+        var listener = new HostListener(factory.Next, TestHello, 5555, () => false);
+
+        var listening = listener.StartAsync();
+
+        Assert.True(listening.IsFaulted, "a bind failure must fault before StartAsync returns");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => listening);
+        Assert.Null(listener.Current);
+        // Disposing would raise Disconnected, which the host would take for a viewer leaving.
+        Assert.False(factory.Created[0].Disposed);
+    }
+
+    [Fact]
+    public async Task RelistenAsync_PortCannotBeBound_FaultsAtOnce_ClearsCurrentAndGuard()
+    {
+        var factory = new FakeFactory();
+        var listener = new HostListener(factory.Next, TestHello, 5555, () => false);
+        await listener.StartAsync();
+        factory.Make = () => new FakeSessionTransport { BindFailure = new InvalidOperationException("in use") };
+
+        var relistening = listener.RelistenAsync();
+
+        Assert.True(relistening.IsFaulted, "a bind failure must fault before RelistenAsync returns");
+        await Assert.ThrowsAsync<InvalidOperationException>(() => relistening);
+        Assert.Null(listener.Current);
+        Assert.False(listener.IsRelistening);
+        Assert.False(factory.Created[1].Disposed);
+    }
+
+    [Fact]
     public async Task RelistenAsync_FactoryThrows_PropagatesAndClearsGuard()
     {
         var factory = new FakeFactory();

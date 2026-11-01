@@ -50,7 +50,9 @@ public sealed class HostListener
 
     /// <summary>
     /// First listen. Like <see cref="ISessionTransport.StartServerAsync"/>, completes only
-    /// once a viewer connects (or the listen fails).
+    /// once a viewer connects (or the listen fails). A port that can't be bound faults the
+    /// returned task before this returns, with <see cref="Current"/> cleared; the same
+    /// holds for <see cref="RelistenAsync"/>.
     /// </summary>
     public Task StartAsync() => ListenAsync();
 
@@ -96,6 +98,10 @@ public sealed class HostListener
         var session = new HostSession(_transportFactory(), _ourHello, _expectedSessionSecret);
         Current = session;
         SessionCreated?.Invoke(session);
-        await session.StartServerAsync(_port, _useTls());
+        var listening = session.StartServerAsync(_port, _useTls());
+        // The port could not be bound. Not disposed: Dispose raises Disconnected, which the
+        // caller would take for a viewer leaving, and a transport that never bound holds nothing.
+        if (listening.IsFaulted && Current == session) Current = null;
+        await listening;
     }
 }
