@@ -34,6 +34,18 @@ func TestGenerateCode(t *testing.T) {
 	}
 }
 
+func TestGenerateCode_HasNoLookalikeCharacters(t *testing.T) {
+	for i := 0; i < 2000; i++ {
+		code, err := generateCode()
+		if err != nil {
+			t.Fatalf("generateCode returned error: %v", err)
+		}
+		if strings.ContainsAny(code, "0O1I") {
+			t.Fatalf("code %q contains a character that reads like another (0/O, 1/I)", code)
+		}
+	}
+}
+
 func TestGenerateSecret(t *testing.T) {
 	secret, err := generateSecret()
 	if err != nil {

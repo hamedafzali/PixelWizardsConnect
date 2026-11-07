@@ -5,7 +5,7 @@ A high-performance Go-based router server for the Remote Desktop Automation appl
 ## Features
 
 - **Fast Connection Routing**: Written in Go for maximum performance
-- **Unique Code Generation**: Generates 6-character alphanumeric connection codes
+- **Unique Code Generation**: Generates 6-character connection codes from letters and digits, without the lookalikes 0/O and 1/I
 - **HTTP API**: Simple REST API for host registration and client connections
 - **Automatic Cleanup**: Removes expired host registrations after 30 minutes
 - **Health Check**: Endpoint to monitor server status

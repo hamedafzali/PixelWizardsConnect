@@ -154,8 +154,10 @@ var (
 	hosts       = make(map[string]*HostRegistration)
 	hostsByCode = make(map[string]*HostRegistration)
 	hostsMutex  sync.Mutex
-	codeChars   = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	codeLength  = 6
+	// No 0/O or 1/I: people read codes aloud and retype them. 32 characters also divide
+	// 256 evenly, so each is equally likely.
+	codeChars  = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	codeLength = 6
 )
 
 // ── Rate limiter ─────────────────────────────────────────────────────────────
