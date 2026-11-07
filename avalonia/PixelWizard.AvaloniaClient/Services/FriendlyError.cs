@@ -29,6 +29,8 @@ public static class FriendlyError
         TimeoutException        => "The operation timed out. Please try again.",
         UriFormatException      => "That address is not valid.",
         FormatException         => "That address or code is not in a valid format.",
+        PixelWizard.Signaling.ConnectionCodeNotFoundException =>
+            "That code is not valid or has expired. Check the code, or ask the host for a new one.",
         System.Net.Http.HttpRequestException => "Could not reach the router server. Check the router address.",
         OperationCanceledException => "The operation was cancelled.",
         _ => "Something went wrong. Please check your settings and try again."

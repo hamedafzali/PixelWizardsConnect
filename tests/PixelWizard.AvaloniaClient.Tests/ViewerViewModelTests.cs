@@ -8,6 +8,7 @@ using PixelWizard.AvaloniaClient.ViewModels;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Protocol;
 using PixelWizard.Session;
+using PixelWizard.Signaling;
 using PixelWizard.Transport.Tcp;
 using Xunit;
 
@@ -41,6 +42,13 @@ public sealed class ViewerViewModelTests : IDisposable
         public Task<RouterConnectResult> ResolveEndpointAsync(string h, int p, string c) => throw new NotSupportedException();
     }
 
+    private sealed class UnknownCodeRouter : IRouterClient
+    {
+        public Task<RouterRegistrationResult> RegisterHostAsync(string h, int p, string e) => throw new NotSupportedException();
+        public Task<RouterConnectResult> ResolveEndpointAsync(string h, int p, string c) =>
+            throw new ConnectionCodeNotFoundException("Invalid or expired connection code");
+    }
+
     private readonly string _settingsFile =
         Path.Combine(Path.GetTempPath(), "pw-viewer-" + Guid.NewGuid().ToString("N") + ".json");
     private readonly FakeShell _shell = new();
@@ -52,9 +60,9 @@ public sealed class ViewerViewModelTests : IDisposable
         _chat = new ChatViewModel(() => null, () => Task.FromResult<string?>(null));
     }
 
-    private ViewerViewModel Vm(AppSettings? settings = null)
+    private ViewerViewModel Vm(AppSettings? settings = null, IRouterClient? router = null)
     {
-        var vm = new ViewerViewModel(_shell, _chat, settings ?? AppSettings.Load(_settingsFile), new NoRouter(), OurHello);
+        var vm = new ViewerViewModel(_shell, _chat, settings ?? AppSettings.Load(_settingsFile), router ?? new NoRouter(), OurHello);
         _created.Add(vm);
         return vm;
     }
@@ -137,6 +145,18 @@ public sealed class ViewerViewModelTests : IDisposable
         await vm.ConnectViaCodeCommand.Execute();
 
         Assert.Equal("Enter a connection code", _shell.Statuses.Last());
+        Assert.False(vm.IsConnecting);
+    }
+
+    [AvaloniaFact]
+    public async Task ConnectViaCode_UnknownCode_SaysTheCodeIsWrong_NotTheRouter()
+    {
+        var vm = Vm(router: new UnknownCodeRouter());
+        vm.ConnectionCode = "E10C93";
+
+        await vm.ConnectViaCodeCommand.Execute();
+
+        Assert.Equal("That code is not valid or has expired. Check the code, or ask the host for a new one.", _shell.Statuses.Last());
         Assert.False(vm.IsConnecting);
     }
 
