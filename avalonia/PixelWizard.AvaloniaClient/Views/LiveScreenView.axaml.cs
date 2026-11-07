@@ -41,6 +41,7 @@ public partial class LiveScreenView : UserControl
 
     private ViewerViewModel? _subscribedVm;
     private TopLevel? _keyboardSource;
+    private bool _pointerOverScreen;
 
     public LiveScreenView()
     {
@@ -72,12 +73,16 @@ public partial class LiveScreenView : UserControl
         _keyboardSource = TopLevel.GetTopLevel(this);
         _keyboardSource?.AddHandler(KeyDownEvent, OnKeyDown);
         _keyboardSource?.AddHandler(KeyUpEvent, OnKeyUp);
+        if (_keyboardSource is WindowBase window)
+            window.PropertyChanged += OnWindowPropertyChanged;
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         _keyboardSource?.RemoveHandler(KeyDownEvent, OnKeyDown);
         _keyboardSource?.RemoveHandler(KeyUpEvent, OnKeyUp);
+        if (_keyboardSource is WindowBase window)
+            window.PropertyChanged -= OnWindowPropertyChanged;
         _keyboardSource = null;
         base.OnDetachedFromVisualTree(e);
     }
@@ -133,7 +138,8 @@ public partial class LiveScreenView : UserControl
 
     private void OnScreenPointerEntered(object? sender, PointerEventArgs e)
     {
-        if (VM is { } vm) vm.KeyboardActive = true;
+        _pointerOverScreen = true;
+        UpdateKeyboardActive();
         // With nothing focused, keys go to the window, so a focused chat box doesn't also
         // get the letters meant for the host.
         _keyboardSource?.FocusManager?.ClearFocus();
@@ -141,7 +147,22 @@ public partial class LiveScreenView : UserControl
 
     private void OnScreenPointerExited(object? sender, PointerEventArgs e)
     {
-        if (VM is { } vm) vm.KeyboardActive = false;
+        _pointerOverScreen = false;
+        UpdateKeyboardActive();
+    }
+
+    // Not Activated/Deactivated: Activated is raised before IsActive is set.
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == WindowBase.IsActiveProperty) UpdateKeyboardActive();
+    }
+
+    // Keys reach this window only while it is the active one. The pointer can hover an
+    // inactive window, and "Keyboard captured" must not show while keys go to another app.
+    private void UpdateKeyboardActive()
+    {
+        if (VM is { } vm)
+            vm.KeyboardActive = _pointerOverScreen && (_keyboardSource as WindowBase)?.IsActive == true;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

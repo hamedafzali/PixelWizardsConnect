@@ -288,6 +288,39 @@ public sealed class MainWindowInputTests : IDisposable
         lock (_keyDowns) Assert.Equal(new[] { 0x42, 0x44 }, _keyDowns);
     }
 
+    // The pointer can hover a window that is not the active one, and keys then go to another
+    // app. "Keyboard captured" showed anyway, so typing silently went nowhere.
+    [AvaloniaFact]
+    public async Task KeyboardIsCapturedOnlyWhileTheWindowIsActive()
+    {
+        await GoLive();
+        var img = ScreenImage("FitScreenImage");
+
+        _window.MouseMove(WindowPointOf(img, 100, 50), RawInputModifiers.None);
+        Assert.True(_vm.Viewer.KeyboardActive);
+
+        RaisePlatform(_window, "Deactivated"); // the user switched to another app
+        Assert.False(_window.IsActive);
+        Assert.False(_vm.Viewer.KeyboardActive);
+        _window.MouseMove(WindowPointOf(img, 110, 50), RawInputModifiers.None);
+        Assert.False(_vm.Viewer.KeyboardActive);
+
+        RaisePlatform(_window, "Activated");
+        Assert.True(_window.IsActive);
+        Assert.True(_vm.Viewer.KeyboardActive);
+    }
+
+    // What the OS does when the window loses or gains focus. Headless has no window manager
+    // to switch windows, and the platform callbacks are internal, hence reflection.
+    private static void RaisePlatform(Window window, string callback)
+    {
+        var impl = window.PlatformImpl!;
+        var prop = impl.GetType().GetProperty(callback,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new MissingMemberException(impl.GetType().Name, callback);
+        ((Action)prop.GetValue(impl)!)();
+    }
+
     // A key pressed over the screen is released on the host even if the pointer has left by
     // then. A key-up whose key-down the host never saw, such as the release of the Return
     // that connected, is not sent.
