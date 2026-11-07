@@ -88,6 +88,12 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
     private string _hostAddress = "127.0.0.1";
     public string HostAddress { get => _hostAddress; set => this.RaiseAndSetIfChanged(ref _hostAddress, value); }
 
+    // Where the current session goes: the typed address, or the endpoint the router gave
+    // for a code. The direct-IP box keeps whatever was last typed in it either way.
+    private string _connectedAddress = "";
+    public string ConnectedAddress { get => _connectedAddress; private set => this.RaiseAndSetIfChanged(ref _connectedAddress, value); }
+    private bool _connectedViaRouter;
+
     private string _connectionCode = "";
     public string ConnectionCode { get => _connectionCode; set => this.RaiseAndSetIfChanged(ref _connectionCode, value); }
 
@@ -308,6 +314,8 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
             return;
         }
         _sessionSecret = "";
+        ConnectedAddress = HostAddress.Trim();
+        _connectedViaRouter = false;
         IsConnecting = true;
         _shell.Status = $"Connecting to {host}:{port}…";
         try
@@ -332,6 +340,8 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
             _settings.LastRouterAddress = RouterAddress;
             _settings.Save();
             var parts = result.HostEndpoint.Split(':');
+            ConnectedAddress = result.HostEndpoint;
+            _connectedViaRouter = true;
             _session = BuildSession();
             await _session.ConnectAsync(parts[0], int.Parse(parts[1]), UseTls);
         }
@@ -427,7 +437,8 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
                 IsConnecting = false;
                 _shell.ShowLiveScreen();
                 _shell.Status = "Connected";
-                RememberHost(HostAddress.Trim());
+                // Recent hosts fill the direct-IP box; a code's host is reached through the router.
+                if (!_connectedViaRouter) RememberHost(ConnectedAddress);
                 _pingTimer?.Start();
                 StartFrameTimeoutTimer();
             });

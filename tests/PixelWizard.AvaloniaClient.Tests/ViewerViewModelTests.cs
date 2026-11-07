@@ -49,6 +49,15 @@ public sealed class ViewerViewModelTests : IDisposable
             throw new ConnectionCodeNotFoundException("Invalid or expired connection code");
     }
 
+    private sealed class FixedRouter : IRouterClient
+    {
+        private readonly string _endpoint;
+        public FixedRouter(string endpoint) => _endpoint = endpoint;
+        public Task<RouterRegistrationResult> RegisterHostAsync(string h, int p, string e) => throw new NotSupportedException();
+        public Task<RouterConnectResult> ResolveEndpointAsync(string h, int p, string c) =>
+            Task.FromResult(new RouterConnectResult(_endpoint, ""));
+    }
+
     private readonly string _settingsFile =
         Path.Combine(Path.GetTempPath(), "pw-viewer-" + Guid.NewGuid().ToString("N") + ".json");
     private readonly FakeShell _shell = new();
@@ -158,6 +167,32 @@ public sealed class ViewerViewModelTests : IDisposable
 
         Assert.Equal("That code is not valid or has expired. Check the code, or ask the host for a new one.", _shell.Statuses.Last());
         Assert.False(vm.IsConnecting);
+    }
+
+    // The direct-IP box still holds whatever was typed there; a code's session goes to the
+    // endpoint the router gave, and that's what the title names.
+    [AvaloniaFact]
+    public async Task ConnectViaCode_TitleNamesTheRoutersEndpoint_NotTheDirectIpBox()
+    {
+        int port = GetFreePort();
+        using var host = new HostSession(new TcpTransport(), OurHello);
+        _ = host.StartServerAsync(port, useTls: false);
+        await Task.Delay(50); // let the listener bind
+
+        using var main = new MainViewModel(AppSettings.Load(_settingsFile),
+            PixelWizard.AvaloniaClient.Platform.HostProviderFactory.Create(), new FixedRouter($"127.0.0.1:{port}"));
+        main.GoViewerCommand.Execute().Subscribe();
+        main.Viewer.UseTls = false;
+        main.Viewer.HostAddress = "10.9.9.9";
+        main.Viewer.ConnectionCode = "ABC234";
+
+        await main.Viewer.ConnectViaCodeCommand.Execute();
+        await WaitUntil(() => main.Viewer.IsConnected, "viewer to go live");
+
+        Assert.Equal($"127.0.0.1:{port}", main.Viewer.ConnectedAddress);
+        Assert.Equal($"PixelWizard Connect — Viewing 127.0.0.1:{port}", main.WindowTitle);
+        Assert.Empty(main.Viewer.RecentHosts); // recents are for the direct-IP box
+        Assert.Equal("10.9.9.9", main.Viewer.HostAddress);
     }
 
     [AvaloniaFact]

@@ -27,7 +27,7 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
     {
         WindowTitle = _screen switch
         {
-            AppScreen.LiveScreen => $"PixelWizard Connect — Viewing {Viewer.HostAddress}",
+            AppScreen.LiveScreen => $"PixelWizard Connect — Viewing {Viewer.ConnectedAddress}",
             AppScreen.Host when Host.IsHostRunning => "PixelWizard Connect — Hosting",
             _ => "PixelWizard Connect"
         };
