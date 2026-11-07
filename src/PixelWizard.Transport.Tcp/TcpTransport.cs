@@ -63,6 +63,12 @@ namespace PixelWizard.Transport.Tcp
         /// </summary>
         internal const int MaxConsecutiveHandlerFailures = 5;
 
+        /// <summary>
+        /// How long <see cref="ConnectAsync"/> waits for the host to complete the TLS handshake.
+        /// A host listening in plaintext never answers, which used to hang the viewer forever.
+        /// </summary>
+        internal TimeSpan HandshakeTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
         public bool IsConnected => _isConnected && _tcpClient?.Connected == true;
 
         public async Task ConnectAsync(string host, int port, bool useTls = true)
@@ -81,13 +87,21 @@ namespace PixelWizard.Transport.Tcp
                     var ssl = new SslStream(stream, false,
                         (sender, cert, chain, errors) => ValidatePin(pinKey, cert, out pinningFailure));
 
+                    using var handshakeCts = new CancellationTokenSource(HandshakeTimeout);
                     try
                     {
-                        await ssl.AuthenticateAsClientAsync(host);
+                        await ssl.AuthenticateAsClientAsync(
+                            new SslClientAuthenticationOptions { TargetHost = host }, handshakeCts.Token);
                     }
                     catch when (pinningFailure != null)
                     {
                         throw pinningFailure;
+                    }
+                    catch (OperationCanceledException) when (handshakeCts.IsCancellationRequested)
+                    {
+                        throw new TlsHandshakeTimeoutException(
+                            $"'{pinKey}' accepted the connection but did not complete the TLS handshake " +
+                            $"within {HandshakeTimeout.TotalSeconds:0.#} s; it may be listening without TLS.");
                     }
 
                     stream = ssl;
