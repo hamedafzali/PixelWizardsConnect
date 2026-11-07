@@ -16,6 +16,7 @@ namespace PixelWizard.WindowsHost
 
         private const uint LEFTDOWN = 0x02, LEFTUP = 0x04;
         private const uint RIGHTDOWN = 0x08, RIGHTUP = 0x10;
+        private const uint WHEEL = 0x0800, HWHEEL = 0x01000;
         private const uint KEYUP = 0x0002;
 
         public void MoveMouse(int x, int y)
@@ -48,6 +49,14 @@ namespace PixelWizard.WindowsHost
         {
             SetCursorPos(x, y);
             mouse_event(leftButton ? LEFTUP : RIGHTUP, 0, 0, 0, 0);
+        }
+
+        // Wheel data is a signed delta in 120ths of a notch, the same unit as the message.
+        public void Scroll(int x, int y, int deltaX, int deltaY)
+        {
+            SetCursorPos(x, y);
+            if (deltaY != 0) mouse_event(WHEEL, 0, 0, unchecked((uint)deltaY), 0);
+            if (deltaX != 0) mouse_event(HWHEEL, 0, 0, unchecked((uint)deltaX), 0);
         }
 
         public void SendKey(int virtualKey, bool isKeyDown)

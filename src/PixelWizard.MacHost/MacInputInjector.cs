@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using PixelWizard.Core.Interfaces;
+using PixelWizard.Protocol;
 
 namespace PixelWizard.MacHost;
 
@@ -82,6 +83,23 @@ public sealed class MacInputInjector : IInputInjector
         CFRelease(evt);
     }
 
+    // Pixel units, so a trackpad's fraction of a notch still scrolls. A notch is three
+    // lines on Windows; about 40 pixels here. CoreGraphics' horizontal axis is positive
+    // to the left, the opposite of the message.
+    private const int PixelsPerNotch = 40;
+
+    public void Scroll(int x, int y, int deltaX, int deltaY)
+    {
+        MoveMouse(x, y);
+        int dy = deltaY * PixelsPerNotch / MouseWheelMessage.NotchDelta;
+        int dx = -deltaX * PixelsPerNotch / MouseWheelMessage.NotchDelta;
+        if (dx == 0 && dy == 0) return;
+        var evt = CGEventCreateScrollWheelEvent2(IntPtr.Zero, CGScrollEventUnit.Pixel, 2, dy, dx, 0);
+        if (evt == IntPtr.Zero) return;
+        CGEventPost(CGEventTapLocation.HID, evt);
+        CFRelease(evt);
+    }
+
     // ── P/Invoke ──────────────────────────────────────────────────────────────
 
     private const string CG = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
@@ -90,10 +108,13 @@ public sealed class MacInputInjector : IInputInjector
 
     [DllImport(CG)] static extern IntPtr CGEventCreateMouseEvent(IntPtr src, CGEventType type, CGPoint pt, int btn);
     [DllImport(CG)] static extern IntPtr CGEventCreateKeyboardEvent(IntPtr src, ushort keyCode, bool keyDown);
+    // The non-variadic form (macOS 13+): variadic P/Invoke passes arguments wrongly on arm64.
+    [DllImport(CG)] static extern IntPtr CGEventCreateScrollWheelEvent2(IntPtr src, CGScrollEventUnit units, uint wheelCount, int wheel1, int wheel2, int wheel3);
     [DllImport(CG)] static extern void   CGEventPost(CGEventTapLocation tap, IntPtr evt);
     [DllImport(CF)] static extern void   CFRelease(IntPtr cf);
     [DllImport(AX)] static extern bool   AXIsProcessTrusted();
 
     private enum CGEventType     : uint { MouseMoved = 5, LeftMouseDown = 1, LeftMouseUp = 2, RightMouseDown = 3, RightMouseUp = 4 }
     private enum CGEventTapLocation : uint { HID = 0 }
+    private enum CGScrollEventUnit  : uint { Pixel = 0, Line = 1 }
 }

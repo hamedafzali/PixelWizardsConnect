@@ -62,6 +62,7 @@ public sealed class HostViewModelTests : IDisposable
         public void ButtonDown(int x, int y, bool leftButton) => Add($"down {x},{y}");
         public void ButtonUp(int x, int y, bool leftButton) => Add($"up {x},{y}");
         public void SendKey(int virtualKey, bool isKeyDown) => Add($"key {virtualKey} {isKeyDown}");
+        public void Scroll(int x, int y, int deltaX, int deltaY) => Add($"scroll {x},{y} {deltaX},{deltaY}");
     }
 
     private sealed class FakeProvider : IHostProvider

@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using PixelWizard.Core.Interfaces;
+using PixelWizard.Protocol;
 
 namespace PixelWizard.LinuxHost;
 
@@ -60,6 +61,28 @@ public sealed class LinuxInputInjector : IInputInjector
         if (keycode == 0) return;
         XTestFakeKeyEvent(_display, keycode, isKeyDown, 0);
         XFlush(_display);
+    }
+
+    // X11 scrolls by button clicks, one per notch: 4 up, 5 down, 6 left, 7 right. The
+    // remainder carries over, so a trackpad's small deltas add up to a click.
+    private int _wheelX, _wheelY;
+
+    public void Scroll(int x, int y, int deltaX, int deltaY)
+    {
+        MoveMouse(x, y);
+        _wheelY += deltaY;
+        _wheelX += deltaX;
+        for (; _wheelY >=  MouseWheelMessage.NotchDelta; _wheelY -= MouseWheelMessage.NotchDelta) ClickButton(4);
+        for (; _wheelY <= -MouseWheelMessage.NotchDelta; _wheelY += MouseWheelMessage.NotchDelta) ClickButton(5);
+        for (; _wheelX <= -MouseWheelMessage.NotchDelta; _wheelX += MouseWheelMessage.NotchDelta) ClickButton(6);
+        for (; _wheelX >=  MouseWheelMessage.NotchDelta; _wheelX -= MouseWheelMessage.NotchDelta) ClickButton(7);
+        XFlush(_display);
+    }
+
+    private void ClickButton(uint button)
+    {
+        XTestFakeButtonEvent(_display, button, true,  0);
+        XTestFakeButtonEvent(_display, button, false, 0);
     }
 
     ~LinuxInputInjector()
