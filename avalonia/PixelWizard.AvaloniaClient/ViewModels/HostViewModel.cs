@@ -190,7 +190,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         try
         {
             SetupHostServices();
-            await StartHostListenerAsync(port);
+            await ListenWithoutWaitingForAViewer(port);
             _captureLoop!.Start();
             _announceCts = new CancellationTokenSource();
             _ = NetworkDiscovery.AnnounceAsync(_activeHostPort, _announceCts.Token);
@@ -198,7 +198,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
             HostStatus    = $"Listening — tell viewer to connect to {lanIp}:{port}";
             _shell.Status = $"Host ready. Viewer address: {lanIp}:{port}";
         }
-        catch (Exception ex) { _shell.Status = FriendlyError.Describe(ex); }
+        catch (Exception ex) { StopAfterFailedStart(ex); }
     }
 
     private static string GetLanIp()
@@ -228,14 +228,14 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
             ShowCodeCard = true;
 
             SetupHostServices();
-            await StartHostListenerAsync(8888);
+            await ListenWithoutWaitingForAViewer(8888);
             _captureLoop!.Start();
             _announceCts = new CancellationTokenSource();
             _ = NetworkDiscovery.AnnounceAsync(_activeHostPort, _announceCts.Token);
             HostStatus    = $"Ready — code: {result.ConnectionCode}";
             _shell.Status = $"Host registered. Share code: {result.ConnectionCode}";
         }
-        catch (Exception ex) { _shell.Status = FriendlyError.Describe(ex); }
+        catch (Exception ex) { StopAfterFailedStart(ex); }
     }
 
     private void SetupHostServices()
@@ -259,9 +259,11 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         _captureLoop.CaptureError += _ => _shell.Status = "Screen capture error — the session may be unstable.";
         _input   = _hostProvider.CreateInput();
 
-        _wsServer = new WebSocketHostServer(_webViewerPort);
-        _wsServer.Log += msg => Dispatcher.UIThread.Post(() => _shell.Status = msg);
-        _wsServer.Start();
+        var wsServer = new WebSocketHostServer(_webViewerPort);
+        _wsServer = wsServer;
+        // Posted, so a line can arrive after Stop; it must not overwrite why the host stopped.
+        wsServer.Log += msg => Dispatcher.UIThread.Post(() => { if (_wsServer == wsServer) _shell.Status = msg; });
+        wsServer.Start();
         WebViewerUrl  = $"http://localhost:{_webViewerPort}/";
         ShowWebViewer = true;
         IsHostRunning = true;
@@ -270,6 +272,21 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         _sessionRemoteEndpoint = "";
         SessionNotes           = "";
         TrayTooltip            = "Hosting — waiting for viewer";
+    }
+
+    // The listener completes only once a viewer connects, so the host is ready as soon as
+    // it is bound. A port that can't be bound has already failed by the time it returns.
+    private Task ListenWithoutWaitingForAViewer(int port)
+    {
+        var listening = StartHostListenerAsync(port);
+        return listening.IsFaulted ? listening : Task.CompletedTask;
+    }
+
+    // A half-started host (port in use, say) is torn down rather than left looking ready.
+    private void StopAfterFailedStart(Exception ex)
+    {
+        if (IsHostRunning) Stop();
+        _shell.Status = FriendlyError.Describe(ex);
     }
 
     private Task StartHostListenerAsync(int port)

@@ -83,6 +83,13 @@ public sealed class HostViewModelTests : IDisposable
         public Task<RouterConnectResult> ResolveEndpointAsync(string h, int p, string c) => throw new NotSupportedException();
     }
 
+    private sealed class StubRouter : IRouterClient
+    {
+        public Task<RouterRegistrationResult> RegisterHostAsync(string h, int p, string e) =>
+            Task.FromResult(new RouterRegistrationResult("ABC123", "secret"));
+        public Task<RouterConnectResult> ResolveEndpointAsync(string h, int p, string c) => throw new NotSupportedException();
+    }
+
     private readonly string _settingsFile =
         Path.Combine(Path.GetTempPath(), "pw-host-" + Guid.NewGuid().ToString("N") + ".json");
     private readonly FakeShell _shell = new();
@@ -96,9 +103,9 @@ public sealed class HostViewModelTests : IDisposable
         _chat = new ChatViewModel(() => null, () => Task.FromResult<string?>(null));
     }
 
-    private HostViewModel Vm(AppSettings? settings = null)
+    private HostViewModel Vm(AppSettings? settings = null, IRouterClient? router = null)
     {
-        var vm = new HostViewModel(_shell, _chat, settings ?? AppSettings.Load(_settingsFile), new NoRouter(),
+        var vm = new HostViewModel(_shell, _chat, settings ?? AppSettings.Load(_settingsFile), router ?? new NoRouter(),
             OurHello, _provider, webViewerPort: GetFreePort());
         vm.ShowViewingBadgeCallback = () => _badgeShown++;
         vm.HideViewingBadgeCallback = () => _badgeHidden++;
@@ -148,10 +155,9 @@ public sealed class HostViewModelTests : IDisposable
         int port = GetFreePort();
         vm.HostPort = port.ToString();
         vm.HostTlsEnabled = false;
-        // Not awaited: the listener's start completes only once a viewer has connected.
         vm.StartDirectHostCommand.Execute().Subscribe();
-        await WaitUntil(() => vm.IsHostRunning, "host to start");
-        await Task.Delay(50); // let the listener bind
+        // Listening is reported once the port is bound, without waiting for a viewer.
+        await WaitUntil(() => vm.HostStatus.StartsWith("Listening"), "host to start");
         return port;
     }
 
@@ -248,6 +254,76 @@ public sealed class HostViewModelTests : IDisposable
         await vm.CopyCodeCommand.Execute();
         Assert.Equal(copied, _shell.Statuses.Contains("Code copied to clipboard"));
         Assert.Equal(copied ? new[] { code } : Array.Empty<string>(), _shell.Clipboard);
+    }
+
+    // ── Starting (over a real socket) ─────────────────────────────────────────
+
+    private const string PortInUse =
+        "That port is already in use by another app. Choose a different port, or close the app using it.";
+
+    [AvaloniaFact]
+    public async Task StartDirectHost_NoViewer_IsReadyOnceBound()
+    {
+        var vm = Vm();
+        int port = GetFreePort();
+        vm.HostPort = port.ToString();
+        vm.HostTlsEnabled = false;
+
+        await vm.StartDirectHostCommand.Execute();
+
+        Assert.True(vm.IsHostRunning);
+        Assert.StartsWith("Listening — tell viewer to connect to ", vm.HostStatus);
+        Assert.EndsWith($":{port}", vm.HostStatus);
+        Assert.StartsWith("Host ready. Viewer address: ", _shell.Statuses.Last());
+    }
+
+    [AvaloniaFact]
+    public async Task StartDirectHost_PortInUse_ShowsWhy_StopsAndDoesNotRelisten()
+    {
+        var blocker = new TcpListener(IPAddress.Any, 0);
+        blocker.Start();
+        try
+        {
+            var vm = Vm();
+            vm.HostPort = ((IPEndPoint)blocker.LocalEndpoint).Port.ToString();
+            vm.HostTlsEnabled = false;
+
+            await vm.StartDirectHostCommand.Execute();
+            int statuses = _shell.Statuses.Count;
+            await Settle();
+
+            Assert.Equal(PortInUse, _shell.Statuses.Last());
+            Assert.Equal(statuses, _shell.Statuses.Count); // no relisten loop behind it
+            Assert.DoesNotContain("Waiting for next connection…", _shell.Statuses);
+            Assert.False(vm.IsHostRunning);
+            Assert.Equal("Stopped", vm.HostStatus);
+        }
+        finally { blocker.Stop(); }
+    }
+
+    [AvaloniaFact]
+    public async Task RegisterWithRouter_PortInUse_ShowsWhy_AndStops()
+    {
+        // The router path always listens on 8888. Whether this blocker or something else
+        // on the machine holds it, the port is in use either way.
+        var blocker = new TcpListener(IPAddress.Any, 8888);
+        try { blocker.Start(); } catch (SocketException) { }
+        try
+        {
+            var vm = Vm(router: new StubRouter());
+            vm.UseRouterForHost = true;
+            vm.HostRouterAddress = "127.0.0.1:1";
+
+            await vm.RegisterHostCommand.Execute();
+            int statuses = _shell.Statuses.Count;
+            await Settle();
+
+            Assert.Equal(PortInUse, _shell.Statuses.Last());
+            Assert.Equal(statuses, _shell.Statuses.Count);
+            Assert.False(vm.IsHostRunning);
+            Assert.False(vm.ShowCodeCard);
+        }
+        finally { blocker.Stop(); }
     }
 
     // ── Consent (over a real socket) ──────────────────────────────────────────

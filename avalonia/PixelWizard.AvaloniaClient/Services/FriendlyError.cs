@@ -15,6 +15,7 @@ public static class FriendlyError
             SocketError.HostNotFound      => "That address could not be found. Check the IP address or router address.",
             SocketError.HostUnreachable   => "The host could not be reached. Check your network connection.",
             SocketError.NetworkUnreachable=> "The network is unreachable. Check your connection.",
+            SocketError.AddressAlreadyInUse => "That port is already in use by another app. Choose a different port, or close the app using it.",
             _ => "Could not connect to the host. Check the address and try again."
         },
         PixelWizard.Transport.Tcp.CertificatePinMismatchException =>
