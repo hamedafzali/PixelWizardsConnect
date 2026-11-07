@@ -119,6 +119,7 @@ public sealed class HostSession : IDisposable
     public event Action<MouseClickMessage>? MouseClickReceived;
     public event Action<MouseClickMessage>? MouseButtonDownReceived;
     public event Action<MouseClickMessage>? MouseButtonUpReceived;
+    public event Action<MouseWheelMessage>? MouseWheelReceived;
     public event Action<KeyMessage>? KeyPressReceived;
     public event Action<KeyMessage>? KeyReleaseReceived;
     public event Action<int>? QualityChanged;
@@ -177,6 +178,9 @@ public sealed class HostSession : IDisposable
                 break;
             case HostDispatchAction.MouseButtonUp:
                 MouseButtonUpReceived?.Invoke(MouseClickMessage.Deserialize(msg.Data));
+                break;
+            case HostDispatchAction.MouseWheel:
+                MouseWheelReceived?.Invoke(MouseWheelMessage.Deserialize(msg.Data));
                 break;
             case HostDispatchAction.KeyPress:
                 KeyPressReceived?.Invoke(KeyMessage.Deserialize(msg.Data));

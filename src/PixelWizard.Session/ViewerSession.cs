@@ -116,6 +116,8 @@ public sealed class ViewerSession : IDisposable
     public Task SendMouseClickAsync(int x, int y, bool leftButton) => Send(MessageType.MouseClick, Click(x, y, leftButton));
     public Task SendMouseDownAsync(int x, int y, bool leftButton) => Send(MessageType.MouseButtonDown, Click(x, y, leftButton));
     public Task SendMouseUpAsync(int x, int y, bool leftButton) => Send(MessageType.MouseButtonUp, Click(x, y, leftButton));
+    public Task SendMouseWheelAsync(int x, int y, int deltaX, int deltaY) => Send(MessageType.MouseWheel,
+        new MouseWheelMessage { X = x, Y = y, DeltaX = deltaX, DeltaY = deltaY }.Serialize());
     public Task SendKeyAsync(int virtualKey, bool isDown) => Send(isDown ? MessageType.KeyPress : MessageType.KeyRelease,
         new KeyMessage { VirtualKey = virtualKey, IsKeyDown = isDown }.Serialize());
     public Task SendQualityPresetAsync(int index) => Send(MessageType.QualityPreset, BitConverter.GetBytes(index));

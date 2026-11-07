@@ -76,6 +76,16 @@ public class SessionSendTests
         }
     }
 
+    [Fact]
+    public async Task MouseWheel()
+    {
+        var (s, t) = Viewer();
+        await s.SendMouseWheelAsync(5, 6, -40, 240);
+        Assert.Equal(MessageType.MouseWheel, t.LastSentMessage!.Type);
+        var m = MouseWheelMessage.Deserialize(t.LastSentMessage.Data);
+        Assert.Equal((5, 6, -40, 240), (m.X, m.Y, m.DeltaX, m.DeltaY));
+    }
+
     [Theory]
     [InlineData(true, MessageType.KeyPress)]
     [InlineData(false, MessageType.KeyRelease)]

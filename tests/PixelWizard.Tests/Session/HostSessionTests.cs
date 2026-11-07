@@ -344,6 +344,31 @@ public class HostSessionTests
     }
 
     [Fact]
+    public void Approved_MouseWheel_FiresMouseWheelReceived()
+    {
+        var fake = new FakeSessionTransport();
+        var session = new HostSession(fake, TestHello, expectedSessionSecret: "s3cr3t");
+        MouseWheelMessage? received = null;
+        session.MouseWheelReceived += m => received = m;
+
+        fake.RaiseMessageReceived(HelloMsg(TestHello));
+        fake.RaiseMessageReceived(new NetworkMessage
+        {
+            Type = MessageType.Handshake,
+            Data = Encoding.UTF8.GetBytes("s3cr3t")
+        });
+        session.Approve();
+        fake.RaiseMessageReceived(new NetworkMessage
+        {
+            Type = MessageType.MouseWheel,
+            Data = new MouseWheelMessage { X = 10, Y = 20, DeltaX = -120, DeltaY = 60 }.Serialize()
+        });
+
+        Assert.NotNull(received);
+        Assert.Equal((10, 20, -120, 60), (received!.X, received.Y, received.DeltaX, received.DeltaY));
+    }
+
+    [Fact]
     public void Approved_MouseMove_FiresMouseMoveReceived_AndPostHandshakeMessageReceived()
     {
         var fake = new FakeSessionTransport();
@@ -459,6 +484,7 @@ public class HostSessionTests
         session.MouseClickReceived += _ => raised++;
         session.MouseButtonDownReceived += _ => raised++;
         session.MouseButtonUpReceived += _ => raised++;
+        session.MouseWheelReceived += _ => raised++;
         session.KeyPressReceived += _ => raised++;
         session.KeyReleaseReceived += _ => raised++;
         session.QualityChanged += _ => raised++;
@@ -473,6 +499,7 @@ public class HostSessionTests
             new NetworkMessage { Type = MessageType.MouseClick, Data = click },
             new NetworkMessage { Type = MessageType.MouseButtonDown, Data = click },
             new NetworkMessage { Type = MessageType.MouseButtonUp, Data = click },
+            new NetworkMessage { Type = MessageType.MouseWheel, Data = new MouseWheelMessage { X = 1, Y = 2, DeltaY = 120 }.Serialize() },
             new NetworkMessage { Type = MessageType.KeyPress, Data = key },
             new NetworkMessage { Type = MessageType.KeyRelease, Data = key },
             new NetworkMessage { Type = MessageType.QualityPreset, Data = BitConverter.GetBytes(1) },
