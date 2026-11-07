@@ -405,6 +405,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         session.MouseClickReceived      += cl => Dispatcher.UIThread.Post(() => _input?.Click(cl.X, cl.Y, cl.LeftButton));
         session.MouseButtonDownReceived += bd => Dispatcher.UIThread.Post(() => _input?.ButtonDown(bd.X, bd.Y, bd.LeftButton));
         session.MouseButtonUpReceived   += bu => Dispatcher.UIThread.Post(() => _input?.ButtonUp(bu.X, bu.Y, bu.LeftButton));
+        session.MouseWheelReceived      += mw => Dispatcher.UIThread.Post(() => _input?.Scroll(mw.X, mw.Y, mw.DeltaX, mw.DeltaY));
         session.KeyPressReceived        += kp => Dispatcher.UIThread.Post(() => _input?.SendKey(kp.VirtualKey, true));
         session.KeyReleaseReceived      += kr => Dispatcher.UIThread.Post(() => _input?.SendKey(kr.VirtualKey, false));
         session.QualityChanged          += q  => Dispatcher.UIThread.Post(() => HostQualityIndex = q);

@@ -199,6 +199,7 @@ public sealed class HostViewModelTests : IDisposable
         await s.SendMouseDownAsync(tag, tag, true);
         await s.SendMouseUpAsync(tag, tag, true);
         await s.SendMouseClickAsync(tag, tag, true);
+        await s.SendMouseWheelAsync(tag, tag, -tag, 120);
         await s.SendKeyAsync(tag, true);
         await s.SendKeyAsync(tag, false);
         await s.SendQualityPresetAsync(3);
@@ -355,9 +356,9 @@ public sealed class HostViewModelTests : IDisposable
         await WaitUntil(() => Volatile.Read(ref viewer.Frames) > 0, "frames at the viewer");
 
         await SendEverything(viewer.Session, 7);
-        await WaitUntil(() => _provider.Input.Count == 6, "input on the host");
+        await WaitUntil(() => _provider.Input.Count == 7, "input on the host");
         await WaitUntil(() => _chat.Messages.Count == 1 && _shell.Clipboard.Count == 1, "chat and clipboard");
-        Assert.Equal(new[] { "move 7,7", "down 7,7", "up 7,7", "click 7,7", "key 7 True", "key 7 False" }, _provider.Input.Calls);
+        Assert.Equal(new[] { "move 7,7", "down 7,7", "up 7,7", "click 7,7", "scroll 7,7 -7,120", "key 7 True", "key 7 False" }, _provider.Input.Calls);
         Assert.Equal("chat 7", _chat.Messages[0].Text);
         Assert.False(_chat.Messages[0].IsHost);
         Assert.Equal("clip 7", _shell.Clipboard[0]);
