@@ -340,4 +340,39 @@ public sealed class ViewerViewModelTests : IDisposable
         Assert.Equal("Disconnected", _shell.Statuses.Last());
         Assert.Null(vm.ActiveChatLink);
     }
+
+    // The host denied (Deny, Escape, closing the dialog) or went away before answering. The
+    // viewer was never shown anything, so it says the host didn't allow it, not a bare
+    // "Disconnected". The approved-then-dropped case above is the negative control.
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task HostNeverAllows_ViewerSaysSo(bool hostDenies)
+    {
+        int port = GetFreePort();
+        using var host = new HostSession(new TcpTransport(), OurHello);
+        bool verified = false;
+        host.HandshakeVerified += () => verified = true;
+        _ = host.StartServerAsync(port, useTls: false);
+        await Task.Delay(50); // let the listener bind
+
+        var vm = Vm();
+        vm.UseTls = false;
+        vm.HostAddress = $"127.0.0.1:{port}";
+
+        await vm.ConnectDirectCommand.Execute();
+        await WaitUntil(() => vm.IsConnected, "viewer to go live");
+        await WaitUntil(() => verified, "host to verify the handshake");
+
+        if (hostDenies)
+            Assert.False(await host.ResolveConsentAsync(_ => Task.FromResult(false), "viewer"));
+        else
+            host.Disconnect();
+
+        await WaitUntil(() => !vm.IsConnected, "viewer to see the host drop");
+        await WaitUntil(() => _shell.ConnectShown.Count > 0, "connect screen");
+
+        Assert.Equal(new[] { false }, _shell.ConnectShown);
+        Assert.Equal("The host didn't allow the connection", _shell.Statuses.Last());
+    }
 }

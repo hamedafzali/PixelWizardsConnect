@@ -373,6 +373,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         {
             // Read synchronously: it's a per-report snapshot (see ViewerSession).
             bool helloUnanswered = session.HelloUnansweredAtDisconnect;
+            bool approvalPending = session.ApprovalPendingAtDisconnect;
             var failure = connectFailure;
             connectFailure = null;
             Dispatcher.UIThread.Post(() =>
@@ -388,6 +389,8 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
                 _shell.Status = failure != null ? FriendlyError.Describe(failure)
                     : helloUnanswered
                     ? "Disconnected — the host may be running an older, incompatible version"
+                    : approvalPending
+                    ? "The host didn't allow the connection"
                     : "Disconnected";
                 _pingTimer?.Stop();
                 KeyboardActive = false;

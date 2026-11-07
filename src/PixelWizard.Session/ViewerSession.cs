@@ -35,6 +35,8 @@ public sealed class ViewerSession : IDisposable
     // drops -- the viewer-side heuristic for detecting a v1 host (see
     // HelloUnansweredAtDisconnect).
     private bool _awaitingHelloResponse;
+    // HandshakeOk arrived and nothing has since (see ApprovalPendingAtDisconnect).
+    private bool _awaitingApproval;
 
     public ViewerSession(Func<ISessionTransport> transportFactory, HelloMessage ourHello, string sessionSecret = "")
     {
@@ -55,7 +57,9 @@ public sealed class ViewerSession : IDisposable
         _transport.Disconnected += () =>
         {
             HelloUnansweredAtDisconnect = _awaitingHelloResponse;
+            ApprovalPendingAtDisconnect = _awaitingApproval;
             _awaitingHelloResponse = false;
+            _awaitingApproval = false;
             Disconnected?.Invoke();
         };
         _transport.Error += ex => Error?.Invoke(ex);
@@ -77,6 +81,13 @@ public sealed class ViewerSession : IDisposable
     // Disconnected fires; read it synchronously inside that handler -- the transport can
     // report Disconnected more than once, and each report takes a fresh snapshot.
     public bool HelloUnansweredAtDisconnect { get; private set; }
+
+    // The host sends HandshakeOk before its consent dialog, then nothing at all until the
+    // user allows the viewer: frames, pongs, chat and clipboard all wait for approval. So
+    // "HandshakeOk was the last thing received" means the host never allowed this session --
+    // it was denied, the host stopped, or the connection dropped while the dialog was open.
+    // Snapshotted like HelloUnansweredAtDisconnect, and read the same way.
+    public bool ApprovalPendingAtDisconnect { get; private set; }
 
     public event Action? Connected;
     public event Action? Disconnected;
@@ -128,7 +139,10 @@ public sealed class ViewerSession : IDisposable
         // Hello-aware, regardless of what it turns out to be.
         _awaitingHelloResponse = false;
 
-        switch (MessageDispatch.ClassifyForViewer(msg.Type))
+        var action = MessageDispatch.ClassifyForViewer(msg.Type);
+        _awaitingApproval = action == ViewerDispatchAction.HandshakeAcknowledged;
+
+        switch (action)
         {
             case ViewerDispatchAction.ApplyFullScreen:
                 FullScreenReceived?.Invoke(msg.Data);
