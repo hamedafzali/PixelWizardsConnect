@@ -24,6 +24,10 @@ namespace PixelWizard.Transport.Tcp
         private TcpListener? _pendingListener;
         private bool _isConnected;
         private readonly CertificatePinStore _pinStore;
+        // Messages are sent from several threads at once (frames, pings and pongs, input,
+        // chat). One message's writes must not interleave with another's, and an SslStream
+        // throws on a write while another is pending.
+        private readonly SemaphoreSlim _sendLock = new(1, 1);
 
         internal static readonly CertificatePinStore SharedPinStore = new();
 
@@ -170,8 +174,10 @@ namespace PixelWizard.Transport.Tcp
             if (!IsConnected || _stream == null)
                 return;
 
+            await _sendLock.WaitAsync();
             try
             {
+                if (!IsConnected) return;
                 byte[] data = message.Serialize();
                 byte[] len = BitConverter.GetBytes(data.Length);
                 await _stream.WriteAsync(len, 0, 4);
@@ -183,6 +189,10 @@ namespace PixelWizard.Transport.Tcp
             {
                 Error?.Invoke(ex);
                 Disconnect();
+            }
+            finally
+            {
+                _sendLock.Release();
             }
         }
 
