@@ -159,6 +159,7 @@
                            PointerPressed="OnScreenPointerPressed"
                            PointerReleased="OnScreenPointerReleased"
                            PointerMoved="OnScreenPointerMoved"
+                           PointerWheelChanged="OnScreenPointerWheelChanged"
                            PointerEntered="OnScreenPointerEntered"
                            PointerExited="OnScreenPointerExited"/>
                     <!-- Empty state -->
@@ -189,6 +190,7 @@
                        PointerPressed="OnScreenPointerPressed"
                        PointerReleased="OnScreenPointerReleased"
                        PointerMoved="OnScreenPointerMoved"
+                       PointerWheelChanged="OnScreenPointerWheelChanged"
                        PointerEntered="OnScreenPointerEntered"
                        PointerExited="OnScreenPointerExited"/>
             </ScrollViewer>

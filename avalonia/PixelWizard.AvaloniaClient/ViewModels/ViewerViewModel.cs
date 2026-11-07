@@ -581,6 +581,13 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         await _session.SendMouseUpAsync(rx, ry, leftButton);
     }
 
+    public async void SendMouseWheel(int rx, int ry, int deltaX, int deltaY)
+    {
+        if (_session?.IsConnected != true || !_hostPeerRole.AcceptsInput()) return;
+        if (deltaX == 0 && deltaY == 0) return;
+        await _session.SendMouseWheelAsync(rx, ry, deltaX, deltaY);
+    }
+
     // Keys whose key-down reached this session's host. Only their key-ups are sent, so the
     // release of a key pressed before going live (the Return that connected) never reaches
     // the host, while a key held as the pointer leaves the screen is still released there.

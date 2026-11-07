@@ -50,6 +50,7 @@ public sealed class MainWindowInputTests : IDisposable
     private readonly List<(int X, int Y)> _moves = new();
     private readonly List<(int X, int Y, bool Left)> _downs = new();
     private readonly List<(int X, int Y, bool Left)> _ups = new();
+    private readonly List<(int X, int Y, int DeltaX, int DeltaY)> _wheels = new();
     private readonly List<int> _keyDowns = new();
     private readonly List<int> _keyUps = new();
 
@@ -63,6 +64,7 @@ public sealed class MainWindowInputTests : IDisposable
         _host.MouseMoveReceived += m => { lock (_moves) _moves.Add((m.X, m.Y)); };
         _host.MouseButtonDownReceived += m => { lock (_downs) _downs.Add((m.X, m.Y, m.LeftButton)); };
         _host.MouseButtonUpReceived += m => { lock (_ups) _ups.Add((m.X, m.Y, m.LeftButton)); };
+        _host.MouseWheelReceived += m => { lock (_wheels) _wheels.Add((m.X, m.Y, m.DeltaX, m.DeltaY)); };
         _host.KeyPressReceived += k => { lock (_keyDowns) _keyDowns.Add(k.VirtualKey); };
         _host.KeyReleaseReceived += k => { lock (_keyUps) _keyUps.Add(k.VirtualKey); };
         _ = _host.StartServerAsync(_port, useTls: false);
@@ -258,6 +260,27 @@ public sealed class MainWindowInputTests : IDisposable
         await WaitUntil(() => { lock (_ups) return _ups.Count == 1; }, "button up on host");
         lock (_downs) Assert.Equal(new[] { (5, 95, true) }, _downs);
         lock (_ups) Assert.Equal(new[] { (5, 95, true) }, _ups);
+    }
+
+    // Avalonia's wheel is positive up and left, in notches; the host's is positive up and
+    // right, in 120ths of a notch.
+    [AvaloniaTheory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WheelOverTheScreen_ScrollsTheHostWhereThePointerIs(bool fit)
+    {
+        await GoLive();
+        if (!fit)
+        {
+            await _vm.Viewer.Zoom100Command.Execute();
+            Settle();
+        }
+        var img = ScreenImage(fit ? "FitScreenImage" : "ZoomScreenImage");
+
+        _window.MouseWheel(WindowPointOf(img, 30, 70), new Vector(0, -1), RawInputModifiers.None);
+        _window.MouseWheel(WindowPointOf(img, 30, 70), new Vector(0.5, 0.25), RawInputModifiers.None);
+        await WaitUntil(() => { lock (_wheels) return _wheels.Count == 2; }, "scrolls on host");
+        lock (_wheels) Assert.Equal(new[] { (30, 70, 0, -120), (30, 70, -60, 30) }, _wheels);
     }
 
     // ── Keyboard ──────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using PixelWizard.AvaloniaClient.Input;
 using PixelWizard.AvaloniaClient.ViewModels;
+using PixelWizard.Protocol;
 
 namespace PixelWizard.AvaloniaClient.Views;
 
@@ -134,6 +135,19 @@ public partial class LiveScreenView : UserControl
         if (vm?.IsConnected != true || vm.RemoteScreen == null) return;
         var (rx, ry) = ToRemote(sender as Image, e.GetPosition((Image?)sender));
         vm.SendMouseMove(rx, ry);
+    }
+
+    // Avalonia's delta is in notches, positive up and left; the message's is in 120ths of
+    // a notch, positive up and right. Handled, so the zoom view's scroller doesn't also move.
+    private void OnScreenPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        var vm = VM;
+        if (vm?.IsConnected != true || vm.RemoteScreen == null) return;
+        var (rx, ry) = ToRemote(sender as Image, e.GetPosition((Image?)sender));
+        vm.SendMouseWheel(rx, ry,
+            (int)Math.Round(-e.Delta.X * MouseWheelMessage.NotchDelta),
+            (int)Math.Round(e.Delta.Y * MouseWheelMessage.NotchDelta));
+        e.Handled = true;
     }
 
     private void OnScreenPointerEntered(object? sender, PointerEventArgs e)
