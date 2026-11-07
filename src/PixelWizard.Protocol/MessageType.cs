@@ -22,6 +22,7 @@ namespace PixelWizard.Protocol
         KeyRelease = 23,
         MouseButtonDown = 24,
         MouseButtonUp   = 25,
+        MouseWheel      = 26,
 
         // Health
         Ping = 30,

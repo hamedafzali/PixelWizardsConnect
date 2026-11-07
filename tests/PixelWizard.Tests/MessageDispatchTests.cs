@@ -34,6 +34,7 @@ public class MessageDispatchTests
         [MessageType.MouseClick] = HostDispatchAction.MouseClick,
         [MessageType.MouseButtonDown] = HostDispatchAction.MouseButtonDown,
         [MessageType.MouseButtonUp] = HostDispatchAction.MouseButtonUp,
+        [MessageType.MouseWheel] = HostDispatchAction.MouseWheel,
         [MessageType.KeyPress] = HostDispatchAction.KeyPress,
         [MessageType.KeyRelease] = HostDispatchAction.KeyRelease,
         [MessageType.Ping] = HostDispatchAction.PingReply,

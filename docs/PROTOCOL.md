@@ -164,6 +164,7 @@ in this protocol (declared length must not exceed remaining buffer, and must not
 | `KeyRelease` | 23 | Control | `KeyMessage` |
 | `MouseButtonDown` | 24 | Control | `MouseClickMessage` |
 | `MouseButtonUp` | 25 | Control | `MouseClickMessage` |
+| `MouseWheel` | 26 | Control | `MouseWheelMessage` (X, Y, DeltaX, DeltaY; deltas in 120ths of a notch, positive = up/right) |
 | `Ping` | 30 | Control | echoed back as `Pong` |
 | `Pong` | 31 | Control | 8-byte timestamp |
 | `QualityPreset` | 32 | Control | 4-byte int index |

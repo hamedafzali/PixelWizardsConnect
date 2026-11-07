@@ -108,4 +108,25 @@ public class ProtocolTests
         Assert.Equal(virtualKey, restored.VirtualKey);
         Assert.Equal(isKeyDown, restored.IsKeyDown);
     }
+
+    [Theory]
+    [InlineData(10, 20, 0, 120)]
+    [InlineData(1919, 0, -240, -40)]
+    public void MouseWheelMessage_RoundTrips_AllFields(int x, int y, int deltaX, int deltaY)
+    {
+        var original = new MouseWheelMessage { X = x, Y = y, DeltaX = deltaX, DeltaY = deltaY };
+
+        var restored = MouseWheelMessage.Deserialize(original.Serialize());
+
+        Assert.Equal(x, restored.X);
+        Assert.Equal(y, restored.Y);
+        Assert.Equal(deltaX, restored.DeltaX);
+        Assert.Equal(deltaY, restored.DeltaY);
+    }
+
+    [Fact]
+    public void MouseWheelMessage_ShortPayload_Throws()
+    {
+        Assert.Throws<EndOfStreamException>(() => MouseWheelMessage.Deserialize(new byte[12]));
+    }
 }
