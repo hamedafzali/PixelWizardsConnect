@@ -76,12 +76,13 @@ public sealed class ViewerViewModelTests : IDisposable
 
     // Posted UI work (every session event lands via Dispatcher.UIThread.Post) runs while
     // this waits on the headless UI thread.
-    private static async Task WaitUntil(Func<bool> condition, string what)
+    // Timed with a Stopwatch, not the wall clock, which can jump (sleep, clock sync).
+    private static async Task WaitUntil(Func<bool> condition, string what, int seconds = 5)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var waited = System.Diagnostics.Stopwatch.StartNew();
         while (!condition())
         {
-            if (DateTime.UtcNow > deadline) throw new TimeoutException($"Timed out waiting for: {what}");
+            if (waited.Elapsed > TimeSpan.FromSeconds(seconds)) throw new TimeoutException($"Timed out waiting for: {what}");
             Dispatcher.UIThread.RunJobs();
             await Task.Delay(10);
         }
@@ -151,6 +152,38 @@ public sealed class ViewerViewModelTests : IDisposable
 
         Assert.False(vm.IsConnected);
         Assert.Equal(0, _shell.LiveShown);
+        Assert.Equal("No host is accepting connections at that address. Make sure the host has started sharing.",
+                     _shell.Statuses.Last());
+    }
+
+    [AvaloniaFact]
+    public async Task ConnectDirect_TlsToAHostThatNeverAnswers_TimesOut_AndSaysToMatchTls()
+    {
+        // What a host listening without TLS looks like to a TLS viewer: the connection is
+        // accepted and the ClientHello is never answered.
+        var silent = new TcpListener(IPAddress.Loopback, 0);
+        silent.Start();
+        var accepting = silent.AcceptTcpClientAsync();
+        try
+        {
+            var vm = Vm();
+            vm.UseTls = true;
+            vm.HostAddress = $"127.0.0.1:{((IPEndPoint)silent.LocalEndpoint).Port}";
+
+            vm.ConnectDirectCommand.Execute().Subscribe();
+            // The transport's handshake timeout is 10 s.
+            await WaitUntil(() => !vm.IsConnecting, "connect attempt to give up", seconds: 20);
+
+            Assert.False(vm.IsConnected);
+            Assert.Equal(0, _shell.LiveShown);
+            Assert.Equal("The host answered but did not start a secure connection. Turn TLS on or off to match the host.",
+                         _shell.Statuses.Last());
+        }
+        finally
+        {
+            silent.Stop();
+            try { (await accepting).Dispose(); } catch { }
+        }
     }
 
     // ── Zoom ──────────────────────────────────────────────────────────────────

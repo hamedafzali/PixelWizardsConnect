@@ -24,6 +24,8 @@ public static class FriendlyError
             "Connection refused: the host did not present a certificate.",
         PixelWizard.Transport.Tcp.CertificatePinStoreCorruptedException =>
             "Connection refused: the saved host certificates could not be read, so this host can't be verified.",
+        PixelWizard.Transport.Tcp.TlsHandshakeTimeoutException =>
+            "The host answered but did not start a secure connection. Turn TLS on or off to match the host.",
         TimeoutException        => "The operation timed out. Please try again.",
         UriFormatException      => "That address is not valid.",
         FormatException         => "That address or code is not in a valid format.",

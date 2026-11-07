@@ -361,16 +361,20 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         // class comment).
         var session = new ViewerSession(() => new TcpTransport(), _ourHello, _sessionSecret);
         _keysDown.Clear();
-        // A certificate failure is raised on Error just before the transport disconnects,
-        // while the session is not yet connected -- so the Error handler below would drop it
-        // and the user would only see "Disconnected". Keep it for the Disconnected handler.
-        Exception? certFailure = null;
+        // A failure to connect (refused, unreachable, TLS handshake timeout, certificate) is
+        // raised on Error just before the transport disconnects, while the session is not yet
+        // connected -- so the Error handler below would drop it and the user would only see
+        // "Disconnected". Keep it for the Disconnected handler. Only before the transport ever
+        // connected: a read error after a drop must not replace the plain "Disconnected".
+        Exception? connectFailure = null;
+        bool everConnected = false;
+        session.Connected += () => everConnected = true;
         session.Disconnected += () =>
         {
             // Read synchronously: it's a per-report snapshot (see ViewerSession).
             bool helloUnanswered = session.HelloUnansweredAtDisconnect;
-            var failure = certFailure;
-            certFailure = null;
+            var failure = connectFailure;
+            connectFailure = null;
             Dispatcher.UIThread.Post(() =>
             {
                 // The user left this session (Back, Disconnect) or started another one;
@@ -393,11 +397,10 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         };
         session.BytesReceived   += b => _receivedBytes += b;
         session.Error += ex => {
-            if (ex is CertificatePinMismatchException or CertificateMissingException
-                   or CertificatePinStoreCorruptedException)
-                certFailure = ex;
             if (session.IsConnected)
                 Dispatcher.UIThread.Post(() => _shell.Status = FriendlyError.Describe(ex));
+            else if (!everConnected)
+                connectFailure = ex;
         };
         // A handler bug, not a transport failure -- the connection survives, so this is
         // surfaced for diagnostics only and never touches Status/IsConnected.
