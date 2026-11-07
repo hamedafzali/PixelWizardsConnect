@@ -311,6 +311,9 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         // Relistening disposes this session, which raises Disconnected a second time while
         // the host is already waiting for the next viewer. Only the first one is handled.
         bool disconnectHandled = false;
+        // Someone was actually watching: the host says so when they leave. A viewer that was
+        // denied, or left before an answer, was never shown anything.
+        bool viewerWasApproved = false;
         session.Disconnected += () => Dispatcher.UIThread.Post(async () =>
         {
             if (_hostListener != owner || disconnectHandled) return;
@@ -323,8 +326,11 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
             _shell.Status = "Client disconnected";
             if (IsHostRunning && _hostListener is { IsRelistening: false } listener)
             {
-                HostStatus    = "Waiting for next connection…";
-                _shell.Status = "Waiting for next connection…";
+                string waiting = viewerWasApproved
+                    ? "Viewer disconnected — waiting for next connection…"
+                    : "Waiting for next connection…";
+                HostStatus    = waiting;
+                _shell.Status = waiting;
                 try { await listener.RelistenAsync(); }
                 catch (Exception ex)
                 {
@@ -385,6 +391,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
                 // already run and the host is waiting for the next viewer.
                 if (!session.IsApproved) return;
 
+                viewerWasApproved = true;
                 StartSessionWatchdog();
                 HostStatus    = "Client connected — sharing screen";
                 IsHostRunning = true;

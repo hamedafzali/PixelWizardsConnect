@@ -139,6 +139,11 @@ public sealed class HostViewModelTests : IDisposable
         }
     }
 
+    // What the host says once an approved viewer leaves; one that never got in leaves it plain.
+    private const string ViewerLeft = "Viewer disconnected — waiting for next connection…";
+    private static bool IsWaitingForAViewer(string status) =>
+        status.EndsWith("aiting for next connection…", StringComparison.Ordinal);
+
     // Keeps the UI thread pumping for a while, so anything that was going to arrive has.
     private static async Task Settle(int ms = 400)
     {
@@ -294,7 +299,7 @@ public sealed class HostViewModelTests : IDisposable
 
             Assert.Equal(PortInUse, _shell.Statuses.Last());
             Assert.Equal(statuses, _shell.Statuses.Count); // no relisten loop behind it
-            Assert.DoesNotContain("Waiting for next connection…", _shell.Statuses);
+            Assert.DoesNotContain(_shell.Statuses, IsWaitingForAViewer);
             Assert.False(vm.IsHostRunning);
             Assert.Equal("Stopped", vm.HostStatus);
         }
@@ -520,12 +525,12 @@ public sealed class HostViewModelTests : IDisposable
         int afterApproval = _shell.Statuses.Count;
 
         viewer.Session.Disconnect();
-        await WaitUntil(() => _shell.Statuses.Contains("Waiting for next connection…"), "host to notice");
+        await WaitUntil(() => _shell.Statuses.Contains(ViewerLeft), "host to notice");
         await Settle();
 
-        Assert.Equal(new[] { "Client disconnected", "Waiting for next connection…" },
+        Assert.Equal(new[] { "Client disconnected", ViewerLeft },
                      _shell.Statuses.Skip(afterApproval));
-        Assert.Equal("Waiting for next connection…", vm.HostStatus);
+        Assert.Equal(ViewerLeft, vm.HostStatus);
         Assert.Equal("Hosting — waiting for viewer", vm.TrayTooltip);
         Assert.Equal(1, _badgeHidden);
         Assert.True(vm.IsHostRunning);
@@ -597,7 +602,7 @@ public sealed class HostViewModelTests : IDisposable
         await Settle();
 
         Assert.DoesNotContain("Client disconnected", _shell.Statuses.Skip(afterStop));
-        Assert.DoesNotContain("Waiting for next connection…", _shell.Statuses.Skip(afterStop));
+        Assert.DoesNotContain(_shell.Statuses.Skip(afterStop), IsWaitingForAViewer);
         Assert.True(vm.IsHostRunning);
 
         var viewer2 = await ConnectViewer(port2);
