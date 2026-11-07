@@ -7,6 +7,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using Avalonia.Threading;
 using SkiaSharp;
 using PixelWizard.AvaloniaClient.Platform;
 using PixelWizard.AvaloniaClient.Services;
@@ -109,6 +110,8 @@ public class App : Application
             };
 
             desktop.MainWindow = _mainWindow;
+            // Not before: finishing launch resets the Dock icon, and that runs after Opened.
+            _mainWindow.Opened += (_, _) => Dispatcher.UIThread.Post(MacDockIcon.Apply, DispatcherPriority.ApplicationIdle);
         }
 
         base.OnFrameworkInitializationCompleted();
