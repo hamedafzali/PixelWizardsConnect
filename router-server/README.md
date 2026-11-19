@@ -149,6 +149,114 @@ Check server health and status.
 - **Host Cleanup**: 30 minutes
 - **Cleanup Interval**: 5 minutes
 
+## coturn
+
+Peers behind strict NATs need a TURN relay. `coturn/turnserver.conf` is a production template for
+[coturn](https://github.com/coturn/coturn), pinned to `coturn/coturn:4.6.2` (the version the
+spike and the CI `coturn` job were tested with). It uses the REST-API secret scheme the router
+issues credentials for (see [TURN credentials](#turn-credentials)), so the router and coturn share
+one secret and nothing else.
+
+### Start it
+
+`docker-compose.https.yml` has a `coturn` service under the `turn` profile (off unless asked
+for). Put the settings in a `.env` file next to the compose file:
+
+```
+TURN_SECRET=<output of: openssl rand -hex 32>
+TURN_URLS=turn:turn.example.org:3478?transport=udp,turn:turn.example.org:3478?transport=tcp
+TURN_REALM=turn.example.org
+TURN_LISTEN_IP=<the server's own address, see below>
+TURN_EXTERNAL_IP=<the address clients reach, see below>
+```
+
+```bash
+docker compose -f docker-compose.https.yml --profile turn up -d
+```
+
+The router gets `TURN_URLS` and `TURN_SECRET` from the same variables. coturn refuses to start
+if any of the four coturn variables is empty. It runs with host networking, because the relay
+needs a UDP port range and Docker's per-port proxying of a range is slow and hides client
+addresses.
+
+The compose file is for the VPS-with-Caddy shape. If the router is reached some other way (for
+example an HTTPS tunnel), run coturn the same way and set `TURN_URLS`/`TURN_SECRET` on the
+router however you start it; the two only share the secret.
+
+### Addresses: VPS or behind NAT
+
+coturn does not expand environment variables in its config file, so these go on the command line
+(the compose file does it from `.env`). They are the part that goes wrong.
+
+| Setup | `TURN_LISTEN_IP` (listening-ip and relay-ip) | `TURN_EXTERNAL_IP` (external-ip) |
+|---|---|---|
+| VPS, public IP on its NIC | the public IP, `203.0.113.10` | the same, no mapping |
+| VPS, public IP NAT-ed to a private NIC address | the private address, `10.0.0.5` | `203.0.113.10/10.0.0.5` |
+| Home server behind a NAT router | the server's LAN address, `192.168.1.20` | `203.0.113.10/192.168.1.20` (router's public IP / LAN address) |
+
+`/` is coturn's `PUBLIC/PRIVATE` mapping form: coturn binds the private address and tells clients
+the public one. Never use `127.0.0.1` or `0.0.0.0` for the relay in production: loopback is in
+the denied peer ranges, so a relay bound there could reach nothing.
+
+### DNS
+
+`turn.example.org` must be a **DNS-only** record (not proxied) pointing at the public IP. HTTP
+proxies and tunnels do not carry UDP, so a proxied record or a tunnel hostname cannot serve TURN.
+
+### Ports: firewall or port forwards
+
+| Port | Protocol | Purpose |
+|---|---|---|
+| 3478 | UDP and TCP | TURN/STUN |
+| 49160-49200 | UDP | relay ports (`min-port`/`max-port` in the template) |
+| 5349 (or 443 forwarded to it) | TCP | `turns:`, only if you enable TLS |
+
+Behind NAT, forward exactly these from the router to `TURN_LISTEN_IP` (same port numbers).
+
+### TLS (optional)
+
+Off by default; the template works without certificates. For `turns:`, put a certificate and key
+in `coturn/tls/` (`fullchain.pem`, `privkey.pem`, for example copied from your certificate
+store), uncomment the volume line in the compose file, and in `turnserver.conf` delete `no-tls`
+and `no-dtls` and uncomment the TLS block. Add a `turns:turn.example.org:5349?transport=tcp`
+entry to `TURN_URLS`. Renewed certificates need a coturn restart.
+
+### Secret rotation
+
+Generate a new secret with `openssl rand -hex 32`, put it in `.env`, then restart both together:
+
+```bash
+docker compose -f docker-compose.https.yml --profile turn up -d router coturn
+```
+
+Every credential issued under the old secret stops working at once, and restarting coturn ends
+live allocations, so relayed calls drop; the next pairing gets credentials under the new secret.
+Restarting only one side makes every new allocation fail.
+
+### Checking an allocation
+
+The template logs one line per allocation (`docker compose ... logs coturn`):
+
+```
+session ...: realm <turn.example.org> user <1795123541:f7c7702ade>: incoming packet ALLOCATE processed, success
+```
+
+The user is the credential's expiry (Unix seconds) and a random id; the secret and credentials
+are never logged. `error 401` right before it is the normal first, unauthenticated request.
+A relay to a denied range shows `A peer IP ... denied in the range: ...` and the client gets
+`403 (Forbidden IP)`. The template denies `0/8`, `10/8`, `100.64/10`, `127/8`, `169.254/16`,
+`172.16/12`, `192.168/16`, `::1`, `fc00::/7` and `fe80::/10` as peers, so the relay cannot reach
+the server's own network. That also means a peer on the server's LAN cannot be relayed to; such
+peers connect directly.
+
+### CI
+
+The `coturn` job starts coturn from this template and runs
+`go test -tags coturn` (`coturn_integration_test.go`), which takes credentials from
+`issueTurnCredentials` and drives `turnutils_uclient`. It prints `PASS (a)` for an allocation
+with valid router-issued credentials, `PASS (b)` for expired credentials being refused and
+`PASS (c)` for a relay to a 10.0.0.0/8 peer being refused.
+
 ## Integration with Remote Desktop App
 
 1. Start the router server
