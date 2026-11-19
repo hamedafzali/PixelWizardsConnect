@@ -37,6 +37,7 @@ func initConfig() {
 	cleanupInterval = getDurationEnv("CLEANUP_INTERVAL", 5*time.Minute)
 	rateLimitWindow = getDurationEnv("RATE_LIMIT_WINDOW", time.Minute)
 	rateLimitMax = getIntEnv("RATE_LIMIT_MAX", 10)
+	initSignalConfig()
 
 	cidrs, err := parseTrustedProxyCIDRs(getEnv("TRUSTED_PROXY_CIDRS", ""))
 	if err != nil {
@@ -210,6 +211,7 @@ func main() {
 
 	http.HandleFunc("/register", handleRegister)
 	http.HandleFunc("/connect", handleConnect)
+	http.HandleFunc("/signal", handleSignal)
 	http.HandleFunc("/health", handleHealth)
 
 	fmt.Printf("Router Server starting on port %s\n", serverPort)
@@ -345,14 +347,15 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// generateUniqueCodeLocked must be called with hostsMutex held.
+// generateUniqueCodeLocked must be called with hostsMutex held. A code is unique across the
+// HTTP routes and the /signal rooms.
 func generateUniqueCodeLocked() (string, error) {
 	for i := 0; i < 10; i++ {
 		code, err := generateCode()
 		if err != nil {
 			return "", err
 		}
-		if _, exists := hostsByCode[code]; !exists {
+		if _, exists := hostsByCode[code]; !exists && !signalCodeInUse(code) {
 			return code, nil
 		}
 	}
@@ -424,6 +427,7 @@ func cleanupExpiredHosts(ctx context.Context) {
 			}
 		}
 		hostsMutex.Unlock()
+		sweepSignalRooms(nowFunc())
 	}
 }
 
