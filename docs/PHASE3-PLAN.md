@@ -1,6 +1,8 @@
 # Phase 3 Plan — Signaling and relay
 
-**Status: draft for review.** Nothing past P3.0 has started.
+**Status: accepted.** D1, D2, D4, D5 and D6 as recommended. D3: the router and coturn are
+self-hosted on the owner's home server, which has a public IPv4 address; the router is reached
+through an HTTPS tunnel and coturn through port forwards. SIGNALING.md accepted as drafted.
 
 ADR-001 scope: "Go router to persistent WebSocket signaling; SDP/ICE exchange; TURN credential
 issuance; coturn deployment." Exit gate: "Two peers exchange ICE candidates across carriers."

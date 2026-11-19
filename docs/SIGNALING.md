@@ -1,6 +1,6 @@
 # PixelWizard Connect — Signaling Protocol (v1)
 
-**Status: draft for review (P3.2).** No code implements this yet.
+**Status: accepted (P3.2).** The router implements it from P3.3.
 
 This is the reference for the router's WebSocket endpoint, `/signal`. Two WebRTC peers use it to
 find each other and exchange SDP and ICE candidates. It is meant to be complete enough to
@@ -168,8 +168,9 @@ what tests assert.
 
 ## Security posture
 
-- **The code is the capability**, as it is today. Six characters from a 36-character alphabet
-  (A–Z, 0–9) is about 2 × 10⁹ codes; the per-IP join limit and one-time use are what make guessing impractical.
+- **The code is the capability**, as it is today. Six characters from a 32-character alphabet
+  (A–Z and 2–9, without the lookalikes 0/O and 1/I) is about 1 × 10⁹ codes; the per-IP join
+  limit and one-time use are what make guessing impractical.
 - **The router is trusted with the SDP.** It could replace the DTLS fingerprint and sit in the
   middle. That is the same trust it already has over `sessionSecret` on the HTTP route, and it is
   why the router is self-hosted. End-to-end fingerprint verification (for example, a short code
