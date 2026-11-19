@@ -103,13 +103,31 @@ messages are in `testdata/signaling/`.
 
 Codes are shared with the HTTP routes (a code is unique across both) but a code from `/register`
 cannot be joined here, nor a `/signal` code on `/connect`. `register`/`resume` count against the
-`/register` rate limit and `join` against the `/connect` one. Without a TURN secret configured
-(not yet implemented), `joined` and `peer-joined` omit `turn`.
+`/register` rate limit and `join` against the `/connect` one. Without TURN configured (see
+below), `joined` and `peer-joined` omit `turn`.
 
 Limits, with defaults, set by environment variable: `SIGNAL_MAX_FRAME_BYTES` (65536),
 `SIGNAL_MSG_RATE_MAX` (100) per `SIGNAL_MSG_RATE_WINDOW` (10s), `SIGNAL_MAX_SOCKETS_PER_IP` (20),
 `SIGNAL_FIRST_MSG_TIMEOUT` (10s), `SIGNAL_PING_INTERVAL` (20s), `SIGNAL_PONG_TIMEOUT` (10s) and
 `SIGNAL_RESUME_WINDOW` (60s).
+
+#### TURN credentials
+
+When `TURN_SECRET` and `TURN_URLS` are both set, `joined` and `peer-joined` carry a `turn` object
+`{urls, username, credential}`, issued fresh for each socket at pairing time. If either is unset,
+`turn` is omitted (peers fall back to STUN and host candidates); there is no static fallback.
+
+- `TURN_URLS`: comma-separated, each starting with `turn:`, `turns:` or `stun:`, for example
+  `turn:turn.example.org:3478?transport=udp,turns:turn.example.org:443?transport=tcp`. Anything
+  else stops the router at startup.
+- `TURN_SECRET`: the secret shared with coturn.
+- `TURN_CREDENTIAL_TTL`: how long a credential stays valid (default `1h`).
+
+The scheme is coturn's REST API: `username = <expiry-unix-seconds>:<random-hex-id>` and
+`credential = base64(HMAC-SHA1(TURN_SECRET, username))`. coturn must run with `use-auth-secret`
+and `static-auth-secret` set to the same value as `TURN_SECRET`; it then checks the expiry and the
+HMAC itself, and the router keeps no per-credential state. The secret, usernames and credentials
+are never logged or exposed on `/health`.
 
 ### GET /health
 
