@@ -94,6 +94,23 @@ Connect to a host using a connection code.
 }
 ```
 
+### WebSocket /signal
+
+Two WebRTC peers meet on a connection code and swap SDP and ICE candidates here. The router
+relays those messages unread and unaltered; media never touches it. The protocol (messages,
+error codes, reconnecting) is in [docs/SIGNALING.md](../docs/SIGNALING.md), and example
+messages are in `testdata/signaling/`.
+
+Codes are shared with the HTTP routes (a code is unique across both) but a code from `/register`
+cannot be joined here, nor a `/signal` code on `/connect`. `register`/`resume` count against the
+`/register` rate limit and `join` against the `/connect` one. Without a TURN secret configured
+(not yet implemented), `joined` and `peer-joined` omit `turn`.
+
+Limits, with defaults, set by environment variable: `SIGNAL_MAX_FRAME_BYTES` (65536),
+`SIGNAL_MSG_RATE_MAX` (100) per `SIGNAL_MSG_RATE_WINDOW` (10s), `SIGNAL_MAX_SOCKETS_PER_IP` (20),
+`SIGNAL_FIRST_MSG_TIMEOUT` (10s), `SIGNAL_PING_INTERVAL` (20s), `SIGNAL_PONG_TIMEOUT` (10s) and
+`SIGNAL_RESUME_WINDOW` (60s).
+
 ### GET /health
 
 Check server health and status.
