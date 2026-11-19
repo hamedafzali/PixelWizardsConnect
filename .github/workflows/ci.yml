@@ -201,3 +201,60 @@ jobs:
 
       - name: Test (race)
         run: go test -race ./...
+
+  # P3.5: proves a real coturn, running router-server/coturn/turnserver.conf, accepts credentials
+  # issued by the router's own Go code (issueTurnCredentials) and refuses what it should. The
+  # test is router-server/coturn_integration_test.go (build tag `coturn`, so it is not in the
+  # normal `go test`); it drives turnutils_uclient inside the coturn container and prints a
+  # PASS (a)/(b)/(c) line for each check.
+  coturn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: router-server
+    env:
+      # Test-only secret; this job's coturn is not reachable from outside the runner.
+      TURN_TEST_SECRET: ci-test-secret-not-used-anywhere-else
+      TURN_TEST_CONTAINER: coturn-ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.12"
+          cache: false
+
+      # Host networking and the runner's own address, not loopback: the template denies
+      # 127.0.0.0/8 as a peer range, and uclient's peer must be a legal relay target. The
+      # runner address is itself in a denied private range, so it alone is allowed through
+      # --allowed-peer-ip; 10.255.255.254 (check c) stays denied by the template.
+      - name: Start coturn from the template
+        run: |
+          HOST_IP=$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1); exit}')
+          echo "runner address: $HOST_IP"
+          echo "TURN_TEST_HOST=$HOST_IP" >> "$GITHUB_ENV"
+          docker run -d --name "$TURN_TEST_CONTAINER" --network host \
+            -v "$PWD/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro" \
+            coturn/coturn:4.6.2 -c /etc/coturn/turnserver.conf \
+            --static-auth-secret="$TURN_TEST_SECRET" --realm=turn.example.org \
+            --listening-ip="$HOST_IP" --relay-ip="$HOST_IP" --external-ip="$HOST_IP" \
+            --allowed-peer-ip="$HOST_IP"
+          for i in $(seq 1 20); do
+            docker logs "$TURN_TEST_CONTAINER" 2>&1 | grep -q "UDP listener opened on: $HOST_IP:3478" && break
+            sleep 1
+          done
+          docker logs "$TURN_TEST_CONTAINER" 2>&1 | grep -q "UDP listener opened on: $HOST_IP:3478" \
+            || { docker logs "$TURN_TEST_CONTAINER"; echo "coturn did not start"; exit 1; }
+          # UDP echo peer that uclient relays to.
+          docker exec -d "$TURN_TEST_CONTAINER" turnutils_peer -L "$HOST_IP" -p 3480
+
+      - name: Vet (coturn tag)
+        run: go vet -tags coturn ./...
+
+      - name: coturn accepts router credentials (a), refuses expired (b) and denied peers (c)
+        run: go test -tags coturn -run TestCoturn -count=1 -v ./...
+
+      - name: coturn log
+        if: always()
+        run: docker logs "$TURN_TEST_CONTAINER" 2>&1 | grep -v "turn server id" | tail -80
