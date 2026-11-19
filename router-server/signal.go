@@ -48,11 +48,12 @@ func initSignalConfig() {
 	signalPingInterval = getDurationEnv("SIGNAL_PING_INTERVAL", 20*time.Second)
 	signalPongTimeout = getDurationEnv("SIGNAL_PONG_TIMEOUT", 10*time.Second)
 	signalResumeWindow = getDurationEnv("SIGNAL_RESUME_WINDOW", 60*time.Second)
+	initTurnConfig()
 }
 
 // ── Messages ─────────────────────────────────────────────────────────────────
 
-// signalTurn is the TURN credential pair a peer receives at pairing (P3.4 fills it in).
+// signalTurn is the TURN credential pair a peer receives at pairing (see turn.go).
 type signalTurn struct {
 	URLs       []string `json:"urls"`
 	Username   string   `json:"username"`
@@ -71,8 +72,8 @@ type signalOut struct {
 }
 
 // issueTurn returns the credentials for one peer at pairing time, or nil when the router has
-// none to give. P3.4 replaces the body; peers cope with nil (STUN and host candidates only).
-func issueTurn() *signalTurn { return nil }
+// none to give; peers cope with nil (STUN and host candidates only). Every call is a fresh pair.
+func issueTurn() *signalTurn { return issueTurnCredentials(nowFunc()) }
 
 // Types a client can legitimately send, plus the ones only the router sends. All are "known":
 // at the wrong point in the sequence they are bad-message, not ignored.
@@ -503,7 +504,7 @@ func (p *signalPeer) join(code string) bool {
 	close(p.established)
 
 	// The viewer's joined goes out first, so nothing the host sends after peer-joined can
-	// reach the viewer ahead of it. TURN credentials are per socket (P3.4).
+	// reach the viewer ahead of it. TURN credentials are per socket.
 	if !p.send(signalOut{V: 1, Type: "joined", Turn: issueTurn()}) {
 		return false
 	}
