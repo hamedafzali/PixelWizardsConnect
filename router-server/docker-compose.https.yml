@@ -69,10 +69,10 @@ services:
       - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
       # For optional TLS (turns:), uncomment, and enable the TLS block in turnserver.conf:
       # - ./coturn/tls:/etc/coturn/tls:ro
-    # coturn does not expand environment variables in its config file, so the per-deployment
-    # values go on the command line, where they override the file. The shell wrapper refuses to
-    # start with an empty secret (an empty HMAC key would let anyone mint valid credentials) and
-    # keeps the secret out of the process list.
+    # coturn does not expand environment variables in its config file. The shell wrapper refuses
+    # to start with an empty secret (an empty HMAC key would let anyone mint valid credentials),
+    # appends the secret to a private copy of the config so it is never on a command line (with
+    # host networking, `ps` on the host would show it), and passes the other values as options.
     entrypoint:
       - /bin/sh
       - -c
@@ -81,8 +81,10 @@ services:
         : "$${TURN_REALM:?TURN_REALM is not set}"
         : "$${TURN_LISTEN_IP:?TURN_LISTEN_IP is not set}"
         : "$${TURN_EXTERNAL_IP:?TURN_EXTERNAL_IP is not set}"
-        exec turnserver -c /etc/coturn/turnserver.conf \
-          --static-auth-secret="$$TURN_SECRET" --realm="$$TURN_REALM" \
+        umask 077
+        { cat /etc/coturn/turnserver.conf; echo "static-auth-secret=$$TURN_SECRET"; } > /tmp/turnserver.conf
+        exec turnserver -c /tmp/turnserver.conf \
+          --realm="$$TURN_REALM" \
           --listening-ip="$$TURN_LISTEN_IP" --relay-ip="$$TURN_LISTEN_IP" \
           --external-ip="$$TURN_EXTERNAL_IP"
 
