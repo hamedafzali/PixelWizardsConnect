@@ -46,5 +46,9 @@
     <None Include="..\fixtures\ScreenChangeDetector\*.png"
           Link="Fixtures\ScreenChangeDetector\%(Filename)%(Extension)"
           CopyToOutputDirectory="PreserveNewest" />
+    <!-- Golden messages shared with the router's Go tests (SignalingGoldenTests). -->
+    <None Include="..\..\router-server\testdata\signaling\*.json"
+          Link="signaling\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
