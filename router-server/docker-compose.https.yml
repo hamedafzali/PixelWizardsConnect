@@ -7,6 +7,16 @@ version: "3.9"
 #   1. Point your DNS A/AAAA record for DOMAIN to this machine.
 #   2. Copy Caddyfile.example to Caddyfile and replace DOMAIN with your real domain.
 #   3. Caddy obtains and auto-renews a Let's Encrypt certificate.
+#
+# Optional TURN relay (coturn), needed for peers behind strict NATs. Off unless the `turn`
+# profile is enabled; see the "coturn" section of README.md. Put these in a `.env` file next to
+# this one (compose reads it automatically):
+#   TURN_SECRET=<openssl rand -hex 32>
+#   TURN_URLS=turn:turn.example.org:3478?transport=udp,turn:turn.example.org:3478?transport=tcp
+#   TURN_REALM=turn.example.org
+#   TURN_LISTEN_IP=<this server's own address: public IP on a VPS, LAN address behind NAT>
+#   TURN_EXTERNAL_IP=<public IP, or PUBLIC/PRIVATE behind NAT>
+# then:  docker compose -f docker-compose.https.yml --profile turn up -d
 
 services:
   router:
@@ -20,6 +30,10 @@ services:
       # subnet. Confirm your actual range with `docker network inspect` and
       # narrow this if it differs — it must cover Caddy's container IP.
       TRUSTED_PROXY_CIDRS: "172.16.0.0/12"
+      # Same variable as coturn's secret, so the two cannot drift apart. Both empty (the
+      # default) means the router issues no TURN credentials. Rotate by restarting both.
+      TURN_URLS: "${TURN_URLS:-}"
+      TURN_SECRET: "${TURN_SECRET:-}"
 
   caddy:
     image: caddy:2-alpine
@@ -34,6 +48,43 @@ services:
       - caddy_config:/config
     depends_on:
       - router
+
+  coturn:
+    # Pinned to the version the spike and the CI `coturn` job were tested with.
+    image: coturn/coturn:4.6.2
+    profiles: ["turn"]
+    restart: unless-stopped
+    # Host networking: a TURN server hands out relay ports from a range (49160-49200/udp here),
+    # and publishing a range through Docker's userland proxy is slow and breaks the source
+    # address coturn sees. With host networking coturn binds the real interface and the
+    # firewall / port forwards in the README apply directly. Consequence: the container has no
+    # compose-network name, which is fine because only clients talk to it, never the router.
+    network_mode: host
+    environment:
+      TURN_SECRET: "${TURN_SECRET:-}"
+      TURN_REALM: "${TURN_REALM:-}"
+      TURN_LISTEN_IP: "${TURN_LISTEN_IP:-}"
+      TURN_EXTERNAL_IP: "${TURN_EXTERNAL_IP:-}"
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+      # For optional TLS (turns:), uncomment, and enable the TLS block in turnserver.conf:
+      # - ./coturn/tls:/etc/coturn/tls:ro
+    # coturn does not expand environment variables in its config file, so the per-deployment
+    # values go on the command line, where they override the file. The shell wrapper refuses to
+    # start with an empty secret (an empty HMAC key would let anyone mint valid credentials) and
+    # keeps the secret out of the process list.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        : "$${TURN_SECRET:?TURN_SECRET is not set}"
+        : "$${TURN_REALM:?TURN_REALM is not set}"
+        : "$${TURN_LISTEN_IP:?TURN_LISTEN_IP is not set}"
+        : "$${TURN_EXTERNAL_IP:?TURN_EXTERNAL_IP is not set}"
+        exec turnserver -c /etc/coturn/turnserver.conf \
+          --static-auth-secret="$$TURN_SECRET" --realm="$$TURN_REALM" \
+          --listening-ip="$$TURN_LISTEN_IP" --relay-ip="$$TURN_LISTEN_IP" \
+          --external-ip="$$TURN_EXTERNAL_IP"
 
 volumes:
   caddy_data:
