@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- One TargetFramework, never TargetFrameworks (see the single-TFM-per-OS rule). -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SIPSorcery" Version="10.0.16" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PixelWizard.Core\PixelWizard.Core.csproj" />
+    <ProjectReference Include="..\PixelWizard.Signaling\PixelWizard.Signaling.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PixelWizard.Transport.WebRtc.Tests" />
+  </ItemGroup>
+
+</Project>
