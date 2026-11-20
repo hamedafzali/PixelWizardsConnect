@@ -1,7 +1,9 @@
 # Phase 4 Plan — WebRTC session transport and H.264
 
-**Status: proposed.** Decisions D1–D8 below need your answer before work starts. Nothing in
-this plan has been implemented.
+**Status: in progress.** On 2026-11-20 the owner said to go ahead without answering D1–D8
+individually, so work proceeds on the proposed option for each (recommended (a) for D5). Any of
+them can still be changed; a change after the sub-task that depends on it is a new commit, not a
+rewrite. P4.1 is done.
 
 ADR-001 scope: "SIPSorcery `ISessionTransport`; H.264 via `SIPSorceryMedia.FFmpeg`; keep
 TCP+JPEG for LAN." Exit gate: "Session established between two different cellular networks."
@@ -144,7 +146,8 @@ Each sub-task is one or more commits. Every commit builds and runs. CI on Window
 the verification.
 
 ### P4.0 — Plan accepted
-Record D1–D8 here with your answers.
+Done 2026-11-20: proceeding on the proposed options for D1–D8 (see Status). D4 is a rule and
+stands regardless.
 
 ### P4.1 — Split establishment out of `ISessionTransport` (D1)
 - Move `ConnectAsync` and `StartServerAsync` off the interface. `HostListener` and
