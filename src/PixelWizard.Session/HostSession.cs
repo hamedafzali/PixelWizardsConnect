@@ -33,7 +33,7 @@ namespace PixelWizard.Session;
 /// </summary>
 public sealed class HostSession : IDisposable
 {
-    private readonly ISessionTransport _transport;
+    private readonly ITcpSessionTransport _transport;
     private readonly HelloMessage _ourHello;
     private readonly string _expectedSessionSecret;
     private bool _helloComplete;
@@ -43,7 +43,7 @@ public sealed class HostSession : IDisposable
     // could watch the screen, or click the host's own consent dialog, while it is open.
     private volatile bool _approved;
 
-    public HostSession(ISessionTransport transport, HelloMessage ourHello, string expectedSessionSecret = "")
+    public HostSession(ITcpSessionTransport transport, HelloMessage ourHello, string expectedSessionSecret = "")
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _ourHello = ourHello ?? throw new ArgumentNullException(nameof(ourHello));

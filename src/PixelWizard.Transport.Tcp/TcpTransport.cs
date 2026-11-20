@@ -12,7 +12,7 @@ using PixelWizard.Protocol;
 
 namespace PixelWizard.Transport.Tcp
 {
-    public class TcpTransport : ISessionTransport
+    public class TcpTransport : ITcpSessionTransport
     {
         private TcpClient? _tcpClient;
         private Stream? _stream;

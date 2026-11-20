@@ -21,7 +21,7 @@ namespace PixelWizard.Session;
 /// </summary>
 public sealed class HostListener
 {
-    private readonly Func<ISessionTransport> _transportFactory;
+    private readonly Func<ITcpSessionTransport> _transportFactory;
     private readonly HelloMessage _ourHello;
     private readonly string _expectedSessionSecret;
     private readonly int _port;
@@ -31,7 +31,7 @@ public sealed class HostListener
     private int _relistening;
     private volatile bool _stopped;
 
-    public HostListener(Func<ISessionTransport> transportFactory, HelloMessage ourHello,
+    public HostListener(Func<ITcpSessionTransport> transportFactory, HelloMessage ourHello,
                         int port, Func<bool> useTls, string expectedSessionSecret = "")
     {
         _transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
@@ -49,7 +49,7 @@ public sealed class HostListener
     public event Action<HostSession>? SessionCreated;
 
     /// <summary>
-    /// First listen. Like <see cref="ISessionTransport.StartServerAsync"/>, completes only
+    /// First listen. Like <see cref="ITcpSessionTransport.StartServerAsync"/>, completes only
     /// once a viewer connects (or the listen fails). A port that can't be bound faults the
     /// returned task before this returns, with <see cref="Current"/> cleared; the same
     /// holds for <see cref="RelistenAsync"/>.

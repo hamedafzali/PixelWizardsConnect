@@ -27,7 +27,7 @@ namespace PixelWizard.Session;
 /// </summary>
 public sealed class ViewerSession : IDisposable
 {
-    private readonly ISessionTransport _transport;
+    private readonly ITcpSessionTransport _transport;
     private readonly HelloMessage _ourHello;
     private readonly string _sessionSecret;
 
@@ -38,7 +38,7 @@ public sealed class ViewerSession : IDisposable
     // HandshakeOk arrived and nothing has since (see ApprovalPendingAtDisconnect).
     private bool _awaitingApproval;
 
-    public ViewerSession(Func<ISessionTransport> transportFactory, HelloMessage ourHello, string sessionSecret = "")
+    public ViewerSession(Func<ITcpSessionTransport> transportFactory, HelloMessage ourHello, string sessionSecret = "")
     {
         if (transportFactory == null) throw new ArgumentNullException(nameof(transportFactory));
         _transport = transportFactory() ?? throw new InvalidOperationException("transportFactory returned null");
