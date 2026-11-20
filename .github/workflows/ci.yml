@@ -36,9 +36,11 @@ jobs:
             nuget-${{ runner.os }}-
 
       # Only the ICE probe step below needs Go (it builds the router and pairs two probes through it).
+      # Newer than the go job's 1.22.12 (which proves the go.mod minimum): Go 1.22 Mach-O binaries
+      # have no LC_UUID load command, and the macOS 26 runner's dyld refuses to start them.
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22.12"
+          go-version: "1.25.3"
           cache: false
 
       - name: Restore
@@ -150,7 +152,9 @@ jobs:
         shell: bash
         timeout-minutes: 5
         run: |
-          set -u
+          # GitHub runs bash steps with -eo pipefail; the CODE poll below (grep finds nothing yet) would
+          # end the step silently. Every exit status that matters is checked explicitly instead.
+          set +e -u
           PROBE=tools/PixelWizard.IceProbe/bin/Release/net9.0/PixelWizard.IceProbe.dll
           PORT=9187
           OUT="$RUNNER_TEMP/icecheck"
