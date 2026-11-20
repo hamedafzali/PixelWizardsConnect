@@ -261,7 +261,31 @@ jobs:
         run: go vet ./...
 
       - name: Test (race)
-        run: go test -race ./...
+        shell: bash
+        run: |
+          # GitHub runs bash steps with -e; turn it off so a failing go test still reaches the
+          # summary and the FAIL lines below. Every exit status is checked explicitly.
+          set +e -uo pipefail
+          # Same packages and flags as a plain `go test -race ./...`; -json only adds a
+          # machine-readable stream so the counts can be reported.
+          go test -race -json ./... > "$RUNNER_TEMP/gotest.json"
+          rc=$?
+          # Top-level tests only (names without a '/'); subtests are counted separately.
+          count() { jq -r --arg a "$1" 'select(.Action==$a and .Test!=null and (.Test|contains("/")|not)) | .Test' "$RUNNER_TEMP/gotest.json" | wc -l | tr -d ' '; }
+          passed=$(count pass); failed=$(count fail); skipped=$(count skip)
+          executed=$((passed + failed + skipped))
+          subtests=$(jq -r 'select((.Action=="pass" or .Action=="fail" or .Action=="skip") and .Test!=null and (.Test|contains("/"))) | .Test' "$RUNNER_TEMP/gotest.json" | wc -l | tr -d ' ')
+          line="Go tests: executed=$executed passed=$passed failed=$failed skipped=$skipped (subtests=$subtests, counted separately)"
+          echo "$line"
+          echo "::notice title=Go router tests::$line"
+          if [ "$rc" -ne 0 ]; then
+            # Show the failing output in the log, then fail.
+            jq -r 'select(.Action=="output") | .Output' "$RUNNER_TEMP/gotest.json" | grep -E '^(--- FAIL|FAIL|panic|WARNING: DATA RACE)' || true
+            echo "::error::go test exited with status $rc"
+            exit "$rc"
+          fi
+          if [ "$failed" -ne 0 ]; then echo "::error::$failed Go test(s) failed"; exit 1; fi
+          if [ "$executed" -eq 0 ]; then echo "::error::No Go tests executed"; exit 1; fi
 
   # P3.5: proves a real coturn, running router-server/coturn/turnserver.conf, accepts credentials
   # issued by the router's own Go code (issueTurnCredentials) and refuses what it should. The
