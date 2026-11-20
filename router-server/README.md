@@ -175,7 +175,10 @@ docker compose -f docker-compose.https.yml --profile turn up -d
 ```
 
 The router gets `TURN_URLS` and `TURN_SECRET` from the same variables. coturn refuses to start
-if any of the four coturn variables is empty. It runs with host networking, because the relay
+if any of the four coturn variables is empty. The secret is written into a private copy of
+the config (`/tmp/turnserver.conf` inside the container, created with `umask 077`) rather than
+passed as a command-line argument, so it does not show up in `ps` on the host; the other three
+values are passed as options. It runs with host networking, because the relay
 needs a UDP port range and Docker's per-port proxying of a range is slow and hides client
 addresses.
 
