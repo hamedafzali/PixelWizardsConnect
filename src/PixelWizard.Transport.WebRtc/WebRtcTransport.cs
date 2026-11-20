@@ -56,6 +56,9 @@ namespace PixelWizard.Transport.WebRtc
         private int _down;
         private string? _selectedPair;
 
+        /// <summary>True when the SCTP sender tuning (see <see cref="SctpTuning"/>) was applied after the channel opened.</summary>
+        internal bool SctpTuned { get; private set; }
+
         public event Action<NetworkMessage>? MessageReceived;
         public event Action? Connected;
         public event Action? Disconnected;
@@ -233,6 +236,7 @@ namespace PixelWizard.Transport.WebRtc
                 _open = true;
             }
             _selectedPair ??= ReadPair();
+            if (_pc != null) SctpTuned = SctpTuning.TryApply(_pc);
             try { Connected?.Invoke(); } catch (Exception ex) { HandlerError?.Invoke(ex); }
             _established?.TrySetResult();
         }

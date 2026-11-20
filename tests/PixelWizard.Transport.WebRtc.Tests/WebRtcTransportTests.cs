@@ -120,6 +120,16 @@ public class WebRtcTransportTests
     }
 
     [RouterFact]
+    public async Task SCTP_sender_tuning_is_applied_on_both_ends()
+    {
+        var (host, viewer) = await PairAsync();
+        using var _h = host; using var _v = viewer;
+        // False means a SIPSorcery upgrade renamed the private sender fields: fix SctpTuning, do not relax this.
+        Assert.True(host.T.SctpTuned);
+        Assert.True(viewer.T.SctpTuned);
+    }
+
+    [RouterFact]
     public async Task Local_disconnect_raises_Disconnected_once_on_both_sides()
     {
         var (host, viewer) = await PairAsync();
