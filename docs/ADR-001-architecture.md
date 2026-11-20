@@ -231,7 +231,7 @@ in the spike report with corresponding caution.
 | **0** | CI on Windows/macOS; golden-file protocol tests; detector fixture tests; cert pinning; trusted-proxy CIDR for `X-Forwarded-For`; document the direct-connect consent model. Then the two spikes. | Green CI on both OSes; both spikes pass | 2–3 wk |
 | **1** | Protocol v2: skip-unknown envelope, `StreamId`/`StreamKind`, `Hello`/capabilities incl. peer role, control plane split from media plane | Unknown message type does not kill a session | 2 wk |
 | **2** | Modularize: `Protocol`/`Core`/`Session`/`Media`/`Transport.*`/`Platform.*`; delete `MainViewModel`; DI; split the 884-line XAML | `MainViewModel` under 300 lines; zero `Dispatcher` references in `Session` | 4–6 wk |
-| **3** | Go router to persistent WebSocket signaling; SDP/ICE exchange; TURN credential issuance; coturn deployment | Two peers exchange ICE candidates across carriers | 2–3 wk |
+| **3** | Go router to persistent WebSocket signaling; SDP/ICE exchange; TURN credential issuance; coturn deployment | Two peers exchange ICE candidates across carriers. **Implemented; exit gate (P3.8) pending**: see [PHASE3-GATE.md](PHASE3-GATE.md) | 2–3 wk |
 | **4** | SIPSorcery `ISessionTransport`; H.264 via `SIPSorceryMedia.FFmpeg`; keep TCP+JPEG for LAN | Session established between two different cellular networks | 4–6 wk |
 | **5** | WebRTC browser expert viewer; annotation layer (vector primitives, `IAnchorResolver`, optional `Pose`, freeze-frame). Ship on desktop screen share first | Expert draws on a live desktop session from a browser | 4 wk |
 | **6** | Flutter mobile: viewer role first, then camera host; store builds | Phone joins a desktop session, then shares its camera | 6–8 wk |
@@ -240,6 +240,50 @@ in the spike report with corresponding caution.
 Phase 5 shipping annotations on **desktop screen share first** is deliberate: "draw on my screen"
 is independently valuable, exercises the entire new protocol before mobile exists, and remains
 the permanent fallback whenever camera or tracking conditions are poor.
+
+---
+
+## Phase 4 entry points
+
+Phase 3 leaves two things for Phase 4 to build on: the signaling client, and the peer setup
+proven in `tools/PixelWizard.IceProbe`. The probe is throwaway; the client is not.
+
+**`PixelWizard.Signaling.SignalingClient`** is one socket and one session, with no SIPSorcery
+knowledge. It moves strings and candidate records.
+
+- Host: `RegisterAsync` returns the code and a resume token, then `WaitForPeerAsync` (it must be
+  the first read) returns `PeerJoinedMessage` with optional `Turn`. `ResumeAsync(token)` on a new
+  client re-takes the code of an unpaired host whose socket dropped, inside the router's resume
+  window. There is no automatic retry.
+- Viewer: `JoinAsync(code)` returns `JoinedMessage` with optional `Turn`.
+- `ReadMessagesAsync` yields offer, answer, candidate, end-of-candidates and bye in arrival order,
+  ends after `PeerLeftMessage`, and throws on a router `error` or a broken socket.
+- `SendOfferAsync`, `SendAnswerAsync`, `SendCandidateAsync`, `SendEndOfCandidatesAsync` and
+  `SendByeAsync`.
+
+**From the probe's peer setup to `ISessionTransport`.** The probe does, in order: take `Turn`
+from `peer-joined`/`joined`; build an `RTCPeerConnection` whose `iceServers` hold the
+router-issued URLs, username and credential (and `iceTransportPolicy = relay` when asked); send
+each candidate from `onicecandidate` as it arrives, queued behind the offer or answer so it
+cannot overtake it; send `end-of-candidates` only when gathering reaches `complete`; hold remote
+candidates until the remote description is set, then apply them; and read the nominated pair
+from the peer connection's RTP channel (`GetRtpChannel()?.NominatedEntry`) once ICE is
+`connected`.
+
+- Moves into the transport (a proposal for Phase 4 to confirm): building the peer connection
+  and its ICE server list from `TurnInfo`; the ordered send queue (SDP, then candidates, then
+  end-of-candidates); the remote-candidate buffer; the gathering-complete to end-of-candidates
+  rule; reading the nominated pair type for diagnostics; and the Phase 4 media and data channels
+  that replace the probe's ping channel. These are the spike findings (trickle, no fixed delays,
+  no SDP splicing) and they must survive the move unchanged.
+- Stays outside the transport: registration, the code, joining and resume, which belong to
+  connection establishment alongside `RouterHttpClient`, with the transport handed an
+  established `SignalingClient` or equivalent; the router's retirement of `/register` and
+  `/connect` for router-mediated sessions (PHASE3-PLAN D4).
+- Stays in the probe only: the command line, console output, the ping/echo and `done`/`done-ack`
+  exchange, the timeouts and the `bye` sequencing.
+- Open item: the probe announced its relay candidate twice after gathering completed; see the
+  Phase 4 row in [BACKLOG.md](BACKLOG.md).
 
 ---
 
