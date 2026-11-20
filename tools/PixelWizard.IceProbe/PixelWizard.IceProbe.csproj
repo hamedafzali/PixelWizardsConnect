@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Throwaway-grade ICE/TURN probe (PHASE3-PLAN P3.7). Not referenced by any app and not part of any
+       published output; it only builds with the solution so CI keeps it compiling. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SIPSorcery" Version="10.0.16" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PixelWizard.Signaling\PixelWizard.Signaling.csproj" />
+  </ItemGroup>
+
+</Project>
