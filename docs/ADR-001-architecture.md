@@ -282,8 +282,8 @@ from the peer connection's RTP channel (`GetRtpChannel()?.NominatedEntry`) once 
   `/connect` for router-mediated sessions (PHASE3-PLAN D4).
 - Stays in the probe only: the command line, console output, the ping/echo and `done`/`done-ack`
   exchange, the timeouts and the `bye` sequencing.
-- Open item: the probe announced its relay candidate twice after gathering completed; see the
-  Phase 4 row in [BACKLOG.md](BACKLOG.md).
+- The probe once appeared to announce its relay candidate twice; P4.3 could not reproduce it
+  (see [BACKLOG.md](BACKLOG.md)).
 
 ---
 
