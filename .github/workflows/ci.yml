@@ -35,6 +35,12 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      # Only the ICE probe step below needs Go (it builds the router and pairs two probes through it).
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22.12"
+          cache: false
+
       - name: Restore
         run: dotnet restore PixelWizardsConnect.sln
 
@@ -135,6 +141,57 @@ jobs:
             exit 1
           }
           Write-Host "::notice::SystemDrawingScreenChangeDetectorTests: $expected/$expected gracefully skipped on macos-latest (SkipIfNotWindows in-process skip, not a test-host launch failure)."
+
+      # P3.7: the ICE probe pairs two SIPSorcery peers through a real router on this runner (no TURN, so
+      # candidates are host candidates; relay is covered by the coturn job). The host probe prints its room
+      # code, the joiner uses it; both must exit 0 and print "RESULT ok". Runs on both OSes so neither OS's
+      # SIPSorcery behaviour stands alone (PHASE3-PLAN finding #4). bash on both runners.
+      - name: ICE probe pairs through the router
+        shell: bash
+        timeout-minutes: 5
+        run: |
+          set -u
+          PROBE=tools/PixelWizard.IceProbe/bin/Release/net9.0/PixelWizard.IceProbe.dll
+          PORT=9187
+          OUT="$RUNNER_TEMP/icecheck"
+          mkdir -p "$OUT"
+
+          (cd router-server && go build -o "$OUT/router.exe" .)
+          PORT=$PORT "$OUT/router.exe" > "$OUT/router.log" 2>&1 &
+          ROUTER_PID=$!
+          HOST_PID=""
+          trap 'kill $ROUTER_PID $HOST_PID 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 30); do
+            curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null || { cat "$OUT/router.log"; echo "router did not start"; exit 1; }
+
+          dotnet "$PROBE" --router "http://127.0.0.1:$PORT" --host --timeout 60 > "$OUT/host.log" 2>&1 &
+          HOST_PID=$!
+
+          CODE=""
+          for i in $(seq 1 30); do
+            CODE=$(grep -m1 '^CODE ' "$OUT/host.log" | tr -d '\r' | cut -d' ' -f2)
+            [ -n "$CODE" ] && break
+            sleep 1
+          done
+          [ -n "$CODE" ] || { cat "$OUT/host.log"; echo "host probe printed no CODE"; exit 1; }
+
+          JOIN_RC=0
+          dotnet "$PROBE" --router "http://127.0.0.1:$PORT" --join "$CODE" --timeout 60 > "$OUT/join.log" 2>&1 || JOIN_RC=$?
+          HOST_RC=0
+          wait $HOST_PID || HOST_RC=$?
+          HOST_PID=""
+
+          echo "=== host probe (exit $HOST_RC) ==="; cat "$OUT/host.log"
+          echo "=== join probe (exit $JOIN_RC) ==="; cat "$OUT/join.log"
+
+          [ "$HOST_RC" -eq 0 ] && [ "$JOIN_RC" -eq 0 ] \
+            && grep -q '^RESULT ok' "$OUT/host.log" && grep -q '^RESULT ok' "$OUT/join.log" \
+            || { echo "::error::ICE probe pairing failed on ${{ runner.os }}"; exit 1; }
+          echo "::notice::ICE probe paired on ${{ runner.os }}: $(grep -m1 '^SELECTED-PAIR' "$OUT/host.log" | tr -d '\r'), $(grep -m1 '^RESULT ok' "$OUT/host.log" | tr -d '\r')"
 
   # T7's only automated coverage for WebSocketHostServer (extracted from
   # PixelWizard.Transport.Tcp into PixelWizard.Transport.WebSocket): headless
