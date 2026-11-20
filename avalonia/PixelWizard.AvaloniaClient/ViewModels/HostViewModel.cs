@@ -29,6 +29,11 @@ public interface IHostShell
 
 public sealed class HostViewModel : ReactiveObject, IDisposable
 {
+    // Captured once: session events arrive on background threads, possibly after Dispose. Posting to
+    // this instance, not the static Dispatcher.UIThread, means a late event never creates or reaches
+    // a different dispatcher (in headless tests one is reset per test; in the app there is only one).
+    private readonly Dispatcher _ui = Dispatcher.UIThread;
+
     private readonly IHostShell     _shell;
     private readonly ChatViewModel  _chat;
     private readonly AppSettings    _settings;
@@ -262,7 +267,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         var wsServer = new WebSocketHostServer(_webViewerPort);
         _wsServer = wsServer;
         // Posted, so a line can arrive after Stop; it must not overwrite why the host stopped.
-        wsServer.Log += msg => Dispatcher.UIThread.Post(() => { if (_wsServer == wsServer) _shell.Status = msg; });
+        wsServer.Log += msg => _ui.Post(() => { if (_wsServer == wsServer) _shell.Status = msg; });
         wsServer.Start();
         WebViewerUrl  = $"http://localhost:{_webViewerPort}/";
         ShowWebViewer = true;
@@ -300,7 +305,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
 
     private void WireHostSession(HostSession session)
     {
-        session.Connected += () => Dispatcher.UIThread.Post(() =>
+        session.Connected += () => _ui.Post(() =>
         {
             HostStatus    = "Viewer connecting — authenticating…";
             _shell.Status = "Authenticating viewer…";
@@ -314,7 +319,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         // Someone was actually watching: the host says so when they leave. A viewer that was
         // denied, or left before an answer, was never shown anything.
         bool viewerWasApproved = false;
-        session.Disconnected += () => Dispatcher.UIThread.Post(async () =>
+        session.Disconnected += () => _ui.Post(async () =>
         {
             if (_hostListener != owner || disconnectHandled) return;
             disconnectHandled = true;
@@ -342,7 +347,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         session.Error += ex => {
             // Only surface error if transport was actually connected — ignore EOF/reset on disconnect
             if (session.IsConnected)
-                Dispatcher.UIThread.Post(() => _shell.Status = FriendlyError.Describe(ex));
+                _ui.Post(() => _shell.Status = FriendlyError.Describe(ex));
         };
         // A handler bug, not a transport failure -- the connection survives, so this is
         // surfaced for diagnostics only and never touches Status/IsConnected.
@@ -352,23 +357,23 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         // what still needs Dispatcher.UIThread or touches instance state HostSession doesn't
         // own (see HostSession's class comment, especially why the consent callback stays
         // here rather than being injected into HostSession).
-        session.IncompatiblePeer += () => Dispatcher.UIThread.Post(() =>
+        session.IncompatiblePeer += () => _ui.Post(() =>
         {
             HostStatus    = "Viewer is running an older, incompatible version — please update it";
             _shell.Status = "Incompatible viewer version";
         });
-        session.BadHello += () => Dispatcher.UIThread.Post(() => { HostStatus = "Bad hello — disconnecting"; _shell.Status = "Bad hello"; });
-        session.MalformedHello += () => Dispatcher.UIThread.Post(() => { HostStatus = "Malformed hello — disconnecting"; _shell.Status = "Malformed hello"; });
-        session.HelloRejectedLocally += reasonText => Dispatcher.UIThread.Post(() =>
+        session.BadHello += () => _ui.Post(() => { HostStatus = "Bad hello — disconnecting"; _shell.Status = "Bad hello"; });
+        session.MalformedHello += () => _ui.Post(() => { HostStatus = "Malformed hello — disconnecting"; _shell.Status = "Malformed hello"; });
+        session.HelloRejectedLocally += reasonText => _ui.Post(() =>
         {
             HostStatus    = $"Rejected viewer: {reasonText}";
             _shell.Status = "Rejected: " + reasonText;
         });
-        session.BadHandshake += () => Dispatcher.UIThread.Post(() => { HostStatus = "Bad handshake — disconnecting"; _shell.Status = "Bad handshake"; });
-        session.HandshakeTokenInvalid += () => Dispatcher.UIThread.Post(() => { HostStatus = "Rejected: invalid token"; _shell.Status = "Rejected: invalid session token"; });
+        session.BadHandshake += () => _ui.Post(() => { HostStatus = "Bad handshake — disconnecting"; _shell.Status = "Bad handshake"; });
+        session.HandshakeTokenInvalid += () => _ui.Post(() => { HostStatus = "Rejected: invalid token"; _shell.Status = "Rejected: invalid session token"; });
         session.HandshakeVerified += () =>
         {
-            _ = Dispatcher.UIThread.InvokeAsync(async () =>
+            _ = _ui.InvokeAsync(async () =>
             {
                 bool allowed = await session.ResolveConsentAsync(ConsentCallback, "incoming viewer");
 
@@ -401,16 +406,16 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
             });
         };
         session.PostHandshakeMessageReceived += ResetSessionWatchdog;
-        session.MouseMoveReceived       += mv => Dispatcher.UIThread.Post(() => _input?.MoveMouse(mv.X, mv.Y));
-        session.MouseClickReceived      += cl => Dispatcher.UIThread.Post(() => _input?.Click(cl.X, cl.Y, cl.LeftButton));
-        session.MouseButtonDownReceived += bd => Dispatcher.UIThread.Post(() => _input?.ButtonDown(bd.X, bd.Y, bd.LeftButton));
-        session.MouseButtonUpReceived   += bu => Dispatcher.UIThread.Post(() => _input?.ButtonUp(bu.X, bu.Y, bu.LeftButton));
-        session.MouseWheelReceived      += mw => Dispatcher.UIThread.Post(() => _input?.Scroll(mw.X, mw.Y, mw.DeltaX, mw.DeltaY));
-        session.KeyPressReceived        += kp => Dispatcher.UIThread.Post(() => _input?.SendKey(kp.VirtualKey, true));
-        session.KeyReleaseReceived      += kr => Dispatcher.UIThread.Post(() => _input?.SendKey(kr.VirtualKey, false));
-        session.QualityChanged          += q  => Dispatcher.UIThread.Post(() => HostQualityIndex = q);
-        session.ClipboardReceived       += text => Dispatcher.UIThread.Post(() => _shell.TryWriteClipboard(text));
-        session.ChatReceived += text => Dispatcher.UIThread.Post(() => _chat.Receive(isFromHost: false, text));
+        session.MouseMoveReceived       += mv => _ui.Post(() => _input?.MoveMouse(mv.X, mv.Y));
+        session.MouseClickReceived      += cl => _ui.Post(() => _input?.Click(cl.X, cl.Y, cl.LeftButton));
+        session.MouseButtonDownReceived += bd => _ui.Post(() => _input?.ButtonDown(bd.X, bd.Y, bd.LeftButton));
+        session.MouseButtonUpReceived   += bu => _ui.Post(() => _input?.ButtonUp(bu.X, bu.Y, bu.LeftButton));
+        session.MouseWheelReceived      += mw => _ui.Post(() => _input?.Scroll(mw.X, mw.Y, mw.DeltaX, mw.DeltaY));
+        session.KeyPressReceived        += kp => _ui.Post(() => _input?.SendKey(kp.VirtualKey, true));
+        session.KeyReleaseReceived      += kr => _ui.Post(() => _input?.SendKey(kr.VirtualKey, false));
+        session.QualityChanged          += q  => _ui.Post(() => HostQualityIndex = q);
+        session.ClipboardReceived       += text => _ui.Post(() => _shell.TryWriteClipboard(text));
+        session.ChatReceived += text => _ui.Post(() => _chat.Receive(isFromHost: false, text));
     }
 
     public void Stop()
@@ -482,7 +487,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
     {
         _sessionWatchdog?.Dispose();
         _sessionWatchdog = new System.Timers.Timer(30_000) { AutoReset = false };
-        _sessionWatchdog.Elapsed += (_, _) => Dispatcher.UIThread.Post(() =>
+        _sessionWatchdog.Elapsed += (_, _) => _ui.Post(() =>
         {
             HostStatus    = "Session timed out — viewer inactive";
             _shell.Status = "Session timed out";

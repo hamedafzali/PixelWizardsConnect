@@ -36,6 +36,9 @@ public interface IViewerShell
 /// </summary>
 public sealed class ViewerViewModel : ReactiveObject, IDisposable
 {
+    // Captured once; see HostViewModel._ui.
+    private readonly Dispatcher _ui = Dispatcher.UIThread;
+
     private readonly IViewerShell   _shell;
     private readonly ChatViewModel  _chat;
     private readonly AppSettings    _settings;
@@ -386,7 +389,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
             bool approvalPending = session.ApprovalPendingAtDisconnect;
             var failure = connectFailure;
             connectFailure = null;
-            Dispatcher.UIThread.Post(() =>
+            _ui.Post(() =>
             {
                 // The user left this session (Back, Disconnect) or started another one;
                 // Disconnect() has already reset the view, and the screen is theirs to pick.
@@ -411,7 +414,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         session.BytesReceived   += b => _receivedBytes += b;
         session.Error += ex => {
             if (session.IsConnected)
-                Dispatcher.UIThread.Post(() => _shell.Status = FriendlyError.Describe(ex));
+                _ui.Post(() => _shell.Status = FriendlyError.Describe(ex));
             else if (!everConnected)
                 connectFailure = ex;
         };
@@ -431,7 +434,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         session.HostHelloAcknowledged += hostHello =>
         {
             _hostPeerRole = hostHello.Role;
-            Dispatcher.UIThread.Post(() =>
+            _ui.Post(() =>
             {
                 IsConnected  = true;
                 IsConnecting = false;
@@ -443,19 +446,19 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
                 StartFrameTimeoutTimer();
             });
         };
-        session.HostHelloRejected += rejected => Dispatcher.UIThread.Post(() =>
+        session.HostHelloRejected += rejected => _ui.Post(() =>
         {
             _shell.Status = $"Host rejected connection: {rejected.Message}";
             Disconnect();
         });
-        session.HandshakeRejected += () => Dispatcher.UIThread.Post(() =>
+        session.HandshakeRejected += () => _ui.Post(() =>
         {
             _shell.Status = "Host rejected: invalid session token";
             Disconnect();
         });
         session.LatencyMeasured += ms => _lastLatencyMs = ms;
-        session.ClipboardReceived += text => Dispatcher.UIThread.Post(() => _shell.WriteClipboard(text));
-        session.ChatReceived += text => Dispatcher.UIThread.Post(() => _chat.Receive(isFromHost: true, text));
+        session.ClipboardReceived += text => _ui.Post(() => _shell.WriteClipboard(text));
+        session.ChatReceived += text => _ui.Post(() => _chat.Receive(isFromHost: true, text));
         return session;
     }
 
@@ -485,7 +488,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         _frameTimeoutTimer?.Dispose();
         _frameTimeoutTimer = new System.Timers.Timer(30_000) { AutoReset = false };
         _frameTimeoutTimer.Elapsed += (_, _) =>
-            Dispatcher.UIThread.Post(() => ShowNoFramesBanner = true);
+            _ui.Post(() => ShowNoFramesBanner = true);
         _frameTimeoutTimer.Start();
     }
 
@@ -509,7 +512,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
 
     private void ApplyFullScreen(byte[] data)
     {
-        Dispatcher.UIThread.Post(() =>
+        _ui.Post(() =>
         {
             var toDispose = _canvas;
             _canvas       = null;
@@ -536,7 +539,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         byte[] imageData = delta.ImageData;
         int dx = delta.X, dy = delta.Y, dw = delta.Width, dh = delta.Height;
 
-        Dispatcher.UIThread.Post(() =>
+        _ui.Post(() =>
         {
             EnsureCanvas(Math.Max(_canvasWidth, dx + dw), Math.Max(_canvasHeight, dy + dh));
             using var ms    = new MemoryStream(imageData);
@@ -622,7 +625,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
             int fps = _renderedFrames, bytes = _receivedBytes;
             _renderedFrames = 0; _receivedBytes = 0;
             string lat = _lastLatencyMs >= 0 ? $"{_lastLatencyMs} ms" : "—";
-            Dispatcher.UIThread.Post(() =>
+            _ui.Post(() =>
             {
                 FpsText       = $"FPS: {fps}";
                 LatencyText   = $"Latency: {lat}";
@@ -655,12 +658,12 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
             _ = Task.Run(async () =>
             {
                 await NetworkDiscovery.ListenAsync(host =>
-                    Dispatcher.UIThread.Post(() => DiscoveredHosts.Add(host)),
+                    _ui.Post(() => DiscoveredHosts.Add(host)),
                     _discoveryCts.Token);
-                Dispatcher.UIThread.Post(() => IsScanning = false);
+                _ui.Post(() => IsScanning = false);
             });
             // Auto-stop after 10 s
-            _ = Task.Delay(10_000).ContinueWith(_ => Dispatcher.UIThread.Post(StopScan));
+            _ = Task.Delay(10_000).ContinueWith(_ => _ui.Post(StopScan));
         }
     }
 
