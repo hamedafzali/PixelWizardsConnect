@@ -332,12 +332,16 @@ public class SignalingClientTests
     [Fact]
     public async Task Resume_AfterDroppedSocket_YieldsTheSameCode()
     {
+        // The drop waits until the host has its registration: aborting right after the send
+        // can reset the connection before the client reads the frame (seen on Windows).
+        var registered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         await using var router = new FakeRouter(async (s, n) =>
         {
             var first = await s.ReceiveAsync();
             if (n == 1)
             {
                 await s.SendAsync("{\"v\":1,\"type\":\"registered\",\"code\":\"K7Q2MX\",\"resumeToken\":\"tok\"}");
+                await registered.Task;
                 s.Abort(); // the host's network went away
                 return;
             }
@@ -348,6 +352,7 @@ public class SignalingClientTests
         });
         await using var first = new SignalingClient("127.0.0.1", router.Port);
         var reg = await Bounded(first.RegisterAsync());
+        registered.SetResult();
         await using var second = new SignalingClient("127.0.0.1", router.Port);
         var resumed = await Bounded(second.ResumeAsync(reg.ResumeToken));
         Assert.Equal(reg.Code, resumed.Code);
