@@ -144,7 +144,7 @@ Check server health and status.
 
 ## Configuration
 
-- **Port**: 9000 (hardcoded, can be changed in main.go)
+- **Port**: 9000 by default; set the `PORT` environment variable to change it (the router listens on that port on all interfaces). `docker-compose.yml` publishes `9000:9000` and the Dockerfile exposes 9000, so change those too if you change `PORT` in a container.
 - **Code Length**: 6 characters
 - **Host Cleanup**: 30 minutes
 - **Cleanup Interval**: 5 minutes
