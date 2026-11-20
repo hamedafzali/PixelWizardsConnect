@@ -35,7 +35,7 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
-      # Only the ICE probe step below needs Go (it builds the router and pairs two probes through it).
+      # Only the WebRTC transport test step below needs Go (it builds the router the tests pair through).
       # Newer than the go job's 1.22.12 (which proves the go.mod minimum): Go 1.22 Mach-O binaries
       # have no LC_UUID load command, and the macOS 26 runner's dyld refuses to start them.
       - uses: actions/setup-go@v5
@@ -144,58 +144,53 @@ jobs:
           }
           Write-Host "::notice::SystemDrawingScreenChangeDetectorTests: $expected/$expected gracefully skipped on macos-latest (SkipIfNotWindows in-process skip, not a test-host launch failure)."
 
-      # P3.7: the ICE probe pairs two SIPSorcery peers through a real router on this runner (no TURN, so
-      # candidates are host candidates; relay is covered by the coturn job). The host probe prints its room
-      # code, the joiner uses it; both must exit 0 and print "RESULT ok". Runs on both OSes so neither OS's
-      # SIPSorcery behaviour stands alone (PHASE3-PLAN finding #4). bash on both runners.
-      - name: ICE probe pairs through the router
+      # P4.2: two WebRtcTransports are paired in one process through a real router built on this runner
+      # (no TURN, so candidates are host candidates; relay is covered by the coturn job). The fixture starts
+      # the router from PIXELWIZARD_ROUTER_EXE. Runs on both OSes so neither OS's SIPSorcery behaviour
+      # stands alone (PHASE4-PLAN risks). This replaces the P3.7 ICE-probe step; the probe project stays
+      # as a diagnostic tool. The assertion step below fails on any skip, because the suite skips itself
+      # whenever the variable is missing.
+      - name: WebRTC transport tests (real router)
         shell: bash
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
-          # GitHub runs bash steps with -eo pipefail; the CODE poll below (grep finds nothing yet) would
-          # end the step silently. Every exit status that matters is checked explicitly instead.
+          # GitHub runs bash steps with -eo pipefail; the test status is checked explicitly instead.
           set +e -u
-          PROBE=tools/PixelWizard.IceProbe/bin/Release/net9.0/PixelWizard.IceProbe.dll
-          PORT=9187
-          OUT="$RUNNER_TEMP/icecheck"
-          mkdir -p "$OUT"
+          (cd router-server && go build -o "$RUNNER_TEMP/router.exe" .) || { echo "::error::router build failed"; exit 1; }
+          PIXELWIZARD_ROUTER_EXE="$RUNNER_TEMP/router.exe" dotnet test tests/PixelWizard.Transport.WebRtc.Tests/PixelWizard.Transport.WebRtc.Tests.csproj \
+            --no-build -c Release \
+            --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=webrtc.trx" \
+            --results-directory TestResults
+          RC=$?
+          [ "$RC" -eq 0 ] || { echo "::error::WebRTC transport tests failed on ${{ runner.os }} (exit $RC)"; exit 1; }
 
-          (cd router-server && go build -o "$OUT/router.exe" .)
-          PORT=$PORT "$OUT/router.exe" > "$OUT/router.log" 2>&1 &
-          ROUTER_PID=$!
-          HOST_PID=""
-          trap 'kill $ROUTER_PID $HOST_PID 2>/dev/null || true' EXIT
+      - name: Assert WebRTC transport tests all executed and passed
+        shell: pwsh
+        run: |
+          # 9 = number of [RouterFact] cases in WebRtcTransportTests.cs. Update deliberately when cases are
+          # added or removed: it exists to catch the suite reporting skipped (router variable lost) or
+          # fewer tests than written as green.
+          $expected = 9
 
-          for i in $(seq 1 30); do
-            curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break
-            sleep 1
-          done
-          curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null || { cat "$OUT/router.log"; echo "router did not start"; exit 1; }
+          [xml]$trx = Get-Content TestResults/webrtc.trx
+          $results = @($trx.TestRun.Results.UnitTestResult)
+          $executed = $results.Count
+          $passed = @($results | Where-Object { $_.outcome -eq 'Passed' })
+          $skipped = @($results | Where-Object { $_.outcome -eq 'NotExecuted' })
 
-          dotnet "$PROBE" --router "http://127.0.0.1:$PORT" --host --timeout 60 > "$OUT/host.log" 2>&1 &
-          HOST_PID=$!
+          Write-Host "WebRTC transport tests: executed=$executed passed=$($passed.Count) skipped=$($skipped.Count)"
 
-          CODE=""
-          for i in $(seq 1 30); do
-            CODE=$(grep -m1 '^CODE ' "$OUT/host.log" | tr -d '\r' | cut -d' ' -f2)
-            [ -n "$CODE" ] && break
-            sleep 1
-          done
-          [ -n "$CODE" ] || { cat "$OUT/host.log"; echo "host probe printed no CODE"; exit 1; }
-
-          JOIN_RC=0
-          dotnet "$PROBE" --router "http://127.0.0.1:$PORT" --join "$CODE" --timeout 60 > "$OUT/join.log" 2>&1 || JOIN_RC=$?
-          HOST_RC=0
-          wait $HOST_PID || HOST_RC=$?
-          HOST_PID=""
-
-          echo "=== host probe (exit $HOST_RC) ==="; cat "$OUT/host.log"
-          echo "=== join probe (exit $JOIN_RC) ==="; cat "$OUT/join.log"
-
-          [ "$HOST_RC" -eq 0 ] && [ "$JOIN_RC" -eq 0 ] \
-            && grep -q '^RESULT ok' "$OUT/host.log" && grep -q '^RESULT ok' "$OUT/join.log" \
-            || { echo "::error::ICE probe pairing failed on ${{ runner.os }}"; exit 1; }
-          echo "::notice::ICE probe paired on ${{ runner.os }}: $(grep -m1 '^SELECTED-PAIR' "$OUT/host.log" | tr -d '\r'), $(grep -m1 '^RESULT ok' "$OUT/host.log" | tr -d '\r')"
+          if ($executed -ne $expected) {
+            Write-Error "Expected exactly $expected WebRTC transport tests to execute, got $executed."
+            exit 1
+          }
+          if ($skipped.Count -gt 0 -or $passed.Count -ne $expected) {
+            $bad = @($results | Where-Object { $_.outcome -ne 'Passed' }) | ForEach-Object { "$($_.testName): $($_.outcome)" }
+            Write-Error "WebRTC transport tests must all pass with none skipped: $($bad -join '; ')"
+            exit 1
+          }
+          Write-Host "::notice::WebRTC transport tests: $expected/$expected passed on ${{ runner.os }} (paired through the real router)."
 
   # T7's only automated coverage for WebSocketHostServer (extracted from
   # PixelWizard.Transport.Tcp into PixelWizard.Transport.WebSocket): headless
