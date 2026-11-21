@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Probe for the vendored FFmpeg (P4.6, D6). Every test is skipped unless PIXELWIZARD_FFMPEG_DIR
+       names a directory holding the built shared libraries, so the main CI is unaffected. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- The versions the T8 spike ran: SIPSorceryMedia.FFmpeg 10.0.16 is compiled against
+         FFmpeg.AutoGen 8.1.0, overridden to 9.0.1 to match FFmpeg 9.0.x (libavcodec 63). -->
+    <PackageReference Include="FFmpeg.AutoGen" Version="9.0.1" />
+    <PackageReference Include="SIPSorceryMedia.FFmpeg" Version="10.0.16" />
+  </ItemGroup>
+</Project>
