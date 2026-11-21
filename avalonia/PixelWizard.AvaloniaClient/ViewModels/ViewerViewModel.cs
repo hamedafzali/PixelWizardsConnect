@@ -323,7 +323,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         _shell.Status = $"Connecting to {host}:{port}…";
         try
         {
-            _session = BuildSession();
+            _session = BuildSession(() => new TcpTransport(), _sessionSecret);
             await _session.ConnectAsync(host, port, UseTls);
         }
         catch (Exception ex) { _shell.Status = FriendlyError.Describe(ex); IsConnecting = false; }
@@ -345,7 +345,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
             var parts = result.HostEndpoint.Split(':');
             ConnectedAddress = result.HostEndpoint;
             _connectedViaRouter = true;
-            _session = BuildSession();
+            _session = BuildSession(() => new TcpTransport(), _sessionSecret);
             await _session.ConnectAsync(parts[0], int.Parse(parts[1]), UseTls);
         }
         catch (Exception ex) { _shell.Status = FriendlyError.Describe(ex); IsConnecting = false; }
@@ -366,13 +366,13 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
             _shell.Status = "Old certificate forgotten. Connect again to trust the host's new certificate.";
     }
 
-    private ViewerSession BuildSession()
+    private ViewerSession BuildSession(Func<ISessionTransport> transportFactory, string sessionSecret)
     {
         // Hello-on-connect and awaiting-Hello tracking live in ViewerSession (T9.3a);
         // dispatch classification too (T9.2a). The handlers below only do what still needs
         // Dispatcher.UIThread or touches state ViewerSession doesn't own (see ViewerSession's
         // class comment).
-        var session = new ViewerSession(() => new TcpTransport(), _ourHello, _sessionSecret);
+        var session = new ViewerSession(transportFactory, _ourHello, sessionSecret);
         _keysDown.Clear();
         // A failure to connect (refused, unreachable, TLS handshake timeout, certificate) is
         // raised on Error just before the transport disconnects, while the session is not yet

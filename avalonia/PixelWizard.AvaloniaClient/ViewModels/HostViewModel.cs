@@ -179,6 +179,9 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
     private string _expectedSessionSecret = "";
     private int    _activeHostPort = 8888;
 
+    // The session that is listening or connected, however it was established.
+    private HostSession? CurrentSession => _hostListener?.Current;
+
     // Decides whether an authenticated viewer may see this screen. Anything but an
     // explicit true denies (see ConsentGate).
     public Func<string, Task<bool>>? ConsentCallback { get; set; }
@@ -250,10 +253,10 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         _captureLoop = new CaptureLoop(
             capture,
             () => StreamingSettings.FromPresetIndex(HostQualityIndex),
-            () => _hostListener?.Current?.IsApproved == true);
+            () => CurrentSession?.IsApproved == true);
         _captureLoop.DeltaCapturedAsync = async (delta, full) =>
         {
-            await _hostListener!.Current!.SendFrameAsync(delta, full);
+            await CurrentSession!.SendFrameAsync(delta, full);
 
             if (_wsServer != null)
             {
@@ -299,20 +302,39 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         // Listen/relisten mechanics and per-connection HostSession creation live in
         // HostListener (T9.3b); whether to relisten stays here (it depends on IsHostRunning).
         _hostListener = new HostListener(() => new TcpTransport(), _ourHello, port, () => HostTlsEnabled, _expectedSessionSecret);
-        _hostListener.SessionCreated += WireHostSession;
-        return _hostListener.StartAsync();
+        var listener = _hostListener;
+        listener.SessionCreated += session => WireHostSession(session, () => _hostListener == listener, RelistenAsync);
+        return listener.StartAsync();
     }
 
-    private void WireHostSession(HostSession session)
+    // The direct path waits for the next viewer by listening again on the same port.
+    private async Task RelistenAsync(bool viewerWasApproved)
+    {
+        if (_hostListener is not { IsRelistening: false } listener) return;
+        string waiting = viewerWasApproved
+            ? "Viewer disconnected — waiting for next connection…"
+            : "Waiting for next connection…";
+        HostStatus    = waiting;
+        _shell.Status = waiting;
+        try { await listener.RelistenAsync(); }
+        catch (Exception ex)
+        {
+            _shell.Status = FriendlyError.Describe(ex);
+            IsHostRunning = false;
+        }
+    }
+
+    // Everything that happens once a HostSession exists, whatever transport carries it: status,
+    // the consent modal, input, clipboard and chat. isCurrent says whether this session still
+    // belongs to the running host (a late event after Stop or a restart must change nothing);
+    // waitForNextViewer re-arms the host after the session ends while the host is still running.
+    private void WireHostSession(HostSession session, Func<bool> isCurrent, Func<bool, Task> waitForNextViewer)
     {
         session.Connected += () => _ui.Post(() =>
         {
             HostStatus    = "Viewer connecting — authenticating…";
             _shell.Status = "Authenticating viewer…";
         });
-        // The handler is posted, so it can run after Stop (or after a restart). Stop already
-        // reset everything; only the listener that created this session may act on it.
-        var owner = _hostListener;
         // Relistening disposes this session, which raises Disconnected a second time while
         // the host is already waiting for the next viewer. Only the first one is handled.
         bool disconnectHandled = false;
@@ -321,7 +343,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         bool viewerWasApproved = false;
         session.Disconnected += () => _ui.Post(async () =>
         {
-            if (_hostListener != owner || disconnectHandled) return;
+            if (!isCurrent() || disconnectHandled) return;
             disconnectHandled = true;
             _sessionWatchdog?.Stop();
             HideViewingBadgeCallback?.Invoke();
@@ -329,20 +351,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
             SaveSessionNotes();
             HostStatus    = "Client disconnected";
             _shell.Status = "Client disconnected";
-            if (IsHostRunning && _hostListener is { IsRelistening: false } listener)
-            {
-                string waiting = viewerWasApproved
-                    ? "Viewer disconnected — waiting for next connection…"
-                    : "Waiting for next connection…";
-                HostStatus    = waiting;
-                _shell.Status = waiting;
-                try { await listener.RelistenAsync(); }
-                catch (Exception ex)
-                {
-                    _shell.Status = FriendlyError.Describe(ex);
-                    IsHostRunning = false;
-                }
-            }
+            if (IsHostRunning) await waitForNextViewer(viewerWasApproved);
         });
         session.Error += ex => {
             // Only surface error if transport was actually connected — ignore EOF/reset on disconnect
@@ -379,7 +388,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
 
                 // The dialog can outlive this session. After Stop or a restart its answer
                 // changes nothing; Stop has already reset the host.
-                if (_hostListener != owner)
+                if (!isCurrent())
                 {
                     session.Disconnect();
                     return;
@@ -491,7 +500,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         {
             HostStatus    = "Session timed out — viewer inactive";
             _shell.Status = "Session timed out";
-            _hostListener?.Current?.Disconnect();
+            CurrentSession?.Disconnect();
         });
         _sessionWatchdog.Start();
     }
@@ -504,7 +513,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
 
     // ── Feature 1/4: Clipboard and chat go to the approved session only ───────
 
-    public ChatLink? ActiveChatLink => _hostListener?.Current is { IsApproved: true } s
+    public ChatLink? ActiveChatLink => CurrentSession is { IsApproved: true } s
         ? new ChatLink(IsHost: true, s.SendChatAsync, s.SendClipboardAsync)
         : null;
 
