@@ -99,8 +99,8 @@ public sealed unsafe class H264Encoder : IDisposable
                 diag.Add($"{name}: {key}={value} {(r >= 0 ? "applied" : "ignored (" + r + ")")}");
             }
             // Constrained baseline where the encoder lets us ask for it. level 3.1 matches 42e01f.
-            Opt("profile", name == "h264_mf" ? "baseline" : "baseline");
-            Opt("level", name == "h264_nvenc" || name == "h264_videotoolbox" ? "3.1" : "3.1");
+            Opt("profile", name == "h264_amf" ? "constrained_baseline" : "baseline");
+            Opt("level", "3.1");
             switch (name)
             {
                 case "h264_videotoolbox":
@@ -118,7 +118,6 @@ public sealed unsafe class H264Encoder : IDisposable
                     break;
                 case "h264_mf":
                     Opt("rate_control", "cbr"); Opt("scenario", "display_remoting");
-                    Opt("hw_encoding", "0"); // software MFT is acceptable; a hardware MFT is still preferred by default
                     break;
             }
 
