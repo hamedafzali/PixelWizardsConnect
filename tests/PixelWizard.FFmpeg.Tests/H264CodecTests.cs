@@ -127,7 +127,13 @@ public sealed class H264CodecTests
         foreach (var (w, h) in new[] { (640, 360), (320, 240), (640, 360) })
         {
             using var enc = NewEncoder(w, h, _out);
-            var key = EncodeN(enc, w, h, 3).First(a => a.IsKeyframe);
+            // Encoders buffer a few frames (h264_mf more than VideoToolbox), so pump until the IDR is out.
+            var px = Pattern(w, h);
+            var aus = new List<EncodedAccessUnit>();
+            var sent = 0;
+            while (!aus.Any(a => a.IsKeyframe) && sent < 30) { aus.AddRange(enc.Encode(px, w * 4)); sent++; }
+            _out.WriteLine($"{w}x{h}: first keyframe out after {sent} frames in");
+            var key = aus.First(a => a.IsKeyframe);
             var frames = dec!.Decode(key.AnnexB);
             Assert.NotEmpty(frames);
             Assert.Equal((w, h), (frames[0].Width, frames[0].Height));
