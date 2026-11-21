@@ -41,11 +41,13 @@ case "$platform" in
     # h264_nvenc / h264_amf: loaded from the GPU driver at run time (nvEncodeAPI64.dll / amfrt64.dll),
     # so nothing extra ships; the headers are MIT. h264_qsv is not built: it needs libvpl and its
     # dispatcher DLL shipped alongside.
+    # d3d11va: FFmpeg 9.0.1 mfenc.c uses D3D11 types outside its CONFIG_D3D11VA guard, so h264_mf
+    # does not compile without it (d3d11.dll is a Windows system DLL, loaded at run time).
     # w32threads, not winpthreads: avoids shipping libwinpthread-1.dll.
     plat=(
       --arch=x86_64 --target-os=mingw32
       --disable-pthreads --enable-w32threads
-      --enable-mediafoundation --enable-ffnvcodec --enable-nvenc --enable-amf
+      --enable-mediafoundation --enable-d3d11va --enable-ffnvcodec --enable-nvenc --enable-amf
       --enable-encoder=h264_mf,h264_nvenc,h264_amf
       --extra-ldflags=-static-libgcc
     )
