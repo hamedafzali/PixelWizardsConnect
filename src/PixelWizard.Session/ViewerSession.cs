@@ -27,7 +27,7 @@ namespace PixelWizard.Session;
 /// </summary>
 public sealed class ViewerSession : IDisposable
 {
-    private readonly ITcpSessionTransport _transport;
+    private readonly ISessionTransport _transport;
     private readonly HelloMessage _ourHello;
     private readonly string _sessionSecret;
 
@@ -38,7 +38,7 @@ public sealed class ViewerSession : IDisposable
     // HandshakeOk arrived and nothing has since (see ApprovalPendingAtDisconnect).
     private bool _awaitingApproval;
 
-    public ViewerSession(Func<ITcpSessionTransport> transportFactory, HelloMessage ourHello, string sessionSecret = "")
+    public ViewerSession(Func<ISessionTransport> transportFactory, HelloMessage ourHello, string sessionSecret = "")
     {
         if (transportFactory == null) throw new ArgumentNullException(nameof(transportFactory));
         _transport = transportFactory() ?? throw new InvalidOperationException("transportFactory returned null");
@@ -105,7 +105,11 @@ public sealed class ViewerSession : IDisposable
     public event Action<string>? ClipboardReceived;
     public event Action<string>? ChatReceived;
 
-    public Task ConnectAsync(string host, int port, bool useTls = true) => _transport.ConnectAsync(host, port, useTls);
+    /// <summary>Connects to a direct TCP host. Only valid when the transport is an <see cref="ITcpSessionTransport"/>.</summary>
+    public Task ConnectAsync(string host, int port, bool useTls = true) => _transport is ITcpSessionTransport tcp
+        ? tcp.ConnectAsync(host, port, useTls)
+        : throw new InvalidOperationException(
+            $"ConnectAsync needs a TCP transport; {_transport.GetType().Name} is established by its own code before the session is created.");
     public void Disconnect() => _transport.Disconnect();
 
     // Outbound message construction (formerly inline in MainViewModel's input/ping/quality/

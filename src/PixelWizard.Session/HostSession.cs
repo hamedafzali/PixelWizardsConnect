@@ -33,7 +33,7 @@ namespace PixelWizard.Session;
 /// </summary>
 public sealed class HostSession : IDisposable
 {
-    private readonly ITcpSessionTransport _transport;
+    private readonly ISessionTransport _transport;
     private readonly HelloMessage _ourHello;
     private readonly string _expectedSessionSecret;
     private bool _helloComplete;
@@ -43,7 +43,7 @@ public sealed class HostSession : IDisposable
     // could watch the screen, or click the host's own consent dialog, while it is open.
     private volatile bool _approved;
 
-    public HostSession(ITcpSessionTransport transport, HelloMessage ourHello, string expectedSessionSecret = "")
+    public HostSession(ISessionTransport transport, HelloMessage ourHello, string expectedSessionSecret = "")
     {
         _transport = transport ?? throw new ArgumentNullException(nameof(transport));
         _ourHello = ourHello ?? throw new ArgumentNullException(nameof(ourHello));
@@ -126,7 +126,11 @@ public sealed class HostSession : IDisposable
     public event Action<string>? ClipboardReceived;
     public event Action<string>? ChatReceived;
 
-    public Task StartServerAsync(int port, bool useTls = true) => _transport.StartServerAsync(port, useTls);
+    /// <summary>Listens for a direct TCP viewer. Only valid when the transport is an <see cref="ITcpSessionTransport"/>.</summary>
+    public Task StartServerAsync(int port, bool useTls = true) => _transport is ITcpSessionTransport tcp
+        ? tcp.StartServerAsync(port, useTls)
+        : throw new InvalidOperationException(
+            $"StartServerAsync needs a TCP transport; {_transport.GetType().Name} is established by its own code before the session is created.");
     public void Disconnect() => _transport.Disconnect();
 
     // Outbound frames/clipboard/chat (formerly inline in MainViewModel, moved here in T9.4).
