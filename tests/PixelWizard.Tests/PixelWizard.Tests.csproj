@@ -31,6 +31,8 @@
     <ProjectReference Include="..\..\src\PixelWizard.Transport.WebSocket\PixelWizard.Transport.WebSocket.csproj" />
     <!-- SkiaDetectorHarness drives its SkiaScreenChangeDetector. -->
     <ProjectReference Include="..\..\src\PixelWizard.Media\PixelWizard.Media.csproj" />
+    <!-- MacRawCaptureTests (skips off macOS / without Screen Recording permission). -->
+    <ProjectReference Include="..\..\src\PixelWizard.MacHost\PixelWizard.MacHost.csproj" />
   </ItemGroup>
   <!-- WindowsHost (System.Drawing) is only compilable from the net9.0-windows TFM: a
        net9.0 project cannot reference a net9.0-windows project (NU1201). -->

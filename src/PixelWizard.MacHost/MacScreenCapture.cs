@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using SkiaSharp;
+using PixelWizard.Core;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
 using PixelWizard.Media;
@@ -12,7 +13,7 @@ using PixelWizard.Protocol;
 namespace PixelWizard.MacHost;
 
 [SupportedOSPlatform("osx")]
-public sealed class MacScreenCapture : IScreenCapture
+public sealed class MacScreenCapture : IScreenCapture, IRawScreenCapture
 {
     private readonly SkiaScreenChangeDetector _detector = new();
     private readonly TimeSpan _fullRefreshInterval;
@@ -110,6 +111,70 @@ public sealed class MacScreenCapture : IScreenCapture
         {
             CFRelease(cfData);
         }
+    }
+
+    /// <summary>True when this process may capture the screen (no prompt, no side effects).</summary>
+    public static bool HasScreenCaptureAccess() => CGPreflightScreenCaptureAccess();
+
+    public string DisplayId => _displayId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// Same CGDisplayCreateImage grab and logical-size convention as the JPEG path (so, like it,
+    /// no cursor). Size is the logical display size cropped to even; on a Retina display the
+    /// physical pixels are scaled straight into the pooled frame buffer (no intermediate bitmap).
+    /// </summary>
+    public unsafe RawFrame? CaptureRaw()
+    {
+        var bounds = CGDisplayBounds(_displayId);
+        int w = RawFrame.EvenFloor((int)bounds.Size.Width);
+        int h = RawFrame.EvenFloor((int)bounds.Size.Height);
+        if (w <= 0 || h <= 0) return null;
+
+        var cgImage = CGDisplayCreateImage(_displayId);
+        if (cgImage == IntPtr.Zero) return null;
+        try
+        {
+            int physW = (int)CGImageGetWidth(cgImage);
+            int physH = (int)CGImageGetHeight(cgImage);
+            int bpr   = (int)CGImageGetBytesPerRow(cgImage);
+            var cfData = CGDataProviderCopyData(CGImageGetDataProvider(cgImage));
+            if (cfData == IntPtr.Zero) return null;
+            try
+            {
+                byte* src = (byte*)CFDataGetBytePtr(cfData);
+                var frame = RawFrame.Rent(w, h, DisplayId);
+                try
+                {
+                    if (physW >= w && physH >= h && physW == (int)bounds.Size.Width && physH == (int)bounds.Size.Height)
+                    {
+                        frame.CopyFrom(new ReadOnlySpan<byte>(src, bpr * (physH - 1) + physW * 4), bpr);
+                    }
+                    else
+                    {
+                        var srcInfo = new SKImageInfo(physW, physH, SKColorType.Bgra8888, SKAlphaType.Premul);
+                        var dstInfo = new SKImageInfo(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+                        fixed (byte* dst = frame.Pixels)
+                        {
+                            using var srcPix = new SKPixmap(srcInfo, (IntPtr)src, bpr);
+                            using var dstPix = new SKPixmap(dstInfo, (IntPtr)dst, frame.Stride);
+                            if (!srcPix.ScalePixels(dstPix, SKFilterQuality.Medium))
+                            {
+                                frame.Dispose();
+                                return null;
+                            }
+                        }
+                    }
+                    return frame;
+                }
+                catch
+                {
+                    frame.Dispose();
+                    throw;
+                }
+            }
+            finally { CFRelease(cfData); }
+        }
+        finally { CGImageRelease(cgImage); }
     }
 
     public void Reset()   => _detector.Reset();
