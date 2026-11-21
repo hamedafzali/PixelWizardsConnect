@@ -180,7 +180,7 @@ public sealed class ViewerViewModelTests : IDisposable
         await Task.Delay(50); // let the listener bind
 
         using var main = new MainViewModel(AppSettings.Load(_settingsFile),
-            PixelWizard.AvaloniaClient.Platform.HostProviderFactory.Create(), new FixedRouter($"127.0.0.1:{port}"));
+            PixelWizard.AvaloniaClient.Platform.HostProviderFactory.Create(), new FixedRouter($"127.0.0.1:{port}"), new FakeRelayConnector());
         main.GoViewerCommand.Execute().Subscribe();
         main.Viewer.UseTls = false;
         main.Viewer.HostAddress = "10.9.9.9";

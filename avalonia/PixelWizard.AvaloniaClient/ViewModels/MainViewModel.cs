@@ -162,10 +162,10 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
 
     // Tests pass their own settings so they never touch the user's settings file.
     public MainViewModel(AppSettings settings)
-        : this(settings, HostProviderFactory.Create(), new RouterHttpClient()) { }
+        : this(settings, HostProviderFactory.Create(), new RouterHttpClient(), new WebRtcRelayConnector()) { }
 
     // App is the composition root: it builds the services and passes them in.
-    public MainViewModel(AppSettings settings, IHostProvider hostProvider, IRouterClient router)
+    public MainViewModel(AppSettings settings, IHostProvider hostProvider, IRouterClient router, IRelayConnector relay)
     {
         _settings = settings;
         GoHostCommand             = ReactiveCommand.Create(GoHost);
@@ -181,7 +181,7 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
         Chat = new ChatViewModel(ActiveChatLink,
             () => GetClipboardCallback?.Invoke() ?? Task.FromResult<string?>(null));
         Viewer = new ViewerViewModel(this, Chat, _settings, router, OurHello);
-        Host   = new HostViewModel(this, Chat, _settings, router, OurHello, hostProvider);
+        Host   = new HostViewModel(this, Chat, _settings, relay, OurHello, hostProvider);
         Host.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(HostViewModel.IsHostRunning)) UpdateWindowTitle();

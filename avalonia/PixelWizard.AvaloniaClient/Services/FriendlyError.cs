@@ -31,6 +31,11 @@ public static class FriendlyError
         FormatException         => "That address or code is not in a valid format.",
         PixelWizard.Signaling.ConnectionCodeNotFoundException =>
             "That code is not valid or has expired. Check the code, or ask the host for a new one.",
+        PixelWizard.Signaling.SignalingErrorException { Code: "code-unknown" or "code-used" or "resume-rejected" } =>
+            "That code is not valid or has expired. Check the code, or ask the host for a new one.",
+        PixelWizard.Signaling.SignalingErrorException { Code: "rate-limited" } =>
+            "The router is limiting requests from this network. Wait a minute and try again.",
+        System.Net.WebSockets.WebSocketException => "Could not reach the router server. Check the router address.",
         System.Net.Http.HttpRequestException => "Could not reach the router server. Check the router address.",
         OperationCanceledException => "The operation was cancelled.",
         _ => "Something went wrong. Please check your settings and try again."

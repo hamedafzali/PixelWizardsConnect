@@ -78,19 +78,6 @@ public sealed class HostViewModelTests : IDisposable
         public IInputInjector CreateInput() => Input;
     }
 
-    private sealed class NoRouter : IRouterClient
-    {
-        public Task<RouterRegistrationResult> RegisterHostAsync(string h, int p, string e) => throw new NotSupportedException();
-        public Task<RouterConnectResult> ResolveEndpointAsync(string h, int p, string c) => throw new NotSupportedException();
-    }
-
-    private sealed class StubRouter : IRouterClient
-    {
-        public Task<RouterRegistrationResult> RegisterHostAsync(string h, int p, string e) =>
-            Task.FromResult(new RouterRegistrationResult("ABC123", "secret"));
-        public Task<RouterConnectResult> ResolveEndpointAsync(string h, int p, string c) => throw new NotSupportedException();
-    }
-
     private readonly string _settingsFile =
         Path.Combine(Path.GetTempPath(), "pw-host-" + Guid.NewGuid().ToString("N") + ".json");
     private readonly FakeShell _shell = new();
@@ -104,9 +91,11 @@ public sealed class HostViewModelTests : IDisposable
         _chat = new ChatViewModel(() => null, () => Task.FromResult<string?>(null));
     }
 
-    private HostViewModel Vm(AppSettings? settings = null, IRouterClient? router = null)
+    private readonly FakeRelayConnector _relay = new();
+
+    private HostViewModel Vm(AppSettings? settings = null, IRelayConnector? relay = null)
     {
-        var vm = new HostViewModel(_shell, _chat, settings ?? AppSettings.Load(_settingsFile), router ?? new NoRouter(),
+        var vm = new HostViewModel(_shell, _chat, settings ?? AppSettings.Load(_settingsFile), relay ?? _relay,
             OurHello, _provider, webViewerPort: GetFreePort());
         vm.ShowViewingBadgeCallback = () => _badgeShown++;
         vm.HideViewingBadgeCallback = () => _badgeHidden++;
@@ -308,29 +297,157 @@ public sealed class HostViewModelTests : IDisposable
         finally { blocker.Stop(); }
     }
 
-    [AvaloniaFact]
-    public async Task RegisterWithRouter_PortInUse_ShowsWhy_AndStops()
+    // ── Router mode (over /signal + WebRTC, faked here) ───────────────────────
+
+    private async Task<(HostViewModel Vm, FakeRegistration Reg)> StartRouterHost(Func<string, Task<bool>>? decider)
     {
-        // The router path always listens on 8888. Whether this blocker or something else
-        // on the machine holds it, the port is in use either way.
-        var blocker = new TcpListener(IPAddress.Any, 8888);
-        try { blocker.Start(); } catch (SocketException) { }
-        try
-        {
-            var vm = Vm(router: new StubRouter());
-            vm.UseRouterForHost = true;
-            vm.HostRouterAddress = "127.0.0.1:1";
+        var vm = Vm();
+        vm.ConsentCallback = decider;
+        vm.UseRouterForHost = true;
+        vm.HostRouterAddress = "router.example.org:9000";
+        await vm.RegisterHostCommand.Execute();
+        FakeRegistration reg;
+        lock (_relay.Registrations) reg = _relay.Registrations[0];
+        return (vm, reg);
+    }
 
-            await vm.RegisterHostCommand.Execute();
-            int statuses = _shell.Statuses.Count;
-            await Settle();
+    private async Task<(ViewerSession Viewer, MemoryTransport T, Viewer Probe)> JoinRouterViewer(FakeRegistration reg)
+    {
+        var t = _relay.Join(reg);
+        var session = new ViewerSession(() => t, OurHello);
+        _cleanup.Add(session);
+        var probe = new Viewer(session);
+        await t.EstablishAsync();
+        return (session, t, probe);
+    }
 
-            Assert.Equal(PortInUse, _shell.Statuses.Last());
-            Assert.Equal(statuses, _shell.Statuses.Count);
-            Assert.False(vm.IsHostRunning);
-            Assert.False(vm.ShowCodeCard);
-        }
-        finally { blocker.Stop(); }
+    [AvaloniaFact]
+    public async Task RouterHost_ShowsTheCode_AndStartsNothingBeforeAViewerIsApproved()
+    {
+        var (vm, reg) = await StartRouterHost(_ => Task.FromResult(true));
+        await Settle();
+
+        Assert.Equal("ROOM01", vm.HostConnectionCode);
+        Assert.True(vm.ShowCodeCard);
+        Assert.True(vm.IsHostRunning);
+        Assert.Equal("Ready — code: ROOM01", vm.HostStatus);
+        Assert.Equal(1, _relay.RegisterCalls);
+        Assert.Equal(0, _provider.Capture.Calls);
+        Assert.Null(vm.ActiveChatLink);
+    }
+
+    [AvaloniaFact]
+    public async Task RouterHost_SessionReachesTheConsentDecider_AndCaptureStartsOnlyAfterApproval()
+    {
+        var decision = new TaskCompletionSource<bool>();
+        var asked = new List<string>();
+        var (vm, reg) = await StartRouterHost(who => { asked.Add(who); return decision.Task; });
+
+        var (_, _, probe) = await JoinRouterViewer(reg);
+        await WaitUntil(() => asked.Count == 1, "the consent decider to be asked");
+        await Settle();
+
+        // The modal is open: nothing is captured or sent, and nothing has approved.
+        Assert.Equal(new[] { "incoming viewer" }, asked);
+        Assert.Equal(0, _provider.Capture.Calls);
+        Assert.Equal(0, Volatile.Read(ref probe.Frames));
+        Assert.Null(vm.ActiveChatLink);
+        Assert.Equal(0, _badgeShown);
+
+        decision.SetResult(true);
+        await WaitUntil(() => vm.HostStatus == "Client connected — sharing screen", "approval");
+        await WaitUntil(() => Volatile.Read(ref probe.Frames) > 0, "frames at the viewer");
+        Assert.True(_provider.Capture.Calls > 0);
+        Assert.Equal(1, _badgeShown);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(Refusal.Deny)]
+    [InlineData(Refusal.NoCallback)]
+    [InlineData(Refusal.Throws)]
+    [InlineData(Refusal.Faults)]
+    public async Task RouterHost_NotExplicitlyAllowed_DisconnectsTheTransport_AndSharesNothing(Refusal refusal)
+    {
+        int asked = 0;
+        var decider = Decider(refusal);
+        var (vm, reg) = await StartRouterHost(decider == null ? null : who => { asked++; return decider(who); });
+
+        var (_, viewerT, probe) = await JoinRouterViewer(reg);
+        await WaitUntil(() => probe.Disconnected, "the viewer to be dropped");
+        await WaitUntil(() => _shell.Statuses.Contains("Connection denied"), "denial");
+        await Settle();
+
+        if (decider != null) Assert.Equal(1, asked);
+        Assert.False(viewerT.IsConnected);
+        Assert.Equal(0, Volatile.Read(ref probe.Frames));
+        Assert.Equal(0, _provider.Capture.Calls);
+        Assert.DoesNotContain("Client connected", _shell.Statuses);
+        Assert.Equal(0, _badgeShown);
+        Assert.Null(vm.ActiveChatLink);
+        // The host goes back to waiting, with a new one-time code.
+        await WaitUntil(() => vm.HostConnectionCode == "ROOM02", "a fresh registration");
+        Assert.True(vm.IsHostRunning);
+    }
+
+    [AvaloniaFact]
+    public async Task RouterHost_AfterAnApprovedViewerLeaves_RegistersAgainAndAsksConsentAgain()
+    {
+        int asked = 0;
+        var (vm, reg) = await StartRouterHost(_ => { asked++; return Task.FromResult(true); });
+        var (_, viewerT, _) = await JoinRouterViewer(reg);
+        await WaitUntil(() => vm.HostStatus == "Client connected — sharing screen", "approval");
+
+        viewerT.Disconnect();
+        await WaitUntil(() => vm.HostConnectionCode == "ROOM02", "a fresh registration");
+        await WaitUntil(() => vm.HostStatus == "Ready — code: ROOM02", "ready again");
+        Assert.True(reg.Disposed);
+        Assert.Equal(1, _badgeHidden);
+        Assert.Null(vm.ActiveChatLink);
+
+        FakeRegistration second;
+        lock (_relay.Registrations) second = _relay.Registrations[1];
+        var captured = _provider.Capture.Calls;
+        await JoinRouterViewer(second);
+        await WaitUntil(() => asked == 2, "a second consent question");
+    }
+
+    [AvaloniaFact]
+    public async Task RouterHost_Stop_DisposesTheRegistration_AndDoesNotRegisterAgain()
+    {
+        var (vm, reg) = await StartRouterHost(_ => Task.FromResult(true));
+        vm.Stop();
+        await Settle();
+
+        Assert.True(reg.Disposed);
+        Assert.False(vm.IsHostRunning);
+        Assert.Equal("Stopped", vm.HostStatus);
+        Assert.Equal(1, _relay.RegisterCalls);
+    }
+
+    [AvaloniaFact]
+    public async Task RouterHost_RouterUnreachable_ShowsWhy_AndStops()
+    {
+        _relay.RegisterFails = new System.Net.WebSockets.WebSocketException("refused");
+        var vm = Vm();
+        vm.UseRouterForHost = true;
+        vm.HostRouterAddress = "router.example.org:9000";
+
+        await vm.RegisterHostCommand.Execute();
+
+        Assert.Equal("Could not reach the router server. Check the router address.", _shell.Statuses.Last());
+        Assert.False(vm.IsHostRunning);
+        Assert.False(vm.ShowCodeCard);
+    }
+
+    [AvaloniaFact]
+    public async Task RouterHost_RemembersTheRouterAddress()
+    {
+        var settings = AppSettings.Load(_settingsFile);
+        var vm = Vm(settings);
+        vm.UseRouterForHost = true;
+        vm.HostRouterAddress = "https://router.example.org";
+        await vm.RegisterHostCommand.Execute();
+        Assert.Equal("https://router.example.org", settings.LastRouterAddress);
     }
 
     // ── Consent (over a real socket) ──────────────────────────────────────────

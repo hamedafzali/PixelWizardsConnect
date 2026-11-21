@@ -54,6 +54,11 @@
     <ProjectReference Include="..\..\src\PixelWizard.Transport.Tcp\PixelWizard.Transport.Tcp.csproj" />
     <ProjectReference Include="..\..\src\PixelWizard.Signaling\PixelWizard.Signaling.csproj" />
     <ProjectReference Include="..\..\src\PixelWizard.Transport.WebSocket\PixelWizard.Transport.WebSocket.csproj" />
+    <ProjectReference Include="..\..\src\PixelWizard.Transport.WebRtc\PixelWizard.Transport.WebRtc.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PixelWizard.AvaloniaClient.Tests" />
   </ItemGroup>
 
   <!-- WindowsHost only wired in for the Windows target -->

@@ -37,18 +37,18 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
     private readonly IHostShell     _shell;
     private readonly ChatViewModel  _chat;
     private readonly AppSettings    _settings;
-    private readonly IRouterClient  _router;
+    private readonly IRelayConnector _relay;
     private readonly HelloMessage   _ourHello;
     private readonly IHostProvider  _hostProvider;
     private readonly int            _webViewerPort;
 
-    public HostViewModel(IHostShell shell, ChatViewModel chat, AppSettings settings, IRouterClient router,
+    public HostViewModel(IHostShell shell, ChatViewModel chat, AppSettings settings, IRelayConnector relay,
         HelloMessage ourHello, IHostProvider hostProvider, int webViewerPort = 9001)
     {
         _shell         = shell;
         _chat          = chat;
         _settings      = settings;
-        _router        = router;
+        _relay         = relay;
         _ourHello      = ourHello;
         _hostProvider  = hostProvider;
         _webViewerPort = webViewerPort;
@@ -180,7 +180,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
     private int    _activeHostPort = 8888;
 
     // The session that is listening or connected, however it was established.
-    private HostSession? CurrentSession => _hostListener?.Current;
+    private HostSession? CurrentSession => _hostListener?.Current ?? _relayRound?.Session;
 
     // Decides whether an authenticated viewer may see this screen. Anything but an
     // explicit true denies (see ConsentGate).
@@ -218,6 +218,9 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         return "127.0.0.1";
     }
 
+    // Router mode: pair through the router's /signal, then run the same session over WebRTC. The room
+    // code is one-time use, so after a session ends the host registers again (new code) and keeps waiting,
+    // the way the direct path listens again.
     private async Task RegisterWithRouter()
     {
         if (!_hostProvider.IsAvailable) { _shell.Status = "Host not available on this platform"; return; }
@@ -225,25 +228,98 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         _shell.Status = "Registering with router…";
         try
         {
-            string localIp   = GetLocalEndpoint(host);
-            var result       = await _router.RegisterHostAsync(host, port, localIp);
+            SetupHostServices();
+            await BeginRelayRoundAsync(host, port);
             _settings.LastRouterAddress = HostRouterAddress;
             _settings.Save();
-            _expectedSessionSecret = result.SessionSecret;
-            _activeHostPort        = 8888;
-
-            HostConnectionCode = result.ConnectionCode;
-            ShowCodeCard = true;
-
-            SetupHostServices();
-            await ListenWithoutWaitingForAViewer(8888);
             _captureLoop!.Start();
-            _announceCts = new CancellationTokenSource();
-            _ = NetworkDiscovery.AnnounceAsync(_activeHostPort, _announceCts.Token);
-            HostStatus    = $"Ready — code: {result.ConnectionCode}";
-            _shell.Status = $"Host registered. Share code: {result.ConnectionCode}";
         }
+        catch (OperationCanceledException) when (_relayRound == null) { /* Stopped while registering */ }
         catch (Exception ex) { StopAfterFailedStart(ex); }
+    }
+
+    // One registration and the session it leads to. Replacing or stopping a round disposes the old one,
+    // and every late event checks it is still the current round (see WireHostSession's isCurrent).
+    private sealed class RelayRound : IDisposable
+    {
+        public readonly CancellationTokenSource Cts = new();
+        public volatile IRelayHostRegistration? Registration;
+        public volatile HostSession? Session;
+
+        public void Dispose()
+        {
+            Session?.Disconnect();
+            Cts.Cancel();
+            var registration = Registration;
+            if (registration != null) _ = registration.DisposeAsync().AsTask();
+            Session?.Dispose();
+        }
+    }
+
+    private RelayRound? _relayRound;
+
+    private async Task BeginRelayRoundAsync(string host, int port)
+    {
+        var round = new RelayRound();
+        var old = _relayRound;
+        _relayRound = round;
+        old?.Dispose();
+
+        var registration = await _relay.RegisterHostAsync(host, port, round.Cts.Token);
+        if (_relayRound != round) { await registration.DisposeAsync(); return; }
+        round.Registration = registration;
+        HostConnectionCode = registration.Code;
+        ShowCodeCard  = true;
+        HostStatus    = $"Ready — code: {registration.Code}";
+        _shell.Status = $"Host registered. Share code: {registration.Code}";
+        _ = Task.Run(() => PairWithViewerAsync(round, registration, host, port));
+    }
+
+    // Waits for a viewer, wraps the transport in a HostSession with the empty secret (D3: the router
+    // pairing is the trust, as on direct LAN), and wires it through the same consent flow as the direct
+    // path. Capture starts only after approval, because the capture loop is gated on IsApproved.
+    private async Task PairWithViewerAsync(RelayRound round, IRelayHostRegistration registration, string host, int port)
+    {
+        RelayLink? link = null;
+        try
+        {
+            link = await registration.WaitForViewerAsync(round.Cts.Token);
+            var session = new HostSession(link.Transport, _ourHello, "");
+            round.Session = session;
+            WireHostSession(session, () => _relayRound == round,
+                viewerWasApproved => ContinueRelayAsync(round, host, port, viewerWasApproved));
+            await link.EstablishAsync(round.Cts.Token);
+        }
+        catch (OperationCanceledException) when (round.Cts.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            if (link != null) { try { await link.Signaling.DisposeAsync(); } catch { } }
+            _ui.Post(async () =>
+            {
+                if (_relayRound != round || !IsHostRunning) return;
+                if (link == null) { StopAfterFailedStart(ex); return; } // lost the router for good: not waiting any more
+                _shell.Status = FriendlyError.Describe(ex);
+                await ContinueRelayAsync(round, host, port, viewerWasApproved: false);
+            });
+        }
+    }
+
+    // After a session ends (or fails to establish): register again for a new code and keep waiting.
+    private async Task ContinueRelayAsync(RelayRound round, string host, int port, bool viewerWasApproved)
+    {
+        if (_relayRound != round) return; // already moved on
+        string waiting = viewerWasApproved
+            ? "Viewer disconnected — waiting for next connection…"
+            : "Waiting for next connection…";
+        HostStatus    = waiting;
+        _shell.Status = waiting;
+        try { await BeginRelayRoundAsync(host, port); }
+        catch (OperationCanceledException) { } // stopped, or replaced, while registering
+        catch (Exception ex)
+        {
+            _shell.Status = FriendlyError.Describe(ex);
+            IsHostRunning = false;
+        }
     }
 
     private void SetupHostServices()
@@ -436,6 +512,8 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         _sessionWatchdog?.Dispose();
         _sessionWatchdog = null;
         _hostListener?.Stop();
+        _relayRound?.Dispose();
+        _relayRound    = null;
         _captureLoop?.Dispose();
         _wsServer?.Stop();
         _hostListener  = null;
@@ -518,14 +596,6 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         : null;
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static string GetLocalEndpoint(string routerHost)
-    {
-        if (routerHost.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
-            routerHost == "127.0.0.1")
-            return "localhost:8888";
-        return $"{GetLanIp()}:8888";
-    }
 
     // ── Dispose ───────────────────────────────────────────────────────────────
 

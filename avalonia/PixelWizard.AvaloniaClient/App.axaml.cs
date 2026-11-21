@@ -29,7 +29,7 @@ public class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            _vm     = new MainViewModel(AppSettings.Load(), HostProviderFactory.Create(), new RouterHttpClient());
+            _vm     = new MainViewModel(AppSettings.Load(), HostProviderFactory.Create(), new RouterHttpClient(), new WebRtcRelayConnector());
             _mainWindow = new MainWindow { DataContext = _vm };
 
             // ── Feature 1 / Clipboard read ────────────────────────────────────
