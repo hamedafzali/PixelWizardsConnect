@@ -210,7 +210,8 @@ jobs:
             zip=ffmpeg-9.0.1-pw1-macos-arm64.zip; sha=63b146aaa420d75accc6219ed6f80fd6da05744520bd1cdf37a667c34913463d
           fi
           cd "$RUNNER_TEMP/ffmpeg-dl"
-          echo "$sha  $zip" | shasum -a 256 -c -
+          # Git Bash on Windows has sha256sum but no shasum; macOS has both on current runners.
+          if command -v sha256sum >/dev/null; then echo "$sha  $zip" | sha256sum -c -; else echo "$sha  $zip" | shasum -a 256 -c -; fi
           mkdir -p "$RUNNER_TEMP/ffmpeg" && unzip -q -o "$zip" -d "$RUNNER_TEMP/ffmpeg"
           lib=$(dirname "$(find "$RUNNER_TEMP/ffmpeg" \( -name 'avcodec-*.dll' -o -name 'libavcodec*.dylib' \) | head -n 1)")
           [ -n "$lib" ] || { echo "::error::no avcodec library in $zip"; exit 1; }
@@ -227,9 +228,9 @@ jobs:
       - name: Assert FFmpeg tests all executed and passed
         shell: pwsh
         run: |
-          # 3 = FfmpegProbeTests cases. Update deliberately when FFmpeg-backed tests are added: the suite
+          # 8 = FfmpegProbeTests (3) and H264CodecTests (5) cases. Update deliberately when FFmpeg-backed tests are added: the suite
           # skips itself when PIXELWIZARD_FFMPEG_DIR is missing, so a skip must fail here.
-          $expected = 3
+          $expected = 8
           [xml]$trx = Get-Content TestResults/ffmpeg.trx
           $results = @($trx.TestRun.Results.UnitTestResult)
           $passed = @($results | Where-Object { $_.outcome -eq 'Passed' })
