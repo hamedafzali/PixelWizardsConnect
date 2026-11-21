@@ -40,6 +40,7 @@
   <ItemGroup Condition="'$(TargetFramework)' != 'net9.0-windows'">
     <Compile Remove="ScreenChangeDetector\SystemDrawingDetectorHarness.cs" />
     <Compile Remove="ScreenChangeDetector\SystemDrawingScreenChangeDetectorTests.cs" />
+    <Compile Remove="Capture\WindowsRawCaptureTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Fixtures\**\*.bin" CopyToOutputDirectory="PreserveNewest" />
