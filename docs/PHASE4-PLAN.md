@@ -81,11 +81,14 @@ first session that crosses NAT.
 **D3 — Handshake over WebRTC.** `/signal` carries no session secret. The secret only protected
 the TCP listener from anyone who could reach `host:port`. Over WebRTC the only peer that can
 reach the host is the one that joined with the code, through a DTLS connection whose
-fingerprint came over signaling. Proposed: WebRTC sessions skip `Handshake`/`HandshakeOk`. Hello
-negotiation is still required, and the consent modal remains the real gate. The router's
-existing trust over the SDP is unchanged (SIGNALING.md, "The router is trusted with the SDP").
-The alternative is a host-generated secret sent through the router. It adds no security, because
-the router already sees everything that secret would protect.
+fingerprint came over signaling. Decided: WebRTC sessions run the existing `Hello` and
+`Handshake` unchanged, with an empty secret on both sides. That is exactly the direct-LAN path
+(see the comment in `HostSession.HandleHandshake`), so the handshake code does not change and
+`HandshakeVerified`, the consent modal and the viewer's approval-pending logic all stay as they
+are. `/signal` carries no secret, and the consent modal is the gate. The router's existing
+trust over the SDP is unchanged (SIGNALING.md, "The router is trusted with the SDP"). The
+alternative, a host-generated secret sent through the router, adds no security, because the
+router already sees everything that secret would protect.
 
 **D4 — Consent ordering.** This is a rule, not an option; it is listed here so you can confirm
 it. ICE and DTLS complete before the host has approved anything, which is unavoidable. Before
@@ -188,6 +191,16 @@ it. This closes the BACKLOG row.
   channel reaches about 3.3 MB/s on loopback even with the SCTP tuning (0.3 MB/s without it), so
   5–15 fps of 50–200 KB JPEG frames is the ceiling, not the norm. This path is a fallback; H.264
   is the real video path.
+
+**Done 2026-11-21.** `HostSession`/`ViewerSession` take `ISessionTransport` (`StartServerAsync` and
+`ConnectAsync` throw `InvalidOperationException` on a non-TCP transport). `WebRtcTransport` has two
+reliable ordered channels, `control` and `media-jpeg`, routed by `MessagePlane`; each has its own
+reassembly buffer, send lock and high-water mark (media 256 KiB, control 1 MiB), both feed one
+ordered receive loop, and `EstablishAsync` completes when both are open. SCTP tuning is applied once
+per association. On loopback a Ping sent right after a 2 MiB frame arrives in about 100 ms, while
+the frame takes about 500 ms. Session tests over the real transport (`SessionOverWebRtcTests`) show
+zero media bytes before `Approve()`, input/clipboard/chat dropped, and that deny, a throwing decider
+and a late approval send nothing.
 
 ### P4.5 — App wiring for router-mediated sessions (D7)
 - Router mode in the host (register, then wait for the peer) and in the viewer (connect by
