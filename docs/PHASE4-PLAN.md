@@ -236,6 +236,15 @@ stay in the code and the HTTP routes retire in P4.10 (D7).
 - The duplicate-detector BACKLOG row is decided here. The H.264 path needs no change
   detection, so the Windows detector stays for TCP+JPEG unless a step removes it.
 
+**Done 2026-11-21.** Implemented as a separate optional `IRawScreenCapture` (not a member of
+`IScreenCapture`, so Linux and the JPEG callers are unchanged); `WindowsScreenCapture` and
+`MacScreenCapture` implement both. `RawFrame` carries width, height, stride, BGRA pixels, a
+monotonic timestamp and a display id (Windows monitor device name, macOS CGDirectDisplayID). The
+pixel buffer is rented from `ArrayPool` and the consumer disposes each frame. Width and height are
+cropped to even in the capture. Same OS grab as the JPEG path (GDI `CopyFromScreen`,
+`CGDisplayCreateImage`), no cursor, logical display size on macOS. Not wired into `CaptureLoop` or
+the session (P4.8). The duplicate-detector BACKLOG row is decided: the Windows detector stays.
+
 ### P4.8 — H.264 track: host encode, viewer decode
 - Hello gains `SupportedCodecs.H264`. The offer carries the 42e01f fmtp. When the peers share
   no H.264, the session falls back to `media-jpeg`.
