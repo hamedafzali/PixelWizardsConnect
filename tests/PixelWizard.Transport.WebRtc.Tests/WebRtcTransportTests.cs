@@ -61,6 +61,9 @@ public class WebRtcTransportTests
         return (host, viewer);
     }
 
+    // Wire bytes of a single-chunk message: its serialized form (type, timestamp, length, payload) plus the 1-byte chunk header.
+    private static long WireSize(int payload) => Msg(MessageType.FullScreen, new byte[payload]).Serialize().Length + 1;
+
     private static NetworkMessage Msg(MessageType type, byte[] data) => new() { Type = type, Data = data };
 
     [RouterFact]
@@ -120,6 +123,87 @@ public class WebRtcTransportTests
     }
 
     [RouterFact]
+    public async Task Messages_are_routed_to_the_channel_of_their_plane()
+    {
+        var (host, viewer) = await PairAsync();
+        using var _h = host; using var _v = viewer;
+        Assert.Equal(0, host.T.MediaBytesSent);
+        long controlBefore = host.T.ControlBytesSent;
+
+        await host.T.SendMessageAsync(Msg(MessageType.ChatMessage, new byte[] { 1, 2, 3 }));
+        await host.T.SendMessageAsync(Msg(MessageType.Pong, new byte[] { 4 }));
+        Assert.Equal(MessageType.ChatMessage, (await viewer.NextAsync()).Type);
+        Assert.Equal(MessageType.Pong, (await viewer.NextAsync()).Type);
+        Assert.Equal(0, host.T.MediaBytesSent);
+        Assert.Equal(0, viewer.T.MediaBytesReceived);
+        Assert.True(host.T.ControlBytesSent > controlBefore);
+
+        long controlSent = host.T.ControlBytesSent;
+        await host.T.SendMessageAsync(Msg(MessageType.FullScreen, new byte[2000]));
+        await host.T.SendMessageAsync(Msg(MessageType.ScreenDelta, new byte[100]));
+        await host.T.SendMessageAsync(Msg(MessageType.StreamFrame, new byte[10]));
+        Assert.Equal(MessageType.FullScreen, (await viewer.NextAsync()).Type);
+        Assert.Equal(MessageType.ScreenDelta, (await viewer.NextAsync()).Type);
+        Assert.Equal(MessageType.StreamFrame, (await viewer.NextAsync()).Type);
+        Assert.Equal(controlSent, host.T.ControlBytesSent);
+        Assert.Equal(WireSize(2000) + WireSize(100) + WireSize(10), host.T.MediaBytesSent);
+        Assert.Equal(host.T.MediaBytesSent, viewer.T.MediaBytesReceived);
+
+        // And the other direction.
+        await viewer.T.SendMessageAsync(Msg(MessageType.FullScreen, new byte[50]));
+        Assert.Equal(MessageType.FullScreen, (await host.NextAsync()).Type);
+        Assert.Equal(WireSize(50), viewer.T.MediaBytesSent);
+        Assert.Equal(WireSize(50), host.T.MediaBytesReceived);
+    }
+
+    [RouterFact]
+    public async Task A_control_message_is_not_stuck_behind_a_large_media_frame()
+    {
+        var (host, viewer) = await PairAsync();
+        using var _h = host; using var _v = viewer;
+        const int size = 2 * 1024 * 1024;
+        var arrivals = new ConcurrentQueue<(MessageType type, DateTime at)>();
+        var both = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        viewer.T.MessageReceived += m =>
+        {
+            arrivals.Enqueue((m.Type, DateTime.UtcNow));
+            if (arrivals.Count == 2) both.TrySetResult();
+        };
+
+        var start = DateTime.UtcNow;
+        var frame = host.T.SendMessageAsync(Msg(MessageType.FullScreen, new byte[size]));
+        await Task.Delay(20); // the frame is on the wire and the media queue is filling
+        await host.T.SendMessageAsync(Msg(MessageType.Ping, new byte[] { 9 }));
+        await both.Task.WaitAsync(Limit);
+        await frame;
+
+        var list = arrivals.ToArray();
+        var ping = list.Single(a => a.type == MessageType.Ping).at;
+        var full = list.Single(a => a.type == MessageType.FullScreen).at;
+        // What is true: the Ping waits at most behind the media bytes already queued in SCTP (<= the 256 KiB
+        // media mark, ~80 ms at ~3.3 MB/s), while a 2 MiB frame takes ~600 ms, so the Ping lands first. With
+        // one shared channel it would arrive after the frame, ~600 ms+. The 1 s bound is a loose guard for slow CI.
+        Assert.True(ping < full, $"ping {(ping - start).TotalMilliseconds:0} ms, frame {(full - start).TotalMilliseconds:0} ms");
+        Assert.True((ping - start) < TimeSpan.FromSeconds(1), $"ping took {(ping - start).TotalMilliseconds:0} ms");
+        Console.WriteLine($"P4.4 latency: ping {(ping - start).TotalMilliseconds:0} ms, 2 MiB frame {(full - start).TotalMilliseconds:0} ms");
+    }
+
+    [RouterFact]
+    public async Task Closing_only_the_media_channel_raises_Disconnected_once_on_both_sides()
+    {
+        var (host, viewer) = await PairAsync();
+        using var _h = host; using var _v = viewer;
+        host.T.CloseMediaChannelForTest();
+        await host.Disconnected.Task.WaitAsync(Limit);
+        await viewer.Disconnected.Task.WaitAsync(Limit);
+        await Task.Delay(500);
+        Assert.Equal(1, host.Disconnects);
+        Assert.Equal(1, viewer.Disconnects);
+        Assert.False(host.T.IsConnected);
+        Assert.False(viewer.T.IsConnected);
+    }
+
+    [RouterFact]
     public async Task SCTP_sender_tuning_is_applied_on_both_ends()
     {
         var (host, viewer) = await PairAsync();
@@ -152,10 +236,11 @@ public class WebRtcTransportTests
             expected[0] = (byte)i;
             Assert.True(expected.AsSpan().SequenceEqual(m.Data));
         }
-        // High-water mark plus one chunk (1 header byte + payload); without backpressure this reaches ~8 MB.
-        Assert.True(host.T.MaxBufferedObserved <= WebRtcTransport.HighWaterMark + WebRtcTransport.ChunkSize + 1,
-            $"max buffered {host.T.MaxBufferedObserved}");
-        Assert.True(host.T.MaxBufferedObserved > 0);
+        // FullScreen is Media plane: the media channel's mark plus one chunk (1 header byte + payload);
+        // without backpressure this reaches ~8 MB.
+        Assert.True(host.T.MaxMediaBufferedObserved <= WebRtcTransport.MediaHighWaterMark + WebRtcTransport.ChunkSize + 1,
+            $"max buffered {host.T.MaxMediaBufferedObserved}");
+        Assert.True(host.T.MaxMediaBufferedObserved > 0);
     }
 
     [RouterFact]

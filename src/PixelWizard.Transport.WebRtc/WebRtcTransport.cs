@@ -8,14 +8,19 @@ namespace PixelWizard.Transport.WebRtc
 {
     public enum WebRtcRole
     {
-        /// <summary>Offerer: creates the <c>control</c> data channel. Has already done Register + WaitForPeerAsync.</summary>
+        /// <summary>Offerer: creates the <c>control</c> and <c>media-jpeg</c> data channels. Has already done Register + WaitForPeerAsync.</summary>
         Host,
-        /// <summary>Answerer: receives the <c>control</c> data channel. Has already done JoinAsync.</summary>
+        /// <summary>Answerer: receives the <c>control</c> and <c>media-jpeg</c> data channels. Has already done JoinAsync.</summary>
         Viewer,
     }
 
     /// <summary>
-    /// <see cref="ISessionTransport"/> over one reliable, ordered RTCDataChannel named <c>control</c>.
+    /// <see cref="ISessionTransport"/> over two reliable, ordered RTCDataChannels: <c>control</c> carries every
+    /// Control-plane message and <c>media-jpeg</c> every Media-plane message (decided by
+    /// <see cref="MessageTypeExtensions.GetPlane"/>), so a large JPEG frame never sits in front of a Ping,
+    /// chat line or input event in the same channel queue. Each channel has its own reassembly buffer, send
+    /// lock and high-water mark; both feed one ordered receive loop, so <see cref="MessageReceived"/> is a
+    /// single stream (ordering is guaranteed within a plane, not across the two).
     /// Establishment is not on the interface: call <see cref="EstablishAsync"/> with a
     /// <see cref="SignalingClient"/> that has already registered (and seen the peer) or joined.
     ///
@@ -30,6 +35,7 @@ namespace PixelWizard.Transport.WebRtc
     public sealed class WebRtcTransport : ISessionTransport
     {
         public const string ControlChannelLabel = "control";
+        public const string MediaChannelLabel = "media-jpeg";
         internal const int ChunkSize = 16 * 1024;
         internal const int MaxConsecutiveHandlerFailures = 5;
         /// <summary>
@@ -38,6 +44,11 @@ namespace PixelWizard.Transport.WebRtc
         /// commented out, so the wait polls bufferedAmount every <see cref="BackpressurePollMs"/> ms.
         /// </summary>
         internal const int HighWaterMark = 1024 * 1024;
+        /// <summary>
+        /// The media channel's own, smaller mark: the capture loop awaits each send, so this is the most
+        /// frame data that can be queued ahead of the next frame (about 80 ms at the ~3.3 MB/s SIPSorcery reaches).
+        /// </summary>
+        internal const int MediaHighWaterMark = 256 * 1024;
         internal const int BackpressurePollMs = 5;
         private const int MaxMessageSize = 64 * 1024 * 1024; // sanity cap on a reassembled message
 
@@ -46,14 +57,13 @@ namespace PixelWizard.Transport.WebRtc
         private readonly Channel<byte[]> _inbound = Channel.CreateUnbounded<byte[]>(
             new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
         private readonly Channel<Func<Task>> _sendQueue = Channel.CreateUnbounded<Func<Task>>();
-        private readonly SemaphoreSlim _sendLock = new(1, 1);
         private readonly List<RTCIceCandidateInit> _pendingRemote = new();
         private readonly List<RTCIceCandidateInit> _pendingLocal = new();
         private readonly List<RTCIceCandidateInit> _appliedRemote = new();
-        private readonly MemoryStream _assembly = new();
+        private readonly Lane _control = new(ControlChannelLabel, HighWaterMark);
+        private readonly Lane _media = new(MediaChannelLabel, MediaHighWaterMark);
 
         private RTCPeerConnection? _pc;
-        private RTCDataChannel? _dc;
         private SignalingClient? _signaling;
         private TaskCompletionSource? _established;
         private bool _remoteSet;
@@ -66,9 +76,28 @@ namespace PixelWizard.Transport.WebRtc
         /// <summary>True when the SCTP sender tuning (see <see cref="SctpTuning"/>) was applied after the channel opened.</summary>
         internal bool SctpTuned { get; private set; }
 
-        private long _maxBuffered;
-        /// <summary>Test hook: the largest channel buffered amount seen right after a chunk was queued.</summary>
-        internal long MaxBufferedObserved => Interlocked.Read(ref _maxBuffered);
+        /// <summary>Test hook: the largest control channel buffered amount seen right after a chunk was queued.</summary>
+        internal long MaxBufferedObserved => Interlocked.Read(ref _control.MaxBuffered);
+        /// <summary>Test hook: the largest media channel buffered amount seen right after a chunk was queued.</summary>
+        internal long MaxMediaBufferedObserved => Interlocked.Read(ref _media.MaxBuffered);
+        /// <summary>Test hooks: wire bytes (chunk header included) sent and received on the media channel.</summary>
+        internal long MediaBytesSent => Interlocked.Read(ref _media.BytesSent);
+        internal long MediaBytesReceived => Interlocked.Read(ref _media.BytesReceived);
+        internal long ControlBytesSent => Interlocked.Read(ref _control.BytesSent);
+        internal long ControlBytesReceived => Interlocked.Read(ref _control.BytesReceived);
+
+        /// <summary>Per data channel state: the channel, its send lock, reassembly buffer, mark and counters.</summary>
+        private sealed class Lane
+        {
+            public readonly string Label;
+            public readonly int HighWater;
+            public readonly SemaphoreSlim SendLock = new(1, 1);
+            public readonly MemoryStream Assembly = new();
+            public RTCDataChannel? Dc;
+            public volatile bool Open;
+            public long MaxBuffered, BytesSent, BytesReceived;
+            public Lane(string label, int highWater) { Label = label; HighWater = highWater; }
+        }
 
         public event Action<NetworkMessage>? MessageReceived;
         public event Action? Connected;
@@ -92,7 +121,7 @@ namespace PixelWizard.Transport.WebRtc
         public string? SelectedPairType => _selectedPair ??= ReadPair();
 
         /// <summary>
-        /// Builds the peer connection and completes when the control channel is open. Faults, and cleans up
+        /// Builds the peer connection and completes when both the control and media channels are open. Faults, and cleans up
         /// (raising Disconnected once), on ICE failure, signaling error, peer-left/bye, timeout or cancellation.
         /// </summary>
         /// <param name="turn">From peer-joined (host) or joined (viewer); null when the router issues none.</param>
@@ -157,7 +186,9 @@ namespace PixelWizard.Transport.WebRtc
 
                 if (role == WebRtcRole.Host)
                 {
-                    Wire(await pc.createDataChannel(ControlChannelLabel).ConfigureAwait(false));
+                    // Both channels exist before the offer, so one SDP negotiates both.
+                    Wire(_control, await pc.createDataChannel(ControlChannelLabel).ConfigureAwait(false));
+                    Wire(_media, await pc.createDataChannel(MediaChannelLabel).ConfigureAwait(false));
                     var offer = pc.createOffer();
                     await pc.setLocalDescription(offer).ConfigureAwait(false);
                     await signaling.SendOfferAsync(offer.sdp, linked.Token).ConfigureAwait(false);
@@ -167,7 +198,8 @@ namespace PixelWizard.Transport.WebRtc
                 {
                     pc.ondatachannel += dc =>
                     {
-                        if (dc.label == ControlChannelLabel) Wire(dc);
+                        if (dc.label == ControlChannelLabel) Wire(_control, dc);
+                        else if (dc.label == MediaChannelLabel) Wire(_media, dc);
                     };
                 }
 
@@ -183,15 +215,17 @@ namespace PixelWizard.Transport.WebRtc
                     && Volatile.Read(ref _down) == 0;
                 Teardown(sendBye: false);
                 if (timedOut)
-                    throw new TimeoutException($"WebRTC control channel did not open within {EstablishTimeout.TotalSeconds:0.#} s.");
+                    throw new TimeoutException($"WebRTC data channels did not open within {EstablishTimeout.TotalSeconds:0.#} s.");
                 throw;
             }
         }
 
         public async Task SendMessageAsync(NetworkMessage message)
         {
-            if (!IsConnected || _dc == null) return;
-            await _sendLock.WaitAsync().ConfigureAwait(false);
+            var lane = message.Type.GetPlane() == MessagePlane.Media ? _media : _control;
+            if (!IsConnected || lane.Dc == null) return;
+            var dc = lane.Dc;
+            await lane.SendLock.WaitAsync().ConfigureAwait(false);
             try
             {
                 if (!IsConnected) return;
@@ -201,8 +235,8 @@ namespace PixelWizard.Transport.WebRtc
                 {
                     int n = Math.Min(ChunkSize, data.Length - offset);
                     bool last = offset + n >= data.Length;
-                    // Backpressure: never let the SCTP send queue grow past the high-water mark plus one chunk.
-                    while (_dc.bufferedAmount > (ulong)HighWaterMark)
+                    // Backpressure: never let this channel's send queue grow past its high-water mark plus one chunk.
+                    while (dc.bufferedAmount > (ulong)lane.HighWater)
                     {
                         if (!IsConnected) return;
                         await Task.Delay(BackpressurePollMs, _lifetime.Token).ConfigureAwait(false);
@@ -211,14 +245,15 @@ namespace PixelWizard.Transport.WebRtc
                     var chunk = new byte[1 + n];
                     chunk[0] = last ? (byte)0 : (byte)1;
                     Buffer.BlockCopy(data, offset, chunk, 1, n);
-                    _dc.send(chunk);
-                    long buffered = (long)_dc.bufferedAmount;
+                    dc.send(chunk);
+                    long buffered = (long)dc.bufferedAmount;
                     long seen;
-                    while (buffered > (seen = Interlocked.Read(ref _maxBuffered))
-                           && Interlocked.CompareExchange(ref _maxBuffered, buffered, seen) != seen) { }
+                    while (buffered > (seen = Interlocked.Read(ref lane.MaxBuffered))
+                           && Interlocked.CompareExchange(ref lane.MaxBuffered, buffered, seen) != seen) { }
                     sent += chunk.Length;
                     offset += n;
                 } while (offset < data.Length);
+                Interlocked.Add(ref lane.BytesSent, sent);
                 BytesSent?.Invoke(sent);
             }
             catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
@@ -228,9 +263,12 @@ namespace PixelWizard.Transport.WebRtc
             }
             finally
             {
-                _sendLock.Release();
+                lane.SendLock.Release();
             }
         }
+
+        /// <summary>Test hook: closes only the media data channel, to prove either channel closing ends the transport.</summary>
+        internal void CloseMediaChannelForTest() => _media.Dc?.close();
 
         /// <summary>Local close: tells the peer (bye over signaling), closes the connection, raises Disconnected once.</summary>
         public void Disconnect() => Teardown(sendBye: true);
@@ -242,46 +280,56 @@ namespace PixelWizard.Transport.WebRtc
 
         // ---- internals ----
 
-        private void Wire(RTCDataChannel dc)
+        private void Wire(Lane lane, RTCDataChannel dc)
         {
-            _dc = dc;
-            dc.onopen += OnOpen;
-            dc.onclose += () => Fail(new IOException("Control channel closed"), raiseError: false);
-            dc.onerror += e => Fail(new IOException($"Control channel error: {e}"));
-            dc.onmessage += (_, _, data) => OnChannelData(data);
-            if (dc.readyState == RTCDataChannelState.open) OnOpen();
+            lane.Dc = dc;
+            dc.onopen += () => OnOpen(lane);
+            dc.onclose += () => Fail(new IOException($"{lane.Label} channel closed"), raiseError: false);
+            dc.onerror += e => Fail(new IOException($"{lane.Label} channel error: {e}"));
+            dc.onmessage += (_, _, data) => OnChannelData(lane, data);
+            if (dc.readyState == RTCDataChannelState.open) OnOpen(lane);
         }
 
-        private void OnOpen()
+        // The transport is open (and Connected raised, EstablishAsync completed) once BOTH channels are open.
+        private void OnOpen(Lane lane)
         {
+            bool bothOpen;
+            bool firstOpen;
             lock (_gate)
             {
-                if (_open || Volatile.Read(ref _down) != 0) return;
-                _open = true;
+                if (lane.Open || Volatile.Read(ref _down) != 0) return;
+                firstOpen = !_control.Open && !_media.Open;
+                lane.Open = true;
+                bothOpen = _control.Open && _media.Open;
+                if (bothOpen) _open = true;
             }
+            // The tuning is per SCTP association, not per channel: both channels share one sender, so it
+            // is applied once, as soon as the association carries its first open channel.
+            if (firstOpen && _pc != null) SctpTuned = SctpTuning.TryApply(_pc);
+            if (!bothOpen) return;
             _selectedPair ??= ReadPair();
-            if (_pc != null) SctpTuned = SctpTuning.TryApply(_pc);
             try { Connected?.Invoke(); } catch (Exception ex) { HandlerError?.Invoke(ex); }
             _established?.TrySetResult();
         }
 
         // Runs on the SCTP thread: reassemble only, then hand the whole message to the ordered receive loop.
-        private void OnChannelData(byte[] data)
+        private void OnChannelData(Lane lane, byte[] data)
         {
             if (data.Length < 1) return;
-            lock (_assembly)
+            lock (lane.Assembly)
             {
-                if (_assembly.Length + data.Length - 1 > MaxMessageSize)
+                if (lane.Assembly.Length + data.Length - 1 > MaxMessageSize)
                 {
-                    _assembly.SetLength(0);
+                    lane.Assembly.SetLength(0);
                     Fail(new InvalidDataException("Reassembled message exceeds the size limit."));
                     return;
                 }
-                _assembly.Write(data, 1, data.Length - 1);
+                lane.Assembly.Write(data, 1, data.Length - 1);
+                Interlocked.Add(ref lane.BytesReceived, data.Length);
                 BytesReceived?.Invoke(data.Length);
                 if (data[0] != 0) return;
-                var whole = _assembly.ToArray();
-                _assembly.SetLength(0);
+                var whole = lane.Assembly.ToArray();
+                lane.Assembly.SetLength(0);
                 _inbound.Writer.TryWrite(whole);
             }
         }
@@ -355,7 +403,7 @@ namespace PixelWizard.Transport.WebRtc
                 }
                 // Socket closed cleanly without peer-left. Before the channel is open that is a failed
                 // establishment; afterwards the data channel may still be fine, so nothing to do.
-                if (!_open) Fail(new IOException("Signaling ended before the control channel opened."));
+                if (!_open) Fail(new IOException("Signaling ended before the data channels opened."));
             }
             catch (OperationCanceledException) { }
             catch (Exception ex) { Fail(ex); }
