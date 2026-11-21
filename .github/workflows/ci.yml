@@ -35,7 +35,8 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
-      # Only the WebRTC transport test step below needs Go (it builds the router the tests pair through).
+      # Go builds the router that the router-backed tests (Avalonia client relay tests, WebRTC transport
+      # tests) pair through.
       # Newer than the go job's 1.22.12 (which proves the go.mod minimum): Go 1.22 Mach-O binaries
       # have no LC_UUID load command, and the macOS 26 runner's dyld refuses to start them.
       - uses: actions/setup-go@v5
@@ -59,11 +60,33 @@ jobs:
 
       # Avalonia client view models, on Avalonia's headless platform. One TFM per OS
       # like the client itself (net9.0-windows on Windows, net9.0 on macOS), so no -f.
+      - name: Build the router for router-backed tests
+        shell: bash
+        run: cd router-server && go build -o "$RUNNER_TEMP/router.exe" .
+
       - name: Test (Avalonia client)
+        env:
+          PIXELWIZARD_ROUTER_EXE: ${{ runner.temp }}/router.exe
         run: >
           dotnet test tests/PixelWizard.AvaloniaClient.Tests/PixelWizard.AvaloniaClient.Tests.csproj
           --no-build -c Release
           --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=avalonia.trx"
+          --results-directory TestResults
+
+      # The relay connector tests skip themselves without PIXELWIZARD_ROUTER_EXE; a skip here means the
+      # variable was lost, so any skipped test fails the job.
+      - name: Assert Avalonia client tests ran with none skipped
+        shell: pwsh
+        run: |
+          [xml]$trx = Get-Content TestResults/avalonia.trx
+          $results = @($trx.TestRun.Results.UnitTestResult)
+          $skipped = @($results | Where-Object { $_.outcome -eq 'NotExecuted' })
+          Write-Host "Avalonia client tests: executed=$($results.Count) skipped=$($skipped.Count)"
+          if ($skipped.Count -gt 0) {
+            Write-Error "Avalonia client tests must not skip: $(($skipped | ForEach-Object { $_.testName }) -join '; ')"
+            exit 1
+          }
 
       # The System.Drawing (WinForms) detector suite only builds/executes on
       # the net9.0-windows TFM. Before T8, PixelWizard.WindowsHost's
@@ -146,7 +169,7 @@ jobs:
 
       # P4.2: two WebRtcTransports are paired in one process through a real router built on this runner
       # (no TURN, so candidates are host candidates; relay is covered by the coturn job). The fixture starts
-      # the router from PIXELWIZARD_ROUTER_EXE. Runs on both OSes so neither OS's SIPSorcery behaviour
+      # the router from PIXELWIZARD_ROUTER_EXE (built in the step before the Avalonia client tests). Runs on both OSes so neither OS's SIPSorcery behaviour
       # stands alone (PHASE4-PLAN risks). This replaces the P3.7 ICE-probe step; the probe project stays
       # as a diagnostic tool. The assertion step below fails on any skip, because the suite skips itself
       # whenever the variable is missing.
@@ -156,7 +179,6 @@ jobs:
         run: |
           # GitHub runs bash steps with -eo pipefail; the test status is checked explicitly instead.
           set +e -u
-          (cd router-server && go build -o "$RUNNER_TEMP/router.exe" .) || { echo "::error::router build failed"; exit 1; }
           PIXELWIZARD_ROUTER_EXE="$RUNNER_TEMP/router.exe" dotnet test tests/PixelWizard.Transport.WebRtc.Tests/PixelWizard.Transport.WebRtc.Tests.csproj \
             --no-build -c Release \
             --logger "console;verbosity=normal" \
