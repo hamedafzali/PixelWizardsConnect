@@ -181,6 +181,13 @@ it. This closes the BACKLOG row.
   by `MessagePlane`.
 - Consent tests over the real transport: no media bytes before `Approve()`; deny and close
   both tear down the peer connection; a late approval after the viewer left changes nothing.
+- `media-jpeg` never builds a frame queue: the capture loop awaits each send, so the
+  transport's backpressure paces capture, and the media channel's high-water mark is kept small
+  so queued frames add little latency. Frames are not dropped individually, because a
+  `ScreenDelta` depends on the frame before it. Measured in P4.2: SIPSorcery's data
+  channel reaches about 3.3 MB/s on loopback even with the SCTP tuning (0.3 MB/s without it), so
+  5–15 fps of 50–200 KB JPEG frames is the ceiling, not the norm. This path is a fallback; H.264
+  is the real video path.
 
 ### P4.5 — App wiring for router-mediated sessions (D7)
 - Router mode in the host (register, then wait for the peer) and in the viewer (connect by
@@ -253,3 +260,4 @@ ADR phase table, BACKLOG, and the Phase 5 entry points: the browser viewer reuse
 | Media flows before consent | Safety failure | D4 tests at P4.4 and P4.8, asserting zero media bytes before `Approve()` |
 | Carrier blocks UDP | No direct path | TURN over TLS on 443 from the Phase 3 coturn template |
 | Phase 3 gate fails | Signaling or TURN redesign | P3.8 runs before P4.5's first cross-network check |
+| SIPSorcery data channel throughput (P4.2: 0.3 MB/s stock, about 3.3 MB/s with the SCTP sender tuning, loopback) | `media-jpeg` is slow; control traffic is unaffected | `SctpTuning` sets three private SctpDataSender fields by reflection and a test fails CI if an upgrade renames them; after a loss SIPSorcery falls back to its own slow start; backpressure paces `media-jpeg` capture; H.264 on an RTP track does not use SCTP |
