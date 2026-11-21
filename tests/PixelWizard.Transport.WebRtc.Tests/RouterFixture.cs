@@ -36,6 +36,9 @@ public sealed class RouterFixture : IDisposable
             RedirectStandardError = true,
         };
         psi.Environment["PORT"] = Port.ToString();
+        // Every test pairs two clients through the router; the default of 10 registrations per minute per IP
+        // is below the number of tests in this suite.
+        psi.Environment["RATE_LIMIT_MAX"] = "1000";
         _process = Process.Start(psi) ?? throw new InvalidOperationException("router did not start");
         // Drain so a full pipe can never block the router.
         _process.OutputDataReceived += (_, _) => { };

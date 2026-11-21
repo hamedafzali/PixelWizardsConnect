@@ -32,6 +32,13 @@ namespace PixelWizard.Transport.WebRtc
         public const string ControlChannelLabel = "control";
         internal const int ChunkSize = 16 * 1024;
         internal const int MaxConsecutiveHandlerFailures = 5;
+        /// <summary>
+        /// Sender backpressure: before each chunk, SendMessageAsync waits while the channel's buffered amount
+        /// exceeds this. SIPSorcery 10.0.16 queues send() unboundedly and its onbufferedamountlow event is
+        /// commented out, so the wait polls bufferedAmount every <see cref="BackpressurePollMs"/> ms.
+        /// </summary>
+        internal const int HighWaterMark = 1024 * 1024;
+        internal const int BackpressurePollMs = 5;
         private const int MaxMessageSize = 64 * 1024 * 1024; // sanity cap on a reassembled message
 
         private readonly object _gate = new();
@@ -58,6 +65,10 @@ namespace PixelWizard.Transport.WebRtc
 
         /// <summary>True when the SCTP sender tuning (see <see cref="SctpTuning"/>) was applied after the channel opened.</summary>
         internal bool SctpTuned { get; private set; }
+
+        private long _maxBuffered;
+        /// <summary>Test hook: the largest channel buffered amount seen right after a chunk was queued.</summary>
+        internal long MaxBufferedObserved => Interlocked.Read(ref _maxBuffered);
 
         public event Action<NetworkMessage>? MessageReceived;
         public event Action? Connected;
@@ -189,15 +200,27 @@ namespace PixelWizard.Transport.WebRtc
                 {
                     int n = Math.Min(ChunkSize, data.Length - offset);
                     bool last = offset + n >= data.Length;
+                    // Backpressure: never let the SCTP send queue grow past the high-water mark plus one chunk.
+                    while (_dc.bufferedAmount > (ulong)HighWaterMark)
+                    {
+                        if (!IsConnected) return;
+                        await Task.Delay(BackpressurePollMs, _lifetime.Token).ConfigureAwait(false);
+                    }
+                    if (!IsConnected) return;
                     var chunk = new byte[1 + n];
                     chunk[0] = last ? (byte)0 : (byte)1;
                     Buffer.BlockCopy(data, offset, chunk, 1, n);
                     _dc.send(chunk);
+                    long buffered = (long)_dc.bufferedAmount;
+                    long seen;
+                    while (buffered > (seen = Interlocked.Read(ref _maxBuffered))
+                           && Interlocked.CompareExchange(ref _maxBuffered, buffered, seen) != seen) { }
                     sent += chunk.Length;
                     offset += n;
                 } while (offset < data.Length);
                 BytesSent?.Invoke(sent);
             }
+            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
             catch (Exception ex)
             {
                 Fail(ex);

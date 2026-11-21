@@ -130,6 +130,47 @@ public class WebRtcTransportTests
     }
 
     [RouterFact]
+    public async Task Sender_backpressure_bounds_the_send_queue_and_keeps_order()
+    {
+        var (host, viewer) = await PairAsync();
+        using var _h = host; using var _v = viewer;
+        const int count = 8, size = 1024 * 1024;
+        for (int i = 0; i < count; i++)
+        {
+            var data = new byte[size];
+            new Random(i).NextBytes(data);
+            data[0] = (byte)i;
+            await host.T.SendMessageAsync(Msg(MessageType.FullScreen, data));
+        }
+        for (int i = 0; i < count; i++)
+        {
+            var m = await viewer.NextAsync();
+            Assert.Equal(size, m.Data.Length);
+            Assert.Equal((byte)i, m.Data[0]);
+            var expected = new byte[size];
+            new Random(i).NextBytes(expected);
+            expected[0] = (byte)i;
+            Assert.True(expected.AsSpan().SequenceEqual(m.Data));
+        }
+        // High-water mark plus one chunk (1 header byte + payload); without backpressure this reaches ~8 MB.
+        Assert.True(host.T.MaxBufferedObserved <= WebRtcTransport.HighWaterMark + WebRtcTransport.ChunkSize + 1,
+            $"max buffered {host.T.MaxBufferedObserved}");
+        Assert.True(host.T.MaxBufferedObserved > 0);
+    }
+
+    [RouterFact]
+    public async Task A_disconnect_while_the_sender_is_waiting_ends_the_send()
+    {
+        var (host, viewer) = await PairAsync();
+        using var _h = host; using var _v = viewer;
+        var big = Msg(MessageType.FullScreen, new byte[8 * 1024 * 1024]);
+        var send = host.T.SendMessageAsync(big);
+        await Task.Delay(200);
+        host.T.Disconnect();
+        await send.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [RouterFact]
     public async Task Local_disconnect_raises_Disconnected_once_on_both_sides()
     {
         var (host, viewer) = await PairAsync();

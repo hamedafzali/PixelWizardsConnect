@@ -168,10 +168,10 @@ jobs:
       - name: Assert WebRTC transport tests all executed and passed
         shell: pwsh
         run: |
-          # 10 = number of [RouterFact] cases in WebRtcTransportTests.cs. Update deliberately when cases are
+          # 12 = number of [RouterFact] cases in WebRtcTransportTests.cs. Update deliberately when cases are
           # added or removed: it exists to catch the suite reporting skipped (router variable lost) or
           # fewer tests than written as green.
-          $expected = 10
+          $expected = 12
 
           [xml]$trx = Get-Content TestResults/webrtc.trx
           $results = @($trx.TestRun.Results.UnitTestResult)
