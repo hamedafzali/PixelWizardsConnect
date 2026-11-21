@@ -1,0 +1,217 @@
+name: FFmpeg (vendored build)
+
+# Builds the minimal LGPL FFmpeg that the app vendors (Phase 4 P4.6, decision D6). Manual only:
+# it is never triggered by a push or pull request. Packaging and the main CI download the result
+# by checksum from the manifest at packaging/ffmpeg/manifest.json, they do not build it.
+#
+# Run with publish=true to also upload the zips, SHA256SUMS and licence notices to a GitHub
+# release tagged ffmpeg-<version>-pw<revision>. Without it, the results are workflow artifacts only.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Upload the results to a GitHub release (tag ffmpeg-<version>-pw<revision>)"
+        type: boolean
+        default: false
+      revision:
+        description: "Package revision N in the release tag ffmpeg-<version>-pwN (bump when the build recipe changes)"
+        type: string
+        default: "1"
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: "9.0.304"
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  # FFmpeg 9.0.x is the major FFmpeg.AutoGen 9.0.1 binds to (libavcodec 63, libavdevice 63): the T8
+  # spike ran SIPSorceryMedia.FFmpeg 10.0.16 on it with the AutoGen 9.0.1 override. 9.0.1 is the
+  # exact patch release the spike ran against on macOS.
+  FFMPEG_VERSION: "9.0.1"
+  FFMPEG_URL: "https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz"
+  FFMPEG_SHA256: "cf38e0e28c7e5605942c4a77755349b0145804a397af37eb1fb4c77cb237f635"
+  # Header-only Windows GPU encoder dependencies (MIT), pinned to commits. They load the vendor
+  # DLLs from the GPU driver at run time, so nothing extra is shipped.
+  NVCODEC_REPO: "https://github.com/FFmpeg/nv-codec-headers.git"
+  NVCODEC_TAG: "n12.2.72.0"
+  NVCODEC_COMMIT: "c69278340ab1d5559c7d7bf0edf615dc33ddbba7"
+  AMF_REPO: "https://github.com/GPUOpen-LibrariesAndSDKs/AMF.git"
+  AMF_TAG: "v1.5.3"
+  AMF_COMMIT: "57ee0cfb0e1a08d9041f77435653794c1b012be0"
+
+jobs:
+  macos:
+    name: macOS arm64
+    runs-on: macos-latest
+    env:
+      REVISION: ${{ inputs.revision }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate inputs
+        run: |
+          [[ "$REVISION" =~ ^[0-9]+$ ]] || { echo "revision must be a number"; exit 1; }
+          [[ "$(uname -m)" == "arm64" ]] || { echo "expected an arm64 runner"; exit 1; }
+
+      - name: Download and verify FFmpeg source
+        run: |
+          curl -fsSL -o ffmpeg.tar.xz "$FFMPEG_URL"
+          echo "$FFMPEG_SHA256  ffmpeg.tar.xz" | shasum -a 256 -c -
+          mkdir ffmpeg-src && tar -xf ffmpeg.tar.xz -C ffmpeg-src
+
+      - name: Build (LGPL, shared)
+        run: bash packaging/ffmpeg/build.sh macos-arm64 "ffmpeg-src/ffmpeg-$FFMPEG_VERSION" work
+
+      - name: Package
+        run: bash packaging/ffmpeg/package.sh macos-arm64 "ffmpeg-src/ffmpeg-$FFMPEG_VERSION" work dist "$FFMPEG_VERSION" "$REVISION"
+
+      - name: Check the manifest records this configure line
+        run: |
+          expected=$(jq -r '.assets["macos-arm64"].configure' packaging/ffmpeg/manifest.json)
+          actual=$(cat dist/configure-line-macos-arm64.txt)
+          [[ "$expected" == "$actual" ]] || { echo "manifest configure line differs from the build"; echo "manifest: $expected"; echo "build:    $actual"; exit 1; }
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # Probe the packaged zip, not the install tree: which H.264 encoders it exposes, whether one
+      # opens, and whether frames survive encode then decode (SIPSorceryMedia.FFmpeg's loader included).
+      - name: Encoder probe
+        run: |
+          mkdir probe-libs && unzip -q dist/ffmpeg-*-macos-arm64.zip -d probe-libs
+          PIXELWIZARD_FFMPEG_DIR="$PWD/probe-libs" dotnet test tests/PixelWizard.FFmpeg.Tests/PixelWizard.FFmpeg.Tests.csproj \
+            -c Release --logger "console;verbosity=detailed"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ffmpeg-macos-arm64
+          path: dist/
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    env:
+      REVISION: ${{ inputs.revision }}
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      # MSYS2 UCRT64 with the MinGW-w64 GCC: FFmpeg's own recommended Windows route, and the one the
+      # public builds use. With w32threads and -static-libgcc the DLLs import only Windows system
+      # DLLs (package.sh fails the build otherwise), so no MinGW runtime ships. A native MSVC build
+      # would also work but needs the VC runtime shipped, a second toolchain bootstrap for the
+      # MSYS2 configure, and offers no benefit for a C codebase.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            make diffutils git curl zip unzip jq
+            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-nasm mingw-w64-ucrt-x86_64-pkgconf
+
+      - name: Validate inputs
+        run: |
+          [[ "$REVISION" =~ ^[0-9]+$ ]] || { echo "revision must be a number"; exit 1; }
+          gcc --version | head -1
+          nasm --version
+
+      - name: Download and verify FFmpeg source
+        run: |
+          curl -fsSL -o ffmpeg.tar.xz "$FFMPEG_URL"
+          echo "$FFMPEG_SHA256  ffmpeg.tar.xz" | sha256sum -c -
+          mkdir ffmpeg-src && tar -xf ffmpeg.tar.xz -C ffmpeg-src
+
+      - name: Header-only encoder dependencies (nv-codec-headers, AMF)
+        run: |
+          set -euo pipefail
+          mkdir -p deps/include deps/licenses deps-src
+          git clone --quiet --branch "$NVCODEC_TAG" --depth 1 "$NVCODEC_REPO" deps-src/nvh
+          [[ "$(git -C deps-src/nvh rev-parse HEAD)" == "$NVCODEC_COMMIT" ]] || { echo "nv-codec-headers commit mismatch"; exit 1; }
+          make -C deps-src/nvh install PREFIX="$PWD/deps"
+          head -n 26 deps-src/nvh/include/ffnvcodec/dynlink_loader.h > deps/licenses/nv-codec-headers-MIT.txt
+          git clone --quiet --branch "$AMF_TAG" --depth 1 "$AMF_REPO" deps-src/AMF
+          [[ "$(git -C deps-src/AMF rev-parse HEAD)" == "$AMF_COMMIT" ]] || { echo "AMF commit mismatch"; exit 1; }
+          cp -R deps-src/AMF/amf/public/include deps/include/AMF
+          cp deps-src/AMF/LICENSE.txt deps/licenses/AMF-LICENSE.txt
+          sed -n '1,28p' deps-src/AMF/amf/public/include/core/Version.h > deps/licenses/AMF-headers-MIT.txt
+
+      - name: Build (LGPL, shared)
+        run: |
+          set -euo pipefail
+          export DEPS="$PWD/deps"
+          bash packaging/ffmpeg/build.sh windows-x64 "ffmpeg-src/ffmpeg-$FFMPEG_VERSION" work
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          export DEPS_LICENSES="$PWD/deps/licenses"
+          bash packaging/ffmpeg/package.sh windows-x64 "ffmpeg-src/ffmpeg-$FFMPEG_VERSION" work dist "$FFMPEG_VERSION" "$REVISION"
+
+      - name: Check the manifest records this configure line
+        run: |
+          expected=$(jq -r '.assets["windows-x64"].configure' packaging/ffmpeg/manifest.json)
+          actual=$(cat dist/configure-line-windows-x64.txt)
+          [[ "$expected" == "$actual" ]] || { echo "manifest configure line differs from the build"; echo "manifest: $expected"; echo "build:    $actual"; exit 1; }
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Encoder probe
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem dist -Filter 'ffmpeg-*-windows-x64.zip' | Select-Object -First 1
+          Expand-Archive -Path $zip.FullName -DestinationPath probe-libs
+          $env:PIXELWIZARD_FFMPEG_DIR = (Resolve-Path probe-libs).Path
+          dotnet test tests/PixelWizard.FFmpeg.Tests/PixelWizard.FFmpeg.Tests.csproj -c Release --logger "console;verbosity=detailed"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ffmpeg-windows-x64
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    if: ${{ inputs.publish }}
+    needs: [macos, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      REVISION: ${{ inputs.revision }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create the release
+        run: |
+          [[ "$REVISION" =~ ^[0-9]+$ ]] || { echo "revision must be a number"; exit 1; }
+          tag="ffmpeg-${FFMPEG_VERSION}-pw${REVISION}"
+          cd dist
+          cat SHA256SUMS-* > SHA256SUMS
+          for p in macos-arm64 windows-x64; do
+            (cd "licenses-$p" && zip -qr "../licenses-$p.zip" .)
+          done
+          cat > notes.md <<EON
+          Minimal LGPL FFmpeg ${FFMPEG_VERSION}, shared libraries, built by the FFmpeg workflow in this repository.
+          Source: ${FFMPEG_URL} (sha256 ${FFMPEG_SHA256}).
+          The exact configure arguments are in configure-line-*.txt and in packaging/ffmpeg/manifest.json.
+          Licence: LGPL 2.1 or later; notices are in licenses-*.zip and inside each package.
+          EON
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "FFmpeg ${FFMPEG_VERSION} (LGPL, pw${REVISION})" --notes-file notes.md \
+            ffmpeg-*.zip SHA256SUMS configure-line-*.txt licenses-*.zip

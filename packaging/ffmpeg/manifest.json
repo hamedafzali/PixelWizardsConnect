@@ -1,0 +1,49 @@
+{
+  "_comment": "Source of truth for the vendored FFmpeg. Fields marked TO_BE_FILLED_AFTER_FIRST_WORKFLOW_RUN are placeholders: copy the sha256 from the SHA256SUMS of the workflow run that gets published. The ffmpeg.yml workflow fails if a configure line here differs from the one it built.",
+  "ffmpegVersion": "9.0.1",
+  "packageRevision": 1,
+  "releaseTag": "ffmpeg-9.0.1-pw1",
+  "licence": "LGPL-2.1-or-later",
+  "source": {
+    "url": "https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz",
+    "sha256": "cf38e0e28c7e5605942c4a77755349b0145804a397af37eb1fb4c77cb237f635"
+  },
+  "assets": {
+    "macos-arm64": {
+      "assetName": "ffmpeg-9.0.1-pw1-macos-arm64.zip",
+      "sha256": "TO_BE_FILLED_AFTER_FIRST_WORKFLOW_RUN",
+      "ffmpegVersion": "9.0.1",
+      "configure": "--disable-everything --disable-gpl --disable-nonfree --disable-autodetect --disable-programs --disable-doc --disable-debug --enable-shared --disable-static --disable-avfilter --disable-network --enable-decoder=h264 --enable-parser=h264 --install_name_dir=@loader_path --enable-pthreads --enable-videotoolbox --enable-encoder=h264_videotoolbox",
+      "libraries": [
+        "libavcodec.63.dylib",
+        "libavdevice.63.dylib",
+        "libavformat.63.dylib",
+        "libavutil.61.dylib",
+        "libswresample.7.dylib",
+        "libswscale.10.dylib"
+      ],
+      "h264Encoders": [
+        "h264_videotoolbox"
+      ]
+    },
+    "windows-x64": {
+      "assetName": "ffmpeg-9.0.1-pw1-windows-x64.zip",
+      "sha256": "TO_BE_FILLED_AFTER_FIRST_WORKFLOW_RUN",
+      "ffmpegVersion": "9.0.1",
+      "configure": "--disable-everything --disable-gpl --disable-nonfree --disable-autodetect --disable-programs --disable-doc --disable-debug --enable-shared --disable-static --disable-avfilter --disable-network --enable-decoder=h264 --enable-parser=h264 --arch=x86_64 --target-os=mingw32 --disable-pthreads --enable-w32threads --enable-mediafoundation --enable-ffnvcodec --enable-nvenc --enable-amf --enable-encoder=h264_mf,h264_nvenc,h264_amf --extra-ldflags=-static-libgcc",
+      "libraries": [
+        "avcodec-63.dll",
+        "avdevice-63.dll",
+        "avformat-63.dll",
+        "avutil-61.dll",
+        "swresample-7.dll",
+        "swscale-10.dll"
+      ],
+      "h264Encoders": [
+        "h264_mf",
+        "h264_nvenc",
+        "h264_amf"
+      ]
+    }
+  }
+}
