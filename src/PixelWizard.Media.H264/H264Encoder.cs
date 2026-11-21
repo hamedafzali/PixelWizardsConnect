@@ -105,7 +105,9 @@ public sealed unsafe class H264Encoder : IDisposable
             {
                 case "h264_videotoolbox":
                     Opt("realtime", "1");
-                    Opt("allow_sw", "0");
+                    // D5: the OS encoder must always be usable, so permit the software VideoToolbox
+                    // encoder on a Mac (or CI VM) with no hardware encoder free.
+                    Opt("allow_sw", "1");
                     Opt("prio_speed", "1");
                     break;
                 case "h264_nvenc":
