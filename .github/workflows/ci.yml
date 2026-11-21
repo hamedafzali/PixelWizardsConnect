@@ -21,6 +21,10 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # actions: read lets the FFmpeg step download the vendored build from its ffmpeg.yml run.
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
 
@@ -185,6 +189,56 @@ jobs:
             exit 1
           }
           Write-Host "::notice::SystemDrawingScreenChangeDetectorTests: $expected/$expected gracefully skipped on macos-latest (SkipIfNotWindows in-process skip, not a test-host launch failure)."
+
+      # P4.6: the vendored LGPL FFmpeg from an ffmpeg.yml run (workflow artifacts, retained until
+      # 2027-02-19), checked against pinned SHA-256s. Interim until the build is published as a
+      # release and packaging/ffmpeg/manifest.json carries the hashes (P4.9).
+      - uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg-${{ runner.os == 'Windows' && 'windows-x64' || 'macos-arm64' }}
+          path: ${{ runner.temp }}/ffmpeg-dl
+          run-id: 44884098400
+          github-token: ${{ github.token }}
+
+      - name: Verify and unpack the vendored FFmpeg
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            zip=ffmpeg-9.0.1-pw1-windows-x64.zip; sha=912ae1a9a1dd73277991a81ec80fc805919ded7284f37afa3dbd7c41c04b87a9
+          else
+            zip=ffmpeg-9.0.1-pw1-macos-arm64.zip; sha=63b146aaa420d75accc6219ed6f80fd6da05744520bd1cdf37a667c34913463d
+          fi
+          cd "$RUNNER_TEMP/ffmpeg-dl"
+          echo "$sha  $zip" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/ffmpeg" && unzip -q -o "$zip" -d "$RUNNER_TEMP/ffmpeg"
+          lib=$(dirname "$(find "$RUNNER_TEMP/ffmpeg" \( -name 'avcodec-*.dll' -o -name 'libavcodec*.dylib' \) | head -n 1)")
+          [ -n "$lib" ] || { echo "::error::no avcodec library in $zip"; exit 1; }
+          echo "PIXELWIZARD_FFMPEG_DIR=$lib" >> "$GITHUB_ENV"
+
+      - name: Test (FFmpeg probe)
+        run: >
+          dotnet test tests/PixelWizard.FFmpeg.Tests/PixelWizard.FFmpeg.Tests.csproj
+          --no-build -c Release
+          --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=ffmpeg.trx"
+          --results-directory TestResults
+
+      - name: Assert FFmpeg tests all executed and passed
+        shell: pwsh
+        run: |
+          # 3 = FfmpegProbeTests cases. Update deliberately when FFmpeg-backed tests are added: the suite
+          # skips itself when PIXELWIZARD_FFMPEG_DIR is missing, so a skip must fail here.
+          $expected = 3
+          [xml]$trx = Get-Content TestResults/ffmpeg.trx
+          $results = @($trx.TestRun.Results.UnitTestResult)
+          $passed = @($results | Where-Object { $_.outcome -eq 'Passed' })
+          Write-Host "FFmpeg tests: executed=$($results.Count) passed=$($passed.Count)"
+          if ($results.Count -ne $expected -or $passed.Count -ne $expected) {
+            $bad = @($results | Where-Object { $_.outcome -ne 'Passed' }) | ForEach-Object { "$($_.testName): $($_.outcome)" }
+            Write-Error "Expected $expected FFmpeg tests to pass, none skipped: $($bad -join '; ')"
+            exit 1
+          }
 
       # P4.2: two WebRtcTransports are paired in one process through a real router built on this runner
       # (no TURN, so candidates are host candidates; relay is covered by the coturn job). The fixture starts
