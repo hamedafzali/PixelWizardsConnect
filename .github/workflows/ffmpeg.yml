@@ -140,6 +140,10 @@ jobs:
           cp -R deps-src/AMF/amf/public/include deps/include/AMF
           cp deps-src/AMF/LICENSE.txt deps/licenses/AMF-LICENSE.txt
           sed -n '1,28p' deps-src/AMF/amf/public/include/core/Version.h > deps/licenses/AMF-headers-MIT.txt
+          # winpthreads is linked statically into each DLL (build.sh, -static), so its MIT/BSD notice ships.
+          wp=$(find /ucrt64/share/licenses -ipath '*winpthread*' -type f | head -n 1)
+          [[ -n "$wp" ]] || { echo "winpthreads licence not found under /ucrt64/share/licenses"; exit 1; }
+          cp "$wp" deps/licenses/winpthreads-COPYING.txt
 
       - name: Build (LGPL, shared)
         run: |
