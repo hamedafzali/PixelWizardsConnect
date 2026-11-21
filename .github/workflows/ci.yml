@@ -106,6 +106,25 @@ jobs:
           --logger "trx;LogFileName=systemdrawing.trx"
           --results-directory TestResults
 
+      # P4.7: the raw GDI capture tests live in the net9.0-windows build only, so no other step runs them.
+      # They skip (not fail) when the runner has no interactive desktop for CopyFromScreen; a missing
+      # result or a failure fails the job.
+      - name: Test (net9.0-windows — raw capture)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          dotnet test tests/PixelWizard.Tests/PixelWizard.Tests.csproj --no-build -c Release -f net9.0-windows `
+            --filter "FullyQualifiedName~WindowsRawCaptureTests" `
+            --logger "console;verbosity=normal" --logger "trx;LogFileName=rawcapture.trx" --results-directory TestResults
+          [xml]$trx = Get-Content TestResults/rawcapture.trx
+          $results = @($trx.TestRun.Results.UnitTestResult)
+          $passed = @($results | Where-Object { $_.outcome -eq 'Passed' })
+          $skipped = @($results | Where-Object { $_.outcome -eq 'NotExecuted' })
+          $failed = @($results | Where-Object { $_.outcome -ne 'Passed' -and $_.outcome -ne 'NotExecuted' })
+          Write-Host "Windows raw capture: executed=$($results.Count) passed=$($passed.Count) skipped=$($skipped.Count) failed=$($failed.Count)"
+          if ($results.Count -ne 2 -or $failed.Count -gt 0) { Write-Error "Expected 2 WindowsRawCaptureTests results with no failures."; exit 1 }
+          if ($skipped.Count -gt 0) { Write-Host "::notice::Windows raw capture skipped on this runner: $(($skipped | ForEach-Object { $_.Output.StdOut + $_.Output.ErrorInfo.Message }) -join ' | ')" }
+
       - name: Assert System.Drawing suite actually executed and passed (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
