@@ -16,5 +16,6 @@
          FFmpeg.AutoGen 8.1.0, overridden to 9.0.1 to match FFmpeg 9.0.x (libavcodec 63). -->
     <PackageReference Include="FFmpeg.AutoGen" Version="9.0.1" />
     <PackageReference Include="SIPSorceryMedia.FFmpeg" Version="10.0.16" />
+    <ProjectReference Include="..\..\src\PixelWizard.Media.H264\PixelWizard.Media.H264.csproj" />
   </ItemGroup>
 </Project>
