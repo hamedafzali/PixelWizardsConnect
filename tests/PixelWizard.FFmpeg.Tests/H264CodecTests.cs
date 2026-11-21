@@ -67,6 +67,20 @@ public sealed class H264CodecTests
         Assert.Contains(8, types);
         Assert.Contains(5, types);
         Assert.True(AnnexB.HasSpsPpsIdr(aus[0].AnnexB));
+        // The SDP offers 42e01f, so the SPS must be Baseline (profile_idc 66) at level 3.1 or below.
+        var sps = SpsHeader(aus[0].AnnexB);
+        _out.WriteLine($"SPS profile_idc={sps.profile} constraints=0x{sps.constraints:x2} level_idc={sps.level}");
+        Assert.Equal(66, sps.profile);
+        Assert.True(sps.level <= 31, $"level_idc {sps.level} above 3.1");
+    }
+
+    // profile_idc, constraint flags and level_idc: the three bytes after the SPS NAL header.
+    private static (int profile, int constraints, int level) SpsHeader(byte[] annexB)
+    {
+        for (var i = 0; i + 6 < annexB.Length; i++)
+            if (annexB[i] == 0 && annexB[i + 1] == 0 && annexB[i + 2] == 1 && (annexB[i + 3] & 0x1F) == 7)
+                return (annexB[i + 4], annexB[i + 5], annexB[i + 6]);
+        throw new Xunit.Sdk.XunitException("no SPS in the access unit");
     }
 
     [FactIfFfmpeg]

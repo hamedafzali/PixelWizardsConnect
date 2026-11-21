@@ -90,6 +90,10 @@ public sealed unsafe class H264Encoder : IDisposable
             ctx->gop_size = gop; ctx->max_b_frames = 0;
             ctx->flags &= ~ffmpeg.AV_CODEC_FLAG_GLOBAL_HEADER; // parameter sets in-band, not extradata only
             ctx->thread_count = 1;
+            // The generic fields as well as the private options below: h264_mf ignores the private
+            // "profile"/"level" options but maps these to its profile/level, so the SPS matches 42e01f.
+            ctx->profile = ffmpeg.AV_PROFILE_H264_CONSTRAINED_BASELINE;
+            ctx->level = 31;
             diag.Add($"{name}: pix_fmt={fmt}");
 
             var priv = (IntPtr)ctx->priv_data;
