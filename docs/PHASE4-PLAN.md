@@ -209,6 +209,19 @@ and a late approval send nothing.
 - First cross-network check: the user runs the existing app with JPEG over WebRTC on two
   networks. This is information only, not the gate.
 
+**Done 2026-11-21, except the cross-network check, which is the user's manual step (pending).**
+Router mode now goes through `IRelayConnector` (`WebRtcRelayConnector` in the app): the host
+registers on `/signal`, shows the code, waits for the peer, builds `HostSession(transport, hello, "")`
+(empty secret, D3) and only then establishes the transport with the TURN info from `peer-joined`;
+the viewer joins by code and does the same with `ViewerSession`. Consent is the direct path's
+flow, so capture starts only after `Approve()`. The ws/wss URL is derived from the existing
+"host:port" router setting (no new UI). Resume: if the socket drops before pairing, the
+registration resumes with the same code (about 55 s of retries inside the router's 60 s window).
+After a session ends or is refused the host re-registers and shows a new code, since codes are
+one-time use (direct mode re-listens on the same port). LAN discovery is not announced in router
+mode. The app no longer calls `/register` or `/connect`; `RouterHttpClient` and `IRouterClient`
+stay in the code and the HTTP routes retire in P4.10 (D7).
+
 ### P4.6 — Vendored FFmpeg (D6)
 - A build workflow, a release asset, a SHA-256 manifest, and the licence notices shipped with
   each package.
