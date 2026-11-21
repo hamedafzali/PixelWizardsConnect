@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- H.264 encode/decode wrappers that drive libavcodec directly through FFmpeg.AutoGen (P4.8a).
+       Not SIPSorceryMedia.FFmpeg's encoder: it cannot drive h264_videotoolbox (see FfmpegProbeTests). -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FFmpeg.AutoGen" Version="9.0.1" />
+    <ProjectReference Include="..\PixelWizard.Core\PixelWizard.Core.csproj" />
+  </ItemGroup>
+</Project>
