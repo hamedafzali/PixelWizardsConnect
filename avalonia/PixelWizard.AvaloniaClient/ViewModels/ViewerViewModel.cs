@@ -42,16 +42,16 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
     private readonly IViewerShell   _shell;
     private readonly ChatViewModel  _chat;
     private readonly AppSettings    _settings;
-    private readonly IRouterClient  _router;
+    private readonly IRelayConnector _relay;
     private readonly HelloMessage   _ourHello;
 
     public ViewerViewModel(IViewerShell shell, ChatViewModel chat, AppSettings settings,
-                           IRouterClient router, HelloMessage ourHello)
+                           IRelayConnector relay, HelloMessage ourHello)
     {
         _shell    = shell;
         _chat     = chat;
         _settings = settings;
-        _router   = router;
+        _relay    = relay;
         _ourHello = ourHello;
 
         ConnectDirectCommand  = ReactiveCommand.CreateFromTask(ConnectDirect);
@@ -329,27 +329,46 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         catch (Exception ex) { _shell.Status = FriendlyError.Describe(ex); IsConnecting = false; }
     }
 
+    // Router mode: join the room for the code through the router's /signal, then run the session over
+    // WebRTC with the empty secret (D3). The Hello/Handshake and the host's approval then run exactly as
+    // on the direct path; until the host approves, nothing is shown.
     private async Task ConnectViaCode()
     {
         string code = ConnectionCode.Trim().ToUpperInvariant();
         if (string.IsNullOrEmpty(code)) { _shell.Status = "Enter a connection code"; return; }
         var (host, port) = RouterEndpoint.Parse(RouterAddress);
         IsConnecting = true;
-        _shell.Status = "Resolving via router…";
+        _shell.Status = "Joining via router…";
+        var cts = new CancellationTokenSource();
+        _relayCts?.Cancel();
+        _relayCts = cts;
+        RelayLink? link = null;
+        ViewerSession? session = null;
         try
         {
-            var result = await _router.ResolveEndpointAsync(host, port, code);
-            _sessionSecret = result.SessionSecret;
+            link = await _relay.JoinAsync(host, port, code, cts.Token);
             _settings.LastRouterAddress = RouterAddress;
             _settings.Save();
-            var parts = result.HostEndpoint.Split(':');
-            ConnectedAddress = result.HostEndpoint;
+            _sessionSecret = "";
+            ConnectedAddress = code;
             _connectedViaRouter = true;
-            _session = BuildSession(() => new TcpTransport(), _sessionSecret);
-            await _session.ConnectAsync(parts[0], int.Parse(parts[1]), UseTls);
+            _shell.Status = "Connecting to the host…";
+            var transport = link.Transport;
+            session = _session = BuildSession(() => transport, "");
+            await link.EstablishAsync(cts.Token);
         }
-        catch (Exception ex) { _shell.Status = FriendlyError.Describe(ex); IsConnecting = false; }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested) { /* the user left */ }
+        catch (Exception ex)
+        {
+            if (link != null) { try { await link.Signaling.DisposeAsync(); } catch { } }
+            // Not this session's Disconnected to report: say why, once.
+            if (session != null && _session == session) { _session = null; session.Dispose(); }
+            _shell.Status = FriendlyError.Describe(ex);
+            IsConnecting = false;
+        }
     }
+
+    private CancellationTokenSource? _relayCts;
 
     // Refusing is the default: nothing changes unless the user explicitly trusts. Trusting
     // only forgets the old pin; the next connect (which the user starts) pins whatever the
@@ -464,6 +483,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
 
     public void Disconnect()
     {
+        _relayCts?.Cancel();
         StopFrameTimeoutTimer();
         _session?.Disconnect();
         _session = null;

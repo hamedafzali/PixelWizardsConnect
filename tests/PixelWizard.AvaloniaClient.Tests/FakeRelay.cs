@@ -91,6 +91,9 @@ internal sealed class FakeRelayConnector : IRelayConnector
     public readonly List<FakeRegistration> Registrations = new();
     public string? JoinedCode;
     public Exception? JoinFails { get; set; }
+    public Exception? EstablishFails { get; set; }
+    /// <summary>Called in JoinAsync with the host-side transport, before it is established, so a test can build a HostSession over it.</summary>
+    public Action<MemoryTransport>? OnHostTransport { get; set; }
 
     public Task<IRelayHostRegistration> RegisterHostAsync(string routerHost, int routerPort, CancellationToken ct)
     {
@@ -115,8 +118,13 @@ internal sealed class FakeRelayConnector : IRelayConnector
         JoinedCode = code;
         if (JoinFails != null) return Task.FromException<RelayLink>(JoinFails);
         var (host, viewer) = MemoryTransport.CreatePair();
+        OnHostTransport?.Invoke(host);
         // The host end opens together with the viewer end.
-        return Task.FromResult(new RelayLink(viewer, async _ => { await host.EstablishAsync(); await viewer.EstablishAsync(); }, new NoSignaling()));
+        return Task.FromResult(new RelayLink(viewer, async _ =>
+        {
+            if (EstablishFails != null) throw EstablishFails;
+            await host.EstablishAsync(); await viewer.EstablishAsync();
+        }, new NoSignaling()));
     }
 }
 

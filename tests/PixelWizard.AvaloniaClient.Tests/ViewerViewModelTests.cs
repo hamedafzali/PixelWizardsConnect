@@ -36,28 +36,6 @@ public sealed class ViewerViewModelTests : IDisposable
         public void WriteClipboard(string text) => Clipboard.Add(text);
     }
 
-    private sealed class NoRouter : IRouterClient
-    {
-        public Task<RouterRegistrationResult> RegisterHostAsync(string h, int p, string e) => throw new NotSupportedException();
-        public Task<RouterConnectResult> ResolveEndpointAsync(string h, int p, string c) => throw new NotSupportedException();
-    }
-
-    private sealed class UnknownCodeRouter : IRouterClient
-    {
-        public Task<RouterRegistrationResult> RegisterHostAsync(string h, int p, string e) => throw new NotSupportedException();
-        public Task<RouterConnectResult> ResolveEndpointAsync(string h, int p, string c) =>
-            throw new ConnectionCodeNotFoundException("Invalid or expired connection code");
-    }
-
-    private sealed class FixedRouter : IRouterClient
-    {
-        private readonly string _endpoint;
-        public FixedRouter(string endpoint) => _endpoint = endpoint;
-        public Task<RouterRegistrationResult> RegisterHostAsync(string h, int p, string e) => throw new NotSupportedException();
-        public Task<RouterConnectResult> ResolveEndpointAsync(string h, int p, string c) =>
-            Task.FromResult(new RouterConnectResult(_endpoint, ""));
-    }
-
     private readonly string _settingsFile =
         Path.Combine(Path.GetTempPath(), "pw-viewer-" + Guid.NewGuid().ToString("N") + ".json");
     private readonly FakeShell _shell = new();
@@ -69,9 +47,9 @@ public sealed class ViewerViewModelTests : IDisposable
         _chat = new ChatViewModel(() => null, () => Task.FromResult<string?>(null));
     }
 
-    private ViewerViewModel Vm(AppSettings? settings = null, IRouterClient? router = null)
+    private ViewerViewModel Vm(AppSettings? settings = null, IRelayConnector? relay = null)
     {
-        var vm = new ViewerViewModel(_shell, _chat, settings ?? AppSettings.Load(_settingsFile), router ?? new NoRouter(), OurHello);
+        var vm = new ViewerViewModel(_shell, _chat, settings ?? AppSettings.Load(_settingsFile), relay ?? new FakeRelayConnector(), OurHello);
         _created.Add(vm);
         return vm;
     }
@@ -160,7 +138,7 @@ public sealed class ViewerViewModelTests : IDisposable
     [AvaloniaFact]
     public async Task ConnectViaCode_UnknownCode_SaysTheCodeIsWrong_NotTheRouter()
     {
-        var vm = Vm(router: new UnknownCodeRouter());
+        var vm = Vm(relay: new FakeRelayConnector { JoinFails = new SignalingErrorException("code-unknown", "unknown") });
         vm.ConnectionCode = "E10C93";
 
         await vm.ConnectViaCodeCommand.Execute();
@@ -169,30 +147,84 @@ public sealed class ViewerViewModelTests : IDisposable
         Assert.False(vm.IsConnecting);
     }
 
-    // The direct-IP box still holds whatever was typed there; a code's session goes to the
-    // endpoint the router gave, and that's what the title names.
+    // The direct-IP box still holds whatever was typed there; a code's session is named by the
+    // code, not by the typed address.
     [AvaloniaFact]
-    public async Task ConnectViaCode_TitleNamesTheRoutersEndpoint_NotTheDirectIpBox()
+    public async Task ConnectViaCode_TitleNamesTheCode_NotTheDirectIpBox()
     {
-        int port = GetFreePort();
-        using var host = new HostSession(new TcpTransport(), OurHello);
-        _ = host.StartServerAsync(port, useTls: false);
-        await Task.Delay(50); // let the listener bind
-
+        var relay = new FakeRelayConnector();
         using var main = new MainViewModel(AppSettings.Load(_settingsFile),
-            PixelWizard.AvaloniaClient.Platform.HostProviderFactory.Create(), new FixedRouter($"127.0.0.1:{port}"), new FakeRelayConnector());
+            PixelWizard.AvaloniaClient.Platform.HostProviderFactory.Create(), relay);
         main.GoViewerCommand.Execute().Subscribe();
-        main.Viewer.UseTls = false;
         main.Viewer.HostAddress = "10.9.9.9";
         main.Viewer.ConnectionCode = "ABC234";
+        HostSession? host = null;
+        relay.OnHostTransport = t => host = new HostSession(t, OurHello, "");
 
         await main.Viewer.ConnectViaCodeCommand.Execute();
         await WaitUntil(() => main.Viewer.IsConnected, "viewer to go live");
 
-        Assert.Equal($"127.0.0.1:{port}", main.Viewer.ConnectedAddress);
-        Assert.Equal($"PixelWizard Connect — Viewing 127.0.0.1:{port}", main.WindowTitle);
+        Assert.Equal("ABC234", relay.JoinedCode);
+        Assert.Equal("ABC234", main.Viewer.ConnectedAddress);
+        Assert.Equal("PixelWizard Connect — Viewing ABC234", main.WindowTitle);
         Assert.Empty(main.Viewer.RecentHosts); // recents are for the direct-IP box
         Assert.Equal("10.9.9.9", main.Viewer.HostAddress);
+        host?.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task ConnectViaCode_HostDenies_ViewerSaysSo()
+    {
+        var relay = new FakeRelayConnector();
+        HostSession? host = null;
+        bool verified = false;
+        relay.OnHostTransport = t => { host = new HostSession(t, OurHello, ""); host.HandshakeVerified += () => verified = true; };
+        var vm = Vm(relay: relay);
+        vm.ConnectionCode = "ABC234";
+
+        await vm.ConnectViaCodeCommand.Execute();
+        await WaitUntil(() => vm.IsConnected, "viewer to go live");
+        await WaitUntil(() => verified, "host to verify the handshake");
+        Assert.False(await host!.ResolveConsentAsync(_ => Task.FromResult(false), "viewer"));
+
+        await WaitUntil(() => !vm.IsConnected, "viewer to see the refusal");
+        Assert.Equal("The host didn't allow the connection", _shell.Statuses.Last());
+        host.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task ConnectViaCode_HostApproves_ChatFlows()
+    {
+        var relay = new FakeRelayConnector();
+        HostSession? host = null;
+        bool verified = false;
+        relay.OnHostTransport = t => { host = new HostSession(t, OurHello, ""); host.HandshakeVerified += () => verified = true; };
+        var vm = Vm(relay: relay);
+        vm.ConnectionCode = "ABC234";
+
+        await vm.ConnectViaCodeCommand.Execute();
+        await WaitUntil(() => verified, "host to verify the handshake");
+        host!.Approve();
+        await host.SendChatAsync("hi viewer");
+        await WaitUntil(() => _chat.Messages.Count == 1, "chat from host");
+
+        Assert.True(vm.IsConnected);
+        Assert.Equal("ABC234", vm.ConnectedAddress);
+        Assert.Equal(1, _shell.LiveShown);
+        host.Dispose();
+    }
+
+    [AvaloniaFact]
+    public async Task ConnectViaCode_EstablishFails_ReportsAndStopsConnecting()
+    {
+        var vm = Vm(relay: new FakeRelayConnector { EstablishFails = new InvalidOperationException("ice failed") });
+        vm.ConnectionCode = "ABC234";
+
+        await vm.ConnectViaCodeCommand.Execute();
+
+        Assert.False(vm.IsConnecting);
+        Assert.False(vm.IsConnected);
+        Assert.NotEqual("Connecting to the host…", _shell.Statuses.Last());
     }
 
     [AvaloniaFact]
