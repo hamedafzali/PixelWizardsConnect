@@ -85,10 +85,11 @@ namespace PixelWizard.Transport.WebRtc
 
         /// <summary>
         /// Nominated candidate pair as "local/remote" candidate types (e.g. "host/host", "relay/srflx"),
-        /// read from the RTP channel's NominatedEntry once ICE is connected. Null before that;
-        /// "unknown/unknown" if ICE connected but no pair could be read.
+        /// read from the RTP channel's NominatedEntry once ICE is connected. Null until a pair can be read:
+        /// SIPSorcery may report ICE connected (and the channel may open) before NominatedEntry is set, so
+        /// an unreadable pair is never cached and a later read tries again.
         /// </summary>
-        public string? SelectedPairType => _selectedPair ?? (_open ? (_selectedPair = ReadPair()) : null);
+        public string? SelectedPairType => _selectedPair ??= ReadPair();
 
         /// <summary>
         /// Builds the peer connection and completes when the control channel is open. Faults, and cleans up
@@ -144,7 +145,7 @@ namespace PixelWizard.Transport.WebRtc
                 };
                 pc.oniceconnectionstatechange += s =>
                 {
-                    if (s == RTCIceConnectionState.connected) _selectedPair = ReadPair();
+                    if (s == RTCIceConnectionState.connected) _selectedPair ??= ReadPair();
                     if (s == RTCIceConnectionState.failed || s == RTCIceConnectionState.closed)
                         Fail(new IOException($"ICE {s}"));
                 };
@@ -419,10 +420,10 @@ namespace PixelWizard.Transport.WebRtc
             catch (Exception) { }
         }
 
-        private string ReadPair()
+        private string? ReadPair()
         {
             var entry = _pc?.GetRtpChannel()?.NominatedEntry;
-            if (entry == null) return "unknown/unknown";
+            if (entry == null) return null;
             return $"{entry.LocalCandidate.type}/{entry.RemoteCandidate.type}";
         }
 
