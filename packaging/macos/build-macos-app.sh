@@ -7,8 +7,24 @@
 #
 #   output-dir   Where the .app is written (default: dist)
 #   arch         arm64 | x64  (default: arm64) → osx-arm64 / osx-x64 RID
+#   --no-ffmpeg  Build without the vendored FFmpeg (the app then runs JPEG-only).
+#
+# FFmpeg (P4.9) is required by default and staged as Contents/MacOS/ffmpeg, which is where the app
+# looks (AppContext.BaseDirectory/ffmpeg). Its zip comes from $PIXELWIZARD_FFMPEG_ZIP (file or dir),
+# else the release named in packaging/ffmpeg/manifest.json; the SHA-256 is verified first. Only
+# arm64 is vendored: an x64 build needs --no-ffmpeg.
 #
 set -e
+
+WITH_FFMPEG=1
+POSITIONAL=()
+for a in "$@"; do
+    case "$a" in
+        --no-ffmpeg) WITH_FFMPEG=0 ;;
+        *) POSITIONAL+=("$a") ;;
+    esac
+done
+set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -22,6 +38,11 @@ case "$ARCH" in
     *) echo "Unknown arch: $ARCH (use arm64 or x64)" >&2; exit 1 ;;
 esac
 
+if [ "$WITH_FFMPEG" = 1 ] && [ "$ARCH" != "arm64" ]; then
+    echo "No vendored FFmpeg for $ARCH (arm64 only). Pass --no-ffmpeg to build a JPEG-only app." >&2
+    exit 1
+fi
+
 PROJECT="$REPO_ROOT/avalonia/PixelWizard.AvaloniaClient"
 # Published binary name (AssemblyName is the default = project name).
 BINARY_NAME="PixelWizard.AvaloniaClient"
@@ -32,6 +53,15 @@ ICON_SRC="$SCRIPT_DIR/PixelWizard.icns"
 
 STAGING="$(mktemp -d)"
 APP_DIR="$OUT_DIR/$APP_NAME"
+
+# Fail before the slow publish if FFmpeg cannot be obtained or does not verify.
+FFMPEG_STAGE=""
+if [ "$WITH_FFMPEG" = 1 ]; then
+    FFMPEG_STAGE="$(mktemp -d)/ffmpeg"
+    "$REPO_ROOT/packaging/ffmpeg/stage-ffmpeg.sh" "macos-$ARCH" "$FFMPEG_STAGE"
+else
+    echo "WARNING: building without FFmpeg; the app will use JPEG only."
+fi
 
 echo "Publishing $RID (self-contained, single-file)..."
 dotnet publish "$PROJECT" \
@@ -52,6 +82,12 @@ if [ -f "$APP_DIR/Contents/MacOS/$BINARY_NAME" ]; then
     mv "$APP_DIR/Contents/MacOS/$BINARY_NAME" "$APP_DIR/Contents/MacOS/$BUNDLE_BINARY"
 fi
 chmod +x "$APP_DIR/Contents/MacOS/$BUNDLE_BINARY"
+
+# Vendored FFmpeg: shared libraries (replaceable, LGPL) plus licenses/, next to the executable.
+if [ -n "$FFMPEG_STAGE" ]; then
+    cp -R "$FFMPEG_STAGE" "$APP_DIR/Contents/MacOS/ffmpeg"
+    rm -rf "$(dirname "$FFMPEG_STAGE")"
+fi
 
 # Icon (CFBundleIconFile references "PixelWizard" → PixelWizard.icns).
 if [ -f "$ICON_SRC" ]; then
