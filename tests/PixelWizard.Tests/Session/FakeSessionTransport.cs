@@ -11,7 +11,7 @@ namespace PixelWizard.Tests.Session;
 /// prove HostSession/ViewerSession forward transport events untouched (T9.1's behavioral
 /// gate) without needing a real socket pair.
 /// </summary>
-public sealed class FakeSessionTransport : ITcpSessionTransport
+public class FakeSessionTransport : ITcpSessionTransport
 {
     public bool IsConnected { get; set; }
 

@@ -83,6 +83,9 @@ public sealed class HostSession : IDisposable
     public void Approve()
     {
         if (!_handshakeComplete) return;
+        // Once only per connection: a second call must not build a second pipeline (the first would keep
+        // capturing and sending with nothing left holding it). The Connected handler resets _approved.
+        if (_approved) return;
         // The media path is decided here and only here, after consent: H.264 when both peers advertise it and
         // the transport carries a video track, with the pipeline built now (D4) and only now. The decision is
         // made before _approved flips, so the JPEG capture loop (gated on IsApproved) never starts for a
