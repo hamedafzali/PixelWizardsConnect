@@ -217,6 +217,23 @@ jobs:
           [ -n "$lib" ] || { echo "::error::no avcodec library in $zip"; exit 1; }
           echo "PIXELWIZARD_FFMPEG_DIR=$lib" >> "$GITHUB_ENV"
 
+      # P4.9: the packaging staging scripts run on the artifact of the run above (the release is not
+      # published yet), so the zip's SHA-256 is verified by the same code that packaging uses, and the
+      # tests below load FFmpeg from the staged layout (the ffmpeg/ directory the app finds next to its
+      # executable) rather than from a bare unzip.
+      - name: Stage the vendored FFmpeg as packaged
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PIXELWIZARD_FFMPEG_ZIP="$RUNNER_TEMP/ffmpeg-dl"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            pwsh -NoProfile -File packaging/ffmpeg/stage-ffmpeg.ps1 -Platform windows-x64 -Dest "$RUNNER_TEMP/staged/ffmpeg"
+          else
+            packaging/ffmpeg/stage-ffmpeg.sh macos-arm64 "$RUNNER_TEMP/staged/ffmpeg"
+          fi
+          [ -f "$RUNNER_TEMP/staged/ffmpeg/licenses/COPYING.LGPLv2.1" ] || { echo "::error::licence notices missing from staged FFmpeg"; exit 1; }
+          echo "PIXELWIZARD_FFMPEG_DIR=$RUNNER_TEMP/staged/ffmpeg" >> "$GITHUB_ENV"
+
       - name: Test (FFmpeg probe)
         run: >
           dotnet test tests/PixelWizard.FFmpeg.Tests/PixelWizard.FFmpeg.Tests.csproj
