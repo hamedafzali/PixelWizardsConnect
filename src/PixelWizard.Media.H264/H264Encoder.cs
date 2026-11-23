@@ -103,7 +103,7 @@ public sealed unsafe class H264Encoder : IDisposable
                 diag.Add($"{name}: {key}={value} {(r >= 0 ? "applied" : "ignored (" + r + ")")}");
             }
             // Constrained baseline where the encoder lets us ask for it. level 3.1 matches 42e01f.
-            Opt("profile", name == "h264_amf" ? "constrained_baseline" : "baseline");
+            Opt("profile", name is "h264_amf" or "h264_videotoolbox" ? "constrained_baseline" : "baseline");
             Opt("level", "3.1");
             switch (name)
             {

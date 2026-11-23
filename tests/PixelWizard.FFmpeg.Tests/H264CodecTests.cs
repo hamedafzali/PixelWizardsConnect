@@ -72,6 +72,9 @@ public sealed class H264CodecTests
         _out.WriteLine($"SPS profile_idc={sps.profile} constraints=0x{sps.constraints:x2} level_idc={sps.level}");
         Assert.Equal(66, sps.profile);
         Assert.True(sps.level <= 31, $"level_idc {sps.level} above 3.1");
+        // 42e01f means constraint_set1 (0x40) is set; VideoToolbox only sets it when asked for constrained baseline.
+        if (enc.EncoderName == "h264_videotoolbox")
+            Assert.True((sps.constraints & 0x40) != 0, $"constraint_set1 missing, flags 0x{sps.constraints:x2}");
     }
 
     // profile_idc, constraint flags and level_idc: the three bytes after the SPS NAL header.
