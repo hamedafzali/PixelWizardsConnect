@@ -510,12 +510,6 @@ func TestSignal_RegisterAndResumeShareTheRegisterLimiter(t *testing.T) {
 	over := dialSignal(t, url)
 	over.send(t, `{"v":1,"type":"register"}`)
 	over.expectError(t, "rate-limited")
-
-	// It is the same limiter /register uses, not a copy.
-	rec := postJSONFrom(handleRegister, "/register", `{"hostId":"h","hostName":"n"}`, "127.0.0.1:1234", "")
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("/register should share the exhausted limiter, got %d", rec.Code)
-	}
 }
 
 func TestSignal_JoinSharesTheConnectLimiter(t *testing.T) {
@@ -528,11 +522,6 @@ func TestSignal_JoinSharesTheConnectLimiter(t *testing.T) {
 	c := dialSignal(t, url)
 	c.send(t, `{"v":1,"type":"join","code":"AAAAAA"}`)
 	c.expectError(t, "rate-limited")
-
-	rec := postJSONFrom(handleConnect, "/connect", `{"connectionCode":"AAAAAA","clientId":"c"}`, "127.0.0.1:1234", "")
-	if rec.Code != http.StatusTooManyRequests {
-		t.Fatalf("/connect should share the exhausted limiter, got %d", rec.Code)
-	}
 
 	// join does not draw on the register limiter.
 	h := dialSignal(t, url)
@@ -629,50 +618,21 @@ func TestSignal_CodeExpiresAfterTTL(t *testing.T) {
 	}
 }
 
-func TestSignal_HTTPAndSignalCodesAreSeparateRooms(t *testing.T) {
-	url := startSignalServer(t)
-
-	httpReg := registerHost(t, "host-1", "")
-	viewer := dialSignal(t, url)
-	viewer.send(t, fmt.Sprintf(`{"v":1,"type":"join","code":%q}`, httpReg.ConnectionCode))
-	viewer.expectError(t, "code-unknown")
-
-	host := dialSignal(t, url)
-	code, _ := host.register(t)
-	rec := postJSON(handleConnect, "/connect", fmt.Sprintf(`{"connectionCode":%q,"clientId":"c"}`, code), "")
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("a /signal code must not work on /connect, got %d", rec.Code)
-	}
-	// And the HTTP registration was not touched by either attempt.
-	rec = postJSON(handleConnect, "/connect", fmt.Sprintf(`{"connectionCode":%q,"clientId":"c"}`, httpReg.ConnectionCode), "")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("the HTTP code should still connect, got %d", rec.Code)
-	}
-}
-
-func TestSignal_CodesAreUniqueAcrossBothRoutes(t *testing.T) {
+func TestSignal_CodesAreUnique(t *testing.T) {
 	url := startSignalServer(t)
 	oldChars, oldLen := codeChars, codeLength
 	t.Cleanup(func() { codeChars, codeLength = oldChars, oldLen })
 	codeChars, codeLength = "A", 1 // a one-code space makes any collision certain
 
-	// An HTTP registration holds "A", so /signal cannot issue a code.
-	registerHost(t, "host-1", "")
-	c := dialSignal(t, url)
-	c.send(t, `{"v":1,"type":"register"}`)
-	if _, err := c.recvRawE(); websocket.CloseStatus(err) != websocket.StatusInternalError {
-		t.Fatalf("expected an internal-error close, got %v", err)
-	}
-
-	// A /signal room holds "A", so /register cannot issue one.
-	resetGlobalState()
 	h := dialSignal(t, url)
 	if code, _ := h.register(t); code != "A" {
 		t.Fatalf("expected code A, got %q", code)
 	}
-	rec := postJSON(handleRegister, "/register", `{"hostId":"host-2","hostName":"n"}`, "")
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("/register should not reuse a /signal code, got %d", rec.Code)
+	// The room holds "A", so a second host cannot be issued a code.
+	c := dialSignal(t, url)
+	c.send(t, `{"v":1,"type":"register"}`)
+	if _, err := c.recvRawE(); websocket.CloseStatus(err) != websocket.StatusInternalError {
+		t.Fatalf("expected an internal-error close, got %v", err)
 	}
 }
 

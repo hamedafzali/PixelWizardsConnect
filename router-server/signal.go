@@ -148,7 +148,7 @@ func validRelayed(typ string, f map[string]json.RawMessage) bool {
 // ── State ────────────────────────────────────────────────────────────────────
 
 // signalRoom is one registration: a host, and once paired, a viewer. Fields are guarded by
-// signalMu. Lock order, where both are needed: hostsMutex, then signalMu.
+// signalMu. Lock order, where both are needed: codeMu, then signalMu.
 type signalRoom struct {
 	code      string
 	token     string // resume token
@@ -183,8 +183,8 @@ var (
 	signalWG sync.WaitGroup
 )
 
-// signalCodeInUse reports whether a /signal room holds code. Called with hostsMutex held, from
-// generateUniqueCodeLocked, so a code is unique across the HTTP and WebSocket routes.
+// signalCodeInUse reports whether a /signal room holds code. Called with codeMu held, from
+// generateUniqueCodeLocked.
 func signalCodeInUse(code string) bool {
 	signalMu.Lock()
 	defer signalMu.Unlock()
@@ -375,10 +375,10 @@ func (p *signalPeer) handle(typ string, fields map[string]json.RawMessage, raw [
 }
 
 func (p *signalPeer) handleFirst(typ string, fields map[string]json.RawMessage) bool {
-	// register and resume share /register's per-IP limiter, join shares /connect's.
-	limiter := registerLimiter
+	// register and resume share one per-IP limiter, join has its own.
+	limiter := hostLimiter
 	if typ == "join" {
-		limiter = connectLimiter
+		limiter = joinLimiter
 	}
 	if !limiter.Allow(p.ip) {
 		p.fail("rate-limited", "too many requests")
@@ -412,8 +412,8 @@ func (p *signalPeer) register() bool {
 		return false
 	}
 
-	// hostsMutex serializes code generation with /register, so the code is unique across both.
-	hostsMutex.Lock()
+	// codeMu serializes code generation, so a code is unique.
+	codeMu.Lock()
 	code, err := generateUniqueCodeLocked()
 	if err == nil {
 		signalMu.Lock()
@@ -421,7 +421,7 @@ func (p *signalPeer) register() bool {
 		p.room = signalRooms[code]
 		signalMu.Unlock()
 	}
-	hostsMutex.Unlock()
+	codeMu.Unlock()
 	if err != nil {
 		p.conn.Close(websocket.StatusInternalError, "internal error")
 		return false

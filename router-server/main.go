@@ -84,77 +84,11 @@ func isTrustedProxy(ip net.IP) bool {
 	return false
 }
 
-// ── Data types ───────────────────────────────────────────────────────────────
-
-type HostRegistration struct {
-	HostID         string    `json:"hostId"`
-	HostName       string    `json:"hostName"`
-	HostEndpoint   string    `json:"hostEndpoint"`
-	ConnectionCode string    `json:"connectionCode"`
-	SessionSecret  string    `json:"sessionSecret"`
-	RegisteredAt   time.Time `json:"registeredAt"`
-}
-
-// Length bounds on caller-supplied /register fields. hostId and hostName are
-// required (non-empty after trimming whitespace); hostEndpoint may be empty
-// (handleRegister defaults it from the socket peer) but is still bounded
-// since it is stored for up to codeTTL. 256 comfortably covers legitimate
-// values (UUIDs, hostnames, "host:port" pairs) while capping the per-entry
-// memory a malicious or buggy caller can force onto the hosts map.
-const (
-	maxHostIDLength       = 256
-	maxHostNameLength     = 256
-	maxHostEndpointLength = 256
-)
-
-// validateRegistration checks presence and length bounds on the fields a
-// caller supplies to /register. connectionCode, sessionSecret, and
-// registeredAt are excluded: handleRegister overwrites all three itself
-// after decoding, so any client-supplied values are discarded before being
-// persisted and need no validation here.
-func validateRegistration(reg *HostRegistration) error {
-	if strings.TrimSpace(reg.HostID) == "" {
-		return fmt.Errorf("hostId is required")
-	}
-	if len(reg.HostID) > maxHostIDLength {
-		return fmt.Errorf("hostId exceeds maximum length of %d", maxHostIDLength)
-	}
-	if strings.TrimSpace(reg.HostName) == "" {
-		return fmt.Errorf("hostName is required")
-	}
-	if len(reg.HostName) > maxHostNameLength {
-		return fmt.Errorf("hostName exceeds maximum length of %d", maxHostNameLength)
-	}
-	if len(reg.HostEndpoint) > maxHostEndpointLength {
-		return fmt.Errorf("hostEndpoint exceeds maximum length of %d", maxHostEndpointLength)
-	}
-	return nil
-}
-
-type ConnectionRequest struct {
-	ConnectionCode string `json:"connectionCode"`
-	ClientID       string `json:"clientId"`
-}
-
-type RegistrationResponse struct {
-	ConnectionCode string `json:"connectionCode"`
-	HostID         string `json:"hostId"`
-	SessionSecret  string `json:"sessionSecret"`
-}
-
-type ConnectionResponse struct {
-	HostEndpoint  string `json:"hostEndpoint"`
-	SessionSecret string `json:"sessionSecret"`
-	Success       bool   `json:"success"`
-	Message       string `json:"message"`
-}
-
 // ── State ────────────────────────────────────────────────────────────────────
 
 var (
-	hosts       = make(map[string]*HostRegistration)
-	hostsByCode = make(map[string]*HostRegistration)
-	hostsMutex  sync.Mutex
+	// codeMu serializes code generation with room creation in signal.go.
+	codeMu sync.Mutex
 	// No 0/O or 1/I: people read codes aloud and retype them. 32 characters also divide
 	// 256 evenly, so each is equally likely.
 	codeChars  = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -197,8 +131,9 @@ func (r *rateLimiter) Allow(ip string) bool {
 }
 
 var (
-	registerLimiter = newRateLimiter()
-	connectLimiter  = newRateLimiter()
+	// hostLimiter covers the /signal register and resume messages, joinLimiter covers join.
+	hostLimiter = newRateLimiter()
+	joinLimiter = newRateLimiter()
 )
 
 // ── Entry point ──────────────────────────────────────────────────────────────
@@ -207,136 +142,34 @@ var startTime = time.Now()
 
 func main() {
 	initConfig()
-	go cleanupExpiredHosts(context.Background())
+	go cleanupExpiredRooms(context.Background())
 
-	http.HandleFunc("/register", handleRegister)
-	http.HandleFunc("/connect", handleConnect)
-	http.HandleFunc("/signal", handleSignal)
-	http.HandleFunc("/health", handleHealth)
+	mux := newMux()
 
 	fmt.Printf("Router Server starting on port %s\n", serverPort)
 	fmt.Printf("  code_ttl=%s  cleanup=%s  rate_limit=%d/%s\n",
 		codeTTL, cleanupInterval, rateLimitMax, rateLimitWindow)
 
-	if err := http.ListenAndServe(":"+serverPort, nil); err != nil {
+	if err := http.ListenAndServe(":"+serverPort, mux); err != nil {
 		log.Fatal("Server failed to start:", err)
 	}
 }
 
+// newMux builds the router's routes. /register and /connect (the HTTP session routes) were
+// removed in Phase 4; they now fall through to the mux's 404.
+func newMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/signal", handleSignal)
+	mux.HandleFunc("/health", handleHealth)
+	return mux
+}
+
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
-func handleRegister(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !registerLimiter.Allow(clientIP(r)) {
-		http.Error(w, "Too many requests", http.StatusTooManyRequests)
-		return
-	}
-
-	var reg HostRegistration
-	if err := json.NewDecoder(r.Body).Decode(&reg); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if err := validateRegistration(&reg); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	secret, err := generateSecret()
-	if err != nil {
-		http.Error(w, "Internal error", http.StatusInternalServerError)
-		return
-	}
-
-	if reg.HostEndpoint == "" {
-		reg.HostEndpoint = fmt.Sprintf("%s:8888", clientIP(r))
-	}
-	reg.SessionSecret = secret
-	reg.RegisteredAt = nowFunc()
-
-	// Generate a unique code and store — all under a single lock to avoid TOCTOU races.
-	hostsMutex.Lock()
-	code, codeErr := generateUniqueCodeLocked()
-	if codeErr == nil {
-		reg.ConnectionCode = code
-		hosts[reg.HostID] = &reg
-		hostsByCode[code] = &reg
-	}
-	hostsMutex.Unlock()
-
-	if codeErr != nil {
-		http.Error(w, "Failed to generate unique code", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(RegistrationResponse{
-		ConnectionCode: code,
-		HostID:         reg.HostID,
-		SessionSecret:  secret,
-	})
-	log.Printf("Host registered: ID=%s Code=%s Endpoint=%s", reg.HostID, code, reg.HostEndpoint)
-}
-
-func handleConnect(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !connectLimiter.Allow(clientIP(r)) {
-		http.Error(w, "Too many requests", http.StatusTooManyRequests)
-		return
-	}
-
-	var req ConnectionRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	hostsMutex.Lock()
-	host, exists := hostsByCode[req.ConnectionCode]
-	if exists {
-		// One-time use: delete immediately so the code cannot be reused,
-		// whether or not it turns out to be expired below.
-		delete(hostsByCode, req.ConnectionCode)
-		delete(hosts, host.HostID)
-		if nowFunc().Sub(host.RegisteredAt) > codeTTL {
-			// Expired but not yet swept by cleanupExpiredHosts. Treat
-			// identically to "never existed": exists=false and no
-			// reference to `host` below, so the caller gets the exact
-			// same response as an unknown code and cannot distinguish
-			// "valid then expired" from "never issued".
-			exists = false
-		}
-	}
-	hostsMutex.Unlock()
-
-	if !exists {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(ConnectionResponse{Success: false, Message: "Invalid or expired connection code"})
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ConnectionResponse{
-		HostEndpoint:  host.HostEndpoint,
-		SessionSecret: host.SessionSecret,
-		Success:       true,
-		Message:       "Connected",
-	})
-	log.Printf("Client connected: Code=%s Endpoint=%s", req.ConnectionCode, host.HostEndpoint)
-}
-
 func handleHealth(w http.ResponseWriter, r *http.Request) {
-	hostsMutex.Lock()
-	count := len(hosts)
-	hostsMutex.Unlock()
+	signalMu.Lock()
+	count := len(signalRooms)
+	signalMu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status": "healthy",
@@ -347,15 +180,15 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// generateUniqueCodeLocked must be called with hostsMutex held. A code is unique across the
-// HTTP routes and the /signal rooms.
+// generateUniqueCodeLocked must be called with codeMu held. A code is unique among the /signal
+// rooms.
 func generateUniqueCodeLocked() (string, error) {
 	for i := 0; i < 10; i++ {
 		code, err := generateCode()
 		if err != nil {
 			return "", err
 		}
-		if _, exists := hostsByCode[code]; !exists && !signalCodeInUse(code) {
+		if !signalCodeInUse(code) {
 			return code, nil
 		}
 	}
@@ -407,8 +240,8 @@ func clientIP(r *http.Request) string {
 	return peer
 }
 
-// cleanupExpiredHosts sweeps expired registrations until ctx is cancelled.
-func cleanupExpiredHosts(ctx context.Context) {
+// cleanupExpiredRooms sweeps expired /signal rooms until ctx is cancelled.
+func cleanupExpiredRooms(ctx context.Context) {
 	ticker := time.NewTicker(cleanupInterval)
 	defer ticker.Stop()
 	for {
@@ -417,16 +250,6 @@ func cleanupExpiredHosts(ctx context.Context) {
 			return
 		case <-ticker.C:
 		}
-		hostsMutex.Lock()
-		now := nowFunc()
-		for id, host := range hosts {
-			if now.Sub(host.RegisteredAt) > codeTTL {
-				delete(hosts, id)
-				delete(hostsByCode, host.ConnectionCode)
-				log.Printf("Cleaned up expired host: ID=%s", id)
-			}
-		}
-		hostsMutex.Unlock()
 		sweepSignalRooms(nowFunc())
 	}
 }
