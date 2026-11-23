@@ -14,6 +14,6 @@ public class RouterUrlTests
     [InlineData("https://router.example.com:9000", 9000, "https://router.example.com:9000")]
     public void BaseUrl_BuildsExpectedUrl(string host, int port, string expected)
     {
-        Assert.Equal(expected, RouterHttpClient.BaseUrl(host, port));
+        Assert.Equal(expected, RouterUrl.BaseUrl(host, port));
     }
 }

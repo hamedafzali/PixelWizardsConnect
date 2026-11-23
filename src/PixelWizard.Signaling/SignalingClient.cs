@@ -49,7 +49,7 @@ namespace PixelWizard.Signaling
 
         internal static Uri SignalUri(string routerHost, int routerPort)
         {
-            string http = RouterHttpClient.BaseUrl(routerHost, routerPort);
+            string http = RouterUrl.BaseUrl(routerHost, routerPort);
             string ws = http.StartsWith("https://", StringComparison.Ordinal) ? "wss://" + http.Substring(8) : "ws://" + http.Substring(7);
             return new Uri(ws + "/signal");
         }

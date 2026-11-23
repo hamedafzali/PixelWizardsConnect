@@ -129,7 +129,7 @@ public class SignalingClientTests
     }
 
     [Fact]
-    public void SignalUri_FollowsRouterHttpClientRules()
+    public void SignalUri_FollowsRouterUrlRules()
     {
         Assert.Equal("ws://r.example:9000/signal", SignalingClient.SignalUri("r.example", 9000).ToString());
         Assert.Equal("wss://r.example/signal", SignalingClient.SignalUri("https://r.example", 443).ToString());

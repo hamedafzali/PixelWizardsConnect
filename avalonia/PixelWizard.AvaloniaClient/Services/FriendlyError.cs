@@ -29,8 +29,6 @@ public static class FriendlyError
         TimeoutException        => "The operation timed out. Please try again.",
         UriFormatException      => "That address is not valid.",
         FormatException         => "That address or code is not in a valid format.",
-        PixelWizard.Signaling.ConnectionCodeNotFoundException =>
-            "That code is not valid or has expired. Check the code, or ask the host for a new one.",
         PixelWizard.Signaling.SignalingErrorException { Code: "code-unknown" or "code-used" or "resume-rejected" } =>
             "That code is not valid or has expired. Check the code, or ask the host for a new one.",
         PixelWizard.Signaling.SignalingErrorException { Code: "rate-limited" } =>
