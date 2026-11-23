@@ -13,5 +13,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\PixelWizard.Transport.WebRtc\PixelWizard.Transport.WebRtc.csproj" />
     <ProjectReference Include="..\..\src\PixelWizard.Session\PixelWizard.Session.csproj" />
+    <ProjectReference Include="..\..\src\PixelWizard.Media.H264\PixelWizard.Media.H264.csproj" />
   </ItemGroup>
 </Project>

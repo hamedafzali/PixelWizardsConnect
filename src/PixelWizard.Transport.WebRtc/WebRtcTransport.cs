@@ -3,6 +3,7 @@ using PixelWizard.Core.Interfaces;
 using PixelWizard.Protocol;
 using PixelWizard.Signaling;
 using SIPSorcery.Net;
+using SIPSorceryMedia.Abstractions;
 
 namespace PixelWizard.Transport.WebRtc
 {
@@ -32,10 +33,13 @@ namespace PixelWizard.Transport.WebRtc
     /// Ownership: the transport takes over the SignalingClient (it keeps reading it for late candidates,
     /// bye and peer-left) and disposes it when the transport goes down, also when EstablishAsync fails.
     /// </summary>
-    public sealed class WebRtcTransport : ISessionTransport
+    public sealed class WebRtcTransport : ISessionTransport, IVideoTrackTransport
     {
         public const string ControlChannelLabel = "control";
         public const string MediaChannelLabel = "media-jpeg";
+        /// <summary>The H.264 fmtp both sides must carry (PHASE4-PLAN finding 2), or setRemoteDescription fails with VideoIncompatible.</summary>
+        public const string H264Fmtp = "level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f";
+        internal const int H264PayloadType = 96;
         internal const int ChunkSize = 16 * 1024;
         internal const int MaxConsecutiveHandlerFailures = 5;
         /// <summary>
@@ -107,6 +111,80 @@ namespace PixelWizard.Transport.WebRtc
         public event Action<int>? BytesReceived;
         public event Action<int>? BytesSent;
 
+        /// <summary>
+        /// Adds an H.264 video track to the offer (host: send only) or the answer (viewer: receive only). Set
+        /// before <see cref="EstablishAsync"/>. A peer that leaves it false never takes part in video, and the
+        /// session stays on media-jpeg. Nothing is written to the track until the session layer sends on it.
+        /// </summary>
+        public bool EnableVideoTrack { get; set; }
+
+        private volatile bool _videoNegotiated;
+        private long _videoPacketsSent;
+        public bool VideoTrackNegotiated => _videoNegotiated;
+        /// <summary>Test hooks: access units handed to the track and RTP-level counts.</summary>
+        internal long VideoAccessUnitsSent => Interlocked.Read(ref _videoPacketsSent);
+        internal long VideoAccessUnitsReceived => Interlocked.Read(ref _videoReceived);
+        private long _videoReceived;
+
+        public event Action<byte[], uint>? VideoAccessUnitReceived;
+        public event Action? KeyframeRequested;
+
+        public void SendVideoAccessUnit(byte[] annexB, uint durationRtpUnits)
+        {
+            var pc = _pc;
+            if (pc == null || !_videoNegotiated || !IsConnected || annexB.Length == 0) return;
+            try
+            {
+                pc.SendVideo(durationRtpUnits, annexB);
+                Interlocked.Increment(ref _videoPacketsSent);
+            }
+            catch (Exception ex) { Fail(ex); }
+        }
+
+        public void RequestKeyframe()
+        {
+            var pc = _pc;
+            var vs = pc?.VideoStream;
+            if (pc == null || vs?.LocalTrack == null || vs.RemoteTrack == null || !_videoNegotiated || !IsConnected) return;
+            try { vs.SendRtcpFeedback(new RTCPFeedback(vs.LocalTrack.Ssrc, vs.RemoteTrack.Ssrc, PSFBFeedbackTypesEnum.PLI)); }
+            catch (Exception ex) { HandlerError?.Invoke(ex); }
+        }
+
+        // Called once the remote description is applied. The track is negotiated only when the remote side kept
+        // the video m-line alive: a peer that did not add a track answers it a=inactive (or port 0).
+        private void EvaluateVideoNegotiation(RTCPeerConnection pc)
+        {
+            if (!EnableVideoTrack) return;
+            var video = pc.remoteDescription?.sdp?.Media.FirstOrDefault(m => m.Media == SDPMediaTypesEnum.video);
+            _videoNegotiated = video != null && video.Port != 0
+                && video.MediaStreamStatus != MediaStreamStatusEnum.Inactive
+                && video.MediaFormats.Values.Any(f => f.Name().Equals("H264", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static MediaStreamTrack NewVideoTrack(MediaStreamStatusEnum status) =>
+            new(SDPMediaTypesEnum.video, false, new List<SDPAudioVideoMediaFormat>
+            {
+                new(new VideoFormat(VideoCodecsEnum.H264, H264PayloadType, 90000, H264Fmtp)),
+            }, status);
+
+        private void WireVideo(RTCPeerConnection pc)
+        {
+            pc.OnVideoFrameReceived += (_, timestamp, frame, format) =>
+            {
+                if (format.Codec != VideoCodecsEnum.H264 || frame.Length == 0) return;
+                Interlocked.Increment(ref _videoReceived);
+                try { VideoAccessUnitReceived?.Invoke(frame, timestamp); } catch (Exception ex) { HandlerError?.Invoke(ex); }
+            };
+            pc.OnReceiveReport += (_, media, report) =>
+            {
+                if (media != SDPMediaTypesEnum.video || report.Feedback == null) return;
+                var h = report.Feedback.Header;
+                if (h.PacketType == RTCPReportTypesEnum.PSFB
+                    && (h.PayloadFeedbackMessageType == PSFBFeedbackTypesEnum.PLI || h.PayloadFeedbackMessageType == PSFBFeedbackTypesEnum.FIR))
+                    try { KeyframeRequested?.Invoke(); } catch (Exception ex) { HandlerError?.Invoke(ex); }
+            };
+        }
+
         public bool IsConnected => _open && Volatile.Read(ref _down) == 0;
 
         /// <summary>How long <see cref="EstablishAsync"/> waits for the channel to open. Default 60 s.</summary>
@@ -152,6 +230,12 @@ namespace PixelWizard.Transport.WebRtc
                 });
                 _pc = pc;
                 if (Volatile.Read(ref _down) != 0) throw new OperationCanceledException();
+                if (EnableVideoTrack)
+                {
+                    WireVideo(pc);
+                    // The host only sends and the viewer only receives; both directions still carry RTCP (the viewer's PLI).
+                    pc.addTrack(NewVideoTrack(role == WebRtcRole.Host ? MediaStreamStatusEnum.SendOnly : MediaStreamStatusEnum.RecvOnly));
+                }
 
                 // Every signaling send goes through one ordered queue: SDP first, then candidates in the
                 // order they fire, then end-of-candidates. A candidate can never overtake the SDP.
@@ -379,6 +463,7 @@ namespace PixelWizard.Transport.WebRtc
                             var res = pc.setRemoteDescription(new RTCSessionDescriptionInit { type = RTCSdpType.offer, sdp = o.Sdp });
                             if (res != SetDescriptionResultEnum.OK) throw new InvalidOperationException($"setRemoteDescription: {res}");
                             FlushRemote();
+                            EvaluateVideoNegotiation(pc);
                             var answer = pc.createAnswer();
                             await pc.setLocalDescription(answer).ConfigureAwait(false);
                             await signaling.SendAnswerAsync(answer.sdp, _lifetime.Token).ConfigureAwait(false);
@@ -388,6 +473,7 @@ namespace PixelWizard.Transport.WebRtc
                             var ares = pc.setRemoteDescription(new RTCSessionDescriptionInit { type = RTCSdpType.answer, sdp = a.Sdp });
                             if (ares != SetDescriptionResultEnum.OK) throw new InvalidOperationException($"setRemoteDescription: {ares}");
                             FlushRemote();
+                            EvaluateVideoNegotiation(pc);
                             break;
                         case CandidateMessage c:
                             AddRemoteCandidate(new RTCIceCandidateInit
