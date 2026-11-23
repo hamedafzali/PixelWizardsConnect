@@ -1,9 +1,10 @@
 # Phase 4 Plan — WebRTC session transport and H.264
 
-**Status: in progress.** On 2026-11-20 the owner said to go ahead without answering D1–D8
-individually, so work proceeds on the proposed option for each (recommended (a) for D5). Any of
-them can still be changed; a change after the sub-task that depends on it is a new commit, not a
-rewrite. P4.1 is done.
+**Status: implemented; exit gate (P4.11) pending.** The code and docs for P4.1–P4.10 and P4.12 are
+done. The gate is a manual run on two machines and two carriers, and it has not been done, so Phase
+4 is not closed. On 2026-11-20 the owner said to go ahead without answering D1–D8 individually, so
+work proceeded on the proposed option for each (recommended (a) for D5). Any of them can still be
+changed; a change after the sub-task that depends on it is a new commit, not a rewrite.
 
 ADR-001 scope: "SIPSorcery `ISessionTransport`; H.264 via `SIPSorceryMedia.FFmpeg`; keep
 TCP+JPEG for LAN." Exit gate: "Session established between two different cellular networks."
@@ -314,6 +315,77 @@ codec, selected pair, latency, and the coturn allocation line.
 ### P4.12 — Close
 ADR phase table, BACKLOG, and the Phase 5 entry points: the browser viewer reuses `/signal`, the
 `control` channel framing and the H.264 fmtp.
+
+**Done 2026-11-23, with the gate pending.** The ADR phase table marks Phase 4 implemented with
+P4.11 pending (the Phase 3 row keeps its own pending gate: [PHASE3-GATE.md](PHASE3-GATE.md) says "Not
+yet run"). BACKLOG closes the Windows detector-suite row (the `windows-latest` job runs and asserts the
+System.Drawing suite) and re-tags the two rows Phase 4 left open; it adds the Phase 4 follow-ups:
+Developer ID signing and notarization, no Linux FFmpeg, the FFmpeg release not published, the router
+redeploy, and Windows packaging only exercised through CI staging. The Phase 5 entry points are below.
+Nothing here claims the gate passed.
+
+#### Phase 5 entry points
+
+What a browser viewer (Phase 5) can build on, and what it cannot. Every path below exists.
+
+**Reuses as is**
+- **`/signal`.** [SIGNALING.md](SIGNALING.md): "Transport", "Envelope", "Sequence", "Messages"
+  (pairing and relayed types), "Reconnecting", "Limits", "Security posture". Router:
+  `router-server/signal.go` (rooms, rate limiters, relay), `router-server/turn.go` (TURN credential
+  issuance carried in `joined`). The text-frame JSON protocol is browser-native (`WebSocket`).
+  A browser joins with `join {code}` and uses the `turn` block as `iceServers`. Reference client for
+  the message order: `src/PixelWizard.Signaling/SignalingClient.cs`, types in
+  `SignalingMessages.cs`. Needed router change: the `Origin` allow-list that SIGNALING.md reserves
+  (`router-server/signal.go`, where `websocket.Accept` is called).
+- **Control data channel.** Label `control` (`WebRtcTransport.ControlChannelLabel`, ordered,
+  reliable), in `src/PixelWizard.Transport.WebRtc/WebRtcTransport.cs`. Message body:
+  `NetworkMessage.Serialize()` (`src/PixelWizard.Protocol/NetworkMessage.cs`, layout in
+  [PROTOCOL.md](PROTOCOL.md) "Transport framing": type, timestamp, inner length, data); type table
+  and plane in `MessageType.cs` and `MessagePlane.cs`; Hello/HelloAck in `HelloMessages.cs`. Over a data
+  channel the TCP 4-byte outer length is not used. Each data-channel message is a 1-byte header
+  (0 = last chunk, 1 = more follow) plus at most 16 KiB of body, and the receiver concatenates until it
+  sees 0 (`SendMessageAsync` and `OnChannelData`). **PROTOCOL.md does not document this chunk header**
+  (D2 said "unchanged", which is true of the message body only); write it down before a second
+  implementation relies on it.
+- **H.264 offer.** The fmtp `level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f`
+  is `WebRtcTransport.H264Fmtp` (payload type 96, 90 kHz). 42e01f is constrained baseline, level 3.1,
+  a profile browsers are expected to decode. The encoder is asked for exactly that profile and the SPS matches
+  (`src/PixelWizard.Media.H264/H264Encoder.cs`). Access units are Annex-B with SPS/PPS in-band on every
+  keyframe (`H264Encoder.cs` clears the global-header flag, repeats SPS/PPS, and prepends them if
+  missing; `AnnexB.cs`), which is what a browser's RTP H.264 depacketiser expects.
+  The H.264 path has not been tried against a browser; check it in Chrome, Firefox and Safari.
+- **Keyframe on demand.** The viewer sends RTCP PLI (`WebRtcTransport.RequestKeyframe`); the host
+  turns a PLI or FIR into `IVideoTrackTransport.KeyframeRequested`
+  (`src/PixelWizard.Core/Interfaces/IVideoTrackTransport.cs`), and `H264HostPipeline.cs` forces an IDR.
+  A browser sends PLI by itself when its decoder loses a reference frame, so the host side needs no
+  change; nothing needs to send PLI by hand.
+- **Codec negotiation.** `Hello.Codecs` (`SupportedCodecs`, flag 2 = H264, in `HelloMessages.cs`). A
+  browser viewer would send Hello on `control` and advertise H.264 as it already can decode it.
+- **Consent.** `HostSession.Approve()` (`src/PixelWizard.Session/HostSession.cs`) and
+  `ConsentGate.cs`; decision D4 above. The H.264 pipeline and the `media-jpeg` channel start only
+  after `Approve()`, so a browser viewer gets the same gate with no host change. D3 (empty secret,
+  the consent modal is the gate) applies to it too.
+- **Existing browser viewer, for context.** `src/PixelWizard.Transport.WebSocket/WebSocketHostServer.cs`
+  serves a separate JPEG-over-WebSocket viewer (PROTOCOL.md "Browser viewer"); its smoke test is
+  `tests/WebViewerSmoke/drive.mjs`. It does not use WebRTC, `/signal` or `NetworkMessage`.
+
+**A browser cannot reuse**
+- **`SctpTuning.cs`.** It sets private fields of SIPSorcery's SCTP sender by reflection
+  (`src/PixelWizard.Transport.WebRtc/SctpTuning.cs`); a browser's SCTP stack has its own pacing. The
+  host's sender-side pacing, the 1 MiB high-water mark and the poll on `bufferedAmount` in
+  `WebRtcTransport.cs` are SIPSorcery workarounds. A browser viewer may pass bytes to `RTCDataChannel`
+  with its own `bufferedAmountLowThreshold`.
+- **`media-jpeg`.** Stays the host's fallback for peers with no H.264. The host is the offerer and
+  creates both `control` and `media-jpeg` before the offer (`EstablishAsync`), and `EstablishAsync`
+  completes only when both are open. A browser answerer receives both through `ondatachannel`; it
+  must let `media-jpeg` open (it can stay unused when H.264 is negotiated). Making the second channel
+  optional would be a host change.
+- **FFmpeg and `PixelWizard.Media.H264` decode.** A browser decodes natively; only the host-side
+  encoder path is shared.
+- **The `WebRtcTransport` class and `ISessionTransport`.** They are C#. A browser needs a JS
+  implementation of the same sequence: trickle candidates from `onicecandidate`, no fixed delays,
+  hold remote candidates until the remote description is set (the Phase 3 and 4 findings above).
+- **TOFU/TLS, `TcpTransport`, UDP discovery.** LAN-only.
 
 ---
 
