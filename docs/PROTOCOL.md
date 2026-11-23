@@ -49,6 +49,37 @@ negotiation completes, both peers are strict: anything other than the exact expe
 message (`Hello`, then `Handshake`) disconnects immediately. Negotiation is the one place
 where "unknown" isn't tolerated, because there is nothing yet to negotiate leniency about.
 
+## WebRTC data-channel framing
+
+Over WebRTC (Phase 4, `PixelWizard.Transport.WebRtc.WebRtcTransport`) the 4-byte outer length is
+**not** sent: an RTCDataChannel already delimits messages. The frame above (type, timestamp, inner
+length, data) is the logical message, and it is split into data-channel messages of the form:
+
+```
+[1-byte chunk header: 0 = last chunk, 1 = more chunks follow][at most 16384 bytes of the frame]
+```
+
+A frame of up to 16384 bytes is one data-channel message with header 0. A larger one is several
+messages with header 1 and a final one with header 0. The receiver concatenates the bodies until it
+sees header 0, then parses the result as one frame. A reassembled frame over 64 MiB closes the
+connection. Chunking keeps a 1 MB JPEG frame independent of the peer's SCTP max-message-size.
+
+The offerer (the host) creates two reliable, ordered channels before its offer, so the answerer
+receives both through `ondatachannel`:
+
+| Label | Carries |
+|---|---|
+| `control` | Every Control-plane message type (`MessageTypeExtensions.GetPlane`): Hello, handshake, consent, input, chat, Ping/Pong, … |
+| `media-jpeg` | Every Media-plane message type (JPEG frames and deltas), so a large frame never queues in front of a control message |
+
+Each channel reassembles independently. Order is guaranteed within a channel, not across the two.
+
+When both peers advertise `SupportedCodecs.H264` in Hello, video goes on an RTP video track instead
+of `media-jpeg`: H.264 payload type 96 with fmtp
+`level-asymmetry-allowed=1;packetization-mode=1;profile-level-id=42e01f` (Constrained Baseline 3.1),
+Annex-B access units with SPS/PPS in-band (no `sprop-parameter-sets`), and RTCP PLI (or FIR) to request a keyframe. The
+host writes nothing to the track until it has approved the viewer (`HostSession.Approve`).
+
 ## Negotiation sequence
 
 On connect, the viewer is the first speaker. The full sequence for a healthy connection:
