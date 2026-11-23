@@ -22,9 +22,11 @@ loads the packaged zip, lists the H.264 encoders, opens one and round-trips fram
 
 With `publish=true` the workflow uploads the zips, `SHA256SUMS`, the configure lines and the
 licence notices to a release tagged `ffmpeg-<version>-pw<N>`. Packaging and CI download the zip
-by the SHA-256 in `manifest.json` (placeholders marked `TO_BE_FILLED_AFTER_FIRST_WORKFLOW_RUN`
-until the first published run). Builds are not bit-reproducible, so the hash of a published asset
-is recorded, not recomputed.
+by the SHA-256 in `manifest.json`. Builds are not bit-reproducible, so the hash of a published asset
+is recorded, not recomputed: the manifest pins the zips of run 44884098400, which CI tests against.
+To release exactly those bytes, run the workflow with `publish=true` and `from_run=44884098400`. That
+skips the build, downloads the run's artifacts and refuses any zip whose SHA-256 differs from the
+manifest.
 
 ## What is built
 

@@ -1,5 +1,5 @@
 {
-  "_comment": "Source of truth for the vendored FFmpeg. Fields marked TO_BE_FILLED_AFTER_FIRST_WORKFLOW_RUN are placeholders: copy the sha256 from the SHA256SUMS of the workflow run that gets published. The ffmpeg.yml workflow fails if a configure line here differs from the one it built.",
+  "_comment": "Source of truth for the vendored FFmpeg. The sha256 values are those of ffmpeg.yml run 44884098400, the build CI tests against; publish that run with from_run so the release carries these exact bytes. The ffmpeg.yml workflow fails if a configure line here differs from the one it built.",
   "ffmpegVersion": "9.0.1",
   "packageRevision": 1,
   "releaseTag": "ffmpeg-9.0.1-pw1",
@@ -11,7 +11,7 @@
   "assets": {
     "macos-arm64": {
       "assetName": "ffmpeg-9.0.1-pw1-macos-arm64.zip",
-      "sha256": "TO_BE_FILLED_AFTER_FIRST_WORKFLOW_RUN",
+      "sha256": "63b146aaa420d75accc6219ed6f80fd6da05744520bd1cdf37a667c34913463d",
       "ffmpegVersion": "9.0.1",
       "configure": "--disable-everything --disable-gpl --disable-nonfree --disable-autodetect --disable-programs --disable-doc --disable-debug --enable-shared --disable-static --disable-avfilter --disable-network --enable-decoder=h264 --enable-parser=h264 --install_name_dir=@loader_path --enable-pthreads --enable-videotoolbox --enable-encoder=h264_videotoolbox",
       "libraries": [
@@ -28,7 +28,7 @@
     },
     "windows-x64": {
       "assetName": "ffmpeg-9.0.1-pw1-windows-x64.zip",
-      "sha256": "TO_BE_FILLED_AFTER_FIRST_WORKFLOW_RUN",
+      "sha256": "912ae1a9a1dd73277991a81ec80fc805919ded7284f37afa3dbd7c41c04b87a9",
       "ffmpegVersion": "9.0.1",
       "configure": "--disable-everything --disable-gpl --disable-nonfree --disable-autodetect --disable-programs --disable-doc --disable-debug --enable-shared --disable-static --disable-avfilter --disable-network --enable-decoder=h264 --enable-parser=h264 --arch=x86_64 --target-os=mingw32 --disable-pthreads --enable-w32threads --enable-mediafoundation --enable-d3d11va --enable-ffnvcodec --enable-nvenc --enable-amf --enable-encoder=h264_mf,h264_nvenc,h264_amf --extra-ldflags=-static",
       "libraries": [

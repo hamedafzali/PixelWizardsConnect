@@ -6,6 +6,11 @@ name: FFmpeg (vendored build)
 #
 # Run with publish=true to also upload the zips, SHA256SUMS and licence notices to a GitHub
 # release tagged ffmpeg-<version>-pw<revision>. Without it, the results are workflow artifacts only.
+#
+# from_run=<run id> skips the build and publishes the artifacts of that earlier run instead. Use it
+# to release the exact bytes CI already tested: the build is not byte-reproducible, so a fresh run
+# would not match the SHA-256s pinned in packaging/ffmpeg/manifest.json. With from_run, the release
+# job refuses any zip whose SHA-256 differs from the manifest.
 on:
   workflow_dispatch:
     inputs:
@@ -17,6 +22,10 @@ on:
         description: "Package revision N in the release tag ffmpeg-<version>-pwN (bump when the build recipe changes)"
         type: string
         default: "1"
+      from_run:
+        description: "Publish the artifacts of this earlier ffmpeg.yml run instead of building (run id; empty = build now)"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -43,6 +52,7 @@ env:
 jobs:
   macos:
     name: macOS arm64
+    if: ${{ inputs.from_run == '' }}
     runs-on: macos-latest
     env:
       REVISION: ${{ inputs.revision }}
@@ -93,6 +103,7 @@ jobs:
 
   windows:
     name: Windows x64
+    if: ${{ inputs.from_run == '' }}
     runs-on: windows-latest
     env:
       REVISION: ${{ inputs.revision }}
@@ -185,21 +196,54 @@ jobs:
 
   release:
     name: Publish release
-    if: ${{ inputs.publish }}
+    # Runs after both builds succeeded, or with from_run when they were skipped on purpose.
+    if: ${{ !cancelled() && inputs.publish && (inputs.from_run != '' || (needs.macos.result == 'success' && needs.windows.result == 'success')) }}
     needs: [macos, windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     env:
       REVISION: ${{ inputs.revision }}
+      FROM_RUN: ${{ inputs.from_run }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate from_run
+        if: ${{ inputs.from_run != '' }}
+        run: '[[ "$FROM_RUN" =~ ^[0-9]+$ ]] || { echo "from_run must be a run id"; exit 1; }'
+
       - uses: actions/download-artifact@v4
+        if: ${{ inputs.from_run == '' }}
         with:
           path: dist
           merge-multiple: true
+
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.from_run != '' }}
+        with:
+          path: dist
+          merge-multiple: true
+          pattern: ffmpeg-*
+          run-id: ${{ inputs.from_run }}
+          github-token: ${{ github.token }}
+
+      - name: Verify the zips
+        run: |
+          set -euo pipefail
+          cd dist
+          for p in macos-arm64 windows-x64; do
+            sha256sum -c "SHA256SUMS-$p"
+          done
+          # A run published after the fact must be the one the manifest pins.
+          if [[ -n "$FROM_RUN" ]]; then
+            for p in macos-arm64 windows-x64; do
+              name=$(jq -r --arg p "$p" '.assets[$p].assetName' ../packaging/ffmpeg/manifest.json)
+              want=$(jq -r --arg p "$p" '.assets[$p].sha256' ../packaging/ffmpeg/manifest.json)
+              echo "$want  $name" | sha256sum -c -
+            done
+          fi
 
       - name: Create the release
         run: |
