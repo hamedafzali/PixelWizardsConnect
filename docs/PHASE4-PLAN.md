@@ -44,8 +44,13 @@ failure that changes the signaling or TURN design stops Phase 4 at that point.
    x264/x265.
 4. Vendor one specific tested FFmpeg build per OS. The macOS 8.x build was unobtainable during the
    spike, and Windows builds come from one volunteer's server.
-5. Feed the project's own `IScreenCapture` implementations into `FFmpegVideoEncoder`, not
-   SIPSorcery's capture sources.
+5. Feed the project's own raw capture (`IRawScreenCapture`) into an encoder we drive ourselves,
+   not SIPSorcery's capture sources. The T8 spike's claim that `SIPSorceryMedia.FFmpeg`'s
+   `FFmpegVideoEncoder` works does not hold for the OS encoders: it aborts on `frame->format` with
+   `h264_videotoolbox`, and only appeared to work on a Mac with Homebrew FFmpeg because it silently
+   picked the GPL `libx264`. libavcodec is therefore driven directly through FFmpeg.AutoGen
+   (`PixelWizard.Media.H264`: `H264Encoder`, `H264Decoder`, `FfmpegLoader`); SIPSorcery only
+   packetises and carries the H.264 track.
 6. Single-platform conclusions need checking on the other OS. Every CI check in this phase runs
    on both Windows and macOS.
 7. The IceProbe announced its relay candidate twice (BACKLOG). The transport must tolerate a
@@ -245,16 +250,33 @@ cropped to even in the capture. Same OS grab as the JPEG path (GDI `CopyFromScre
 `CGDisplayCreateImage`), no cursor, logical display size on macOS. Not wired into `CaptureLoop` or
 the session (P4.8). The duplicate-detector BACKLOG row is decided: the Windows detector stays.
 
-### P4.8 — H.264 track: host encode, viewer decode
-- Hello gains `SupportedCodecs.H264`. The offer carries the 42e01f fmtp. When the peers share
-  no H.264, the session falls back to `media-jpeg`.
-- Host: the raw frames go to `FFmpegVideoEncoder` and then the video track. This starts only
-  after `Approve()` and starts with a keyframe.
-- Viewer: an FFmpeg decoder decodes the H.264, and the frames are drawn onto the existing canvas
-  on the UI thread only.
-- Keyframes: a viewer's PLI triggers an IDR from the host, and a periodic IDR is the safety net.
-- Tests: an in-process round trip of a synthetic frame on both OSes (decoded pixels close to the
-  source), and no frame is written to the track before approval.
+### P4.8 — H.264 track: host encode, viewer decode (done)
+- Hello gains `SupportedCodecs.H264` (flag value 2, no extra bytes, no version bump: an older peer's
+  0x01 reads as JPEG only). A peer advertises it only when FFmpeg loaded and (host) an encoder
+  opens or (viewer) the decoder opens. H.264 is used only when both advertise it and the
+  transport is WebRTC with a negotiated video m-line; otherwise the session stays on `media-jpeg`.
+  TCP stays TCP and JPEG. The offer carries the 42e01f fmtp.
+- `WebRtcTransport` (`IVideoTrackTransport`): an H.264 track at a 90 kHz clock, an API to send an
+  Annex-B access unit, an event with reassembled access units, a viewer PLI and a host
+  `KeyframeRequested`. The control and `media-jpeg` channels are untouched.
+- Host: `H264HostPipeline` (capture, `H264Encoder`, track at about 15 fps) is built only inside
+  `HostSession.Approve()`, so there is no capture, no encoder and nothing on the track before
+  consent. The first frame is a keyframe, a PLI forces an IDR, and a periodic IDR comes from the
+  2 s GOP. If the encoder cannot be created the session falls back to `media-jpeg` and logs why.
+  The encoder is released on disconnect or deny. Encoder latency is not assumed away (VideoToolbox
+  holds about 3 frames).
+- Viewer: `H264ViewerReceiver` decodes on a background thread; frames are drawn onto the existing
+  canvas on the UI thread only. Decode errors are dropped and a PLI is sent at most every 500 ms.
+- FFmpeg is found through `PIXELWIZARD_FFMPEG_DIR` or `AppContext.BaseDirectory/ffmpeg`
+  (`FfmpegBootstrap`); if neither loads, no H264 is advertised. Shipping it is P4.9.
+- VideoToolbox is asked for `constrained_baseline`, so its SPS carries constraint_set1 as the
+  42e01f fmtp says.
+- Tests: a round trip over a paired `WebRtcTransport` and through the host and viewer sessions
+  (decoded pixels close to the source), no video before `Approve()` and none after a deny,
+  negotiation fallback to `media-jpeg`, PLI leading to a keyframe, Hello wire compatibility. The
+  FFmpeg-gated cases run in CI via `PIXELWIZARD_FFMPEG_DIR` (the WebRTC assert count is 32).
+- Not yet exercised here: Windows (`h264_mf`, and the Windows host and viewer paths) is covered by
+  CI only; a real two-machine run is the P4.11 gate.
 
 ### P4.9 — Packaging
 - Per-OS staging of the vendored FFmpeg into the single-file publishes. The macOS .app gets
