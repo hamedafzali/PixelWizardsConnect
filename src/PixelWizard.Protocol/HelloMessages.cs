@@ -31,12 +31,16 @@ namespace PixelWizard.Protocol
     }
 
     /// <summary>Codecs a peer can decode. Flags so future codecs add a bit, not a wire
-    /// change. Only Jpeg exists today.</summary>
+    /// change. Jpeg is the media-jpeg message path every peer has. H264 (P4.8) is an H.264 video
+    /// track, offered only by a WebRTC peer whose FFmpeg loaded and whose encoder (host) or decoder
+    /// (viewer) opened; a Hello from a build that predates the bit carries Jpeg alone, which is
+    /// exactly "JPEG only", so no version bump is needed.</summary>
     [Flags]
     public enum SupportedCodecs : byte
     {
         None = 0,
-        Jpeg = 1
+        Jpeg = 1,
+        H264 = 2
     }
 
     /// <summary>
@@ -143,6 +147,11 @@ namespace PixelWizard.Protocol
 
             return null;
         }
+
+        /// <summary>True when both peers advertise H.264. Whether the session actually uses it also needs a
+        /// transport that carries a video track (WebRTC); everything else stays on media-jpeg.</summary>
+        public static bool BothSupportH264(HelloMessage local, HelloMessage remote) =>
+            (local.Codecs & remote.Codecs & SupportedCodecs.H264) != SupportedCodecs.None;
     }
 
     /// <summary>

@@ -84,7 +84,11 @@ with no reply.
   into the void. Nothing in the current desktop codebase advertises `ShareOnly` — it always has
   `IInputInjector` available — but a viewer must handle receiving it, since a future mobile
   host will.
-- **Codecs**: bit flags, `1` = `Jpeg`. `0` (`None`) is valid and means "no codec support to
+- **Codecs**: bit flags, `1` = `Jpeg`, `2` = `H264`. `H264` means an H.264 video track and is
+  advertised only by a WebRTC peer whose FFmpeg loaded and whose encoder (host) or decoder (viewer)
+  opened; a peer that predates the bit sends `1` and is treated as JPEG only. Media uses H.264 only
+  when both peers set the bit and the transport carries a video track; otherwise it stays on the
+  JPEG messages. `0` (`None`) is valid and means "no codec support to
   advertise" — it is not malformed, just guaranteed to fail negotiation (see below).
 - **MaxConcurrentStreams**: a byte is enough headroom (256) for any realistic combination of
   screen/camera/overlay streams; this is not a hard architectural ceiling, just the field

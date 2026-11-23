@@ -122,6 +122,38 @@ public class HelloTests
         Assert.Equal(HelloRejectReason.IncompatibleCapabilities, HelloNegotiator.Evaluate(local, remote));
     }
 
+    [Fact]
+    public void H264Flag_RoundTrips_AndAddsNoBytes()
+    {
+        var hello = new HelloMessage { ProtocolVersion = 2, Role = PeerRole.Full, Codecs = SupportedCodecs.Jpeg | SupportedCodecs.H264, MaxConcurrentStreams = 1 };
+        var bytes = hello.Serialize();
+        Assert.Equal(4, bytes.Length);
+        Assert.Equal(SupportedCodecs.Jpeg | SupportedCodecs.H264, HelloMessage.Deserialize(bytes).Codecs);
+    }
+
+    [Fact]
+    public void HelloFromABuildBeforeH264_ParsesAsJpegOnly()
+    {
+        // version 2, role Full, codecs 0x01 (Jpeg, what every pre-H264 build sends), 1 stream.
+        var restored = HelloMessage.Deserialize(new byte[] { 2, 1, 1, 1 });
+        Assert.Equal(SupportedCodecs.Jpeg, restored.Codecs);
+        Assert.False(restored.Codecs.HasFlag(SupportedCodecs.H264));
+    }
+
+    [Theory]
+    [InlineData(SupportedCodecs.Jpeg | SupportedCodecs.H264, SupportedCodecs.Jpeg | SupportedCodecs.H264, true)]
+    [InlineData(SupportedCodecs.Jpeg | SupportedCodecs.H264, SupportedCodecs.Jpeg, false)]
+    [InlineData(SupportedCodecs.Jpeg, SupportedCodecs.Jpeg | SupportedCodecs.H264, false)]
+    [InlineData(SupportedCodecs.Jpeg, SupportedCodecs.Jpeg, false)]
+    public void H264IsUsedOnlyWhenBothPeersAdvertiseIt(SupportedCodecs local, SupportedCodecs remote, bool expected)
+    {
+        var l = new HelloMessage { ProtocolVersion = 2, Codecs = local };
+        var r = new HelloMessage { ProtocolVersion = 2, Codecs = remote };
+        Assert.Null(HelloNegotiator.Evaluate(l, r)); // a missing H264 never rejects: JPEG is shared
+        Assert.Equal(expected, HelloNegotiator.BothSupportH264(l, r));
+        Assert.Equal(expected, HelloNegotiator.BothSupportH264(r, l));
+    }
+
     [Theory]
     [InlineData(PeerRole.Full, true)]
     [InlineData(PeerRole.ShareOnly, false)]
