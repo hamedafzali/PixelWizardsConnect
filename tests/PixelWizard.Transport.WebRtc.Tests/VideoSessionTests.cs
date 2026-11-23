@@ -50,6 +50,7 @@ public class VideoSessionTests
     private sealed class FailingPipeline : IHostVideoPipeline
     {
         public bool TryStart(out string reason) { reason = "encoder unavailable (test)"; return false; }
+        public bool IsRunning => false;
         public void Stop() { }
         public void Dispose() { }
     }

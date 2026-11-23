@@ -106,8 +106,12 @@ public sealed class HostSession : IDisposable
         && _transport is IVideoTrackTransport { VideoTrackNegotiated: true }
         && HelloNegotiator.BothSupportH264(_ourHello, _peerHello);
 
-    /// <summary>True while the H.264 pipeline is running; the JPEG capture loop must stay idle then.</summary>
-    public bool VideoActive => _videoActive;
+    /// <summary>
+    /// True while the H.264 pipeline is running; the JPEG capture loop must stay idle then. A pipeline that
+    /// ended on its own (an encoder that failed to re-open, a capture error) reads false, so the JPEG loop
+    /// takes over instead of leaving the viewer on a frozen picture.
+    /// </summary>
+    public bool VideoActive => _videoActive && _video is { IsRunning: true };
 
     /// <summary>Why H.264 was agreed but not started (the session fell back to media-jpeg); null otherwise.</summary>
     public string? VideoFallbackReason { get; private set; }

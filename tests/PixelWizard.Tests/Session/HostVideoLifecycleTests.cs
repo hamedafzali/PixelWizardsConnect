@@ -8,7 +8,7 @@ namespace PixelWizard.Tests.Session;
 
 /// <summary>
 /// P4.8b: the H.264 pipeline's lifecycle inside HostSession, with no FFmpeg or WebRTC. The pipeline is
-/// built once per approval, however often Approve() is called.
+/// built once per approval, and a pipeline that ends on its own hands the media path back to JPEG.
 /// </summary>
 public class HostVideoLifecycleTests
 {
@@ -34,6 +34,7 @@ public class HostVideoLifecycleTests
         public bool Running;
         public int Disposals;
         public bool TryStart(out string reason) { reason = ""; Running = true; return true; }
+        public bool IsRunning => Running;
         public void Stop() => Running = false;
         public void Dispose() { Disposals++; Running = false; }
     }
@@ -63,6 +64,21 @@ public class HostVideoLifecycleTests
         Assert.Equal(1, built);
         Assert.True(session.VideoActive);
         Assert.Equal(0, pipeline.Disposals);
+    }
+
+    [Fact]
+    public void PipelineThatEndsOnItsOwn_HandsMediaBackToJpeg()
+    {
+        var (session, _) = VerifiedH264();
+        var pipeline = new FakePipeline();
+        session.VideoPipelineFactory = () => pipeline;
+        session.Approve();
+        Assert.True(session.VideoActive);
+
+        pipeline.Running = false; // e.g. the encoder failed to re-open after a resolution change
+
+        Assert.False(session.VideoActive);
+        Assert.True(session.IsApproved);
     }
 
     [Fact]

@@ -29,6 +29,7 @@ public sealed class H264HostPipeline : IHostVideoPipeline
     private volatile bool _keyframeRequested;
     private bool _started;
     private bool _stopped;
+    private volatile bool _runEnded;
     private long _framesEncoded, _accessUnitsSent, _keyframesSent;
 
     public H264HostPipeline(IVideoTrackTransport track, IRawScreenCapture capture, int fps = DefaultFps, int gopSeconds = 2, Action<string>? log = null)
@@ -43,6 +44,8 @@ public sealed class H264HostPipeline : IHostVideoPipeline
     public long AccessUnitsSent => Interlocked.Read(ref _accessUnitsSent);
     /// <summary>Access units that contained an IDR slice.</summary>
     public long KeyframesSent => Interlocked.Read(ref _keyframesSent);
+
+    public bool IsRunning { get { lock (_gate) return _started && !_stopped && !_runEnded; } }
 
     public bool TryStart(out string reason)
     {
@@ -126,6 +129,7 @@ public sealed class H264HostPipeline : IHostVideoPipeline
         catch (Exception ex) { if (!token.IsCancellationRequested) _log?.Invoke("H.264 host pipeline stopped: " + ex.Message); }
         finally
         {
+            _runEnded = true;
             first?.Dispose();
             // The encoder is only ever touched by this thread once it runs, so it is released here.
             lock (_gate) { _encoder?.Dispose(); _encoder = null; }
