@@ -71,6 +71,9 @@ public sealed class ViewerSession : IDisposable
 
     public bool IsConnected => _transport.IsConnected;
 
+    /// <summary>The transport's video track, or null when it has none (TCP). The H.264 receiver attaches to this.</summary>
+    public IVideoTrackTransport? VideoTrack => _transport as IVideoTrackTransport;
+
     // A v1 host has no concept of Hello: its own strict pre-handshake gate sees an
     // unrecognized message type and disconnects immediately with zero bytes sent back
     // (nothing like HelloAck/HelloRejected is possible from a build that predates them). So

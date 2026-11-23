@@ -42,6 +42,10 @@ public sealed class HostSession : IDisposable
     // nothing is sent to the viewer and nothing it sends is acted on -- otherwise a viewer
     // could watch the screen, or click the host's own consent dialog, while it is open.
     private volatile bool _approved;
+    private HelloMessage? _peerHello;
+    private IHostVideoPipeline? _video;
+    private volatile bool _videoActive;
+    private readonly object _videoGate = new();
 
     public HostSession(ISessionTransport transport, HelloMessage ourHello, string expectedSessionSecret = "")
     {
@@ -55,7 +59,11 @@ public sealed class HostSession : IDisposable
             _approved = false;
             Connected?.Invoke();
         };
-        _transport.Disconnected += () => Disconnected?.Invoke();
+        _transport.Disconnected += () =>
+        {
+            StopVideo();
+            Disconnected?.Invoke();
+        };
         _transport.Error += ex => Error?.Invoke(ex);
         _transport.HandlerError += ex => HandlerError?.Invoke(ex);
         _transport.BytesReceived += n => BytesReceived?.Invoke(n);
@@ -74,7 +82,68 @@ public sealed class HostSession : IDisposable
     /// </summary>
     public void Approve()
     {
-        if (_handshakeComplete) _approved = true;
+        if (!_handshakeComplete) return;
+        // The media path is decided here and only here, after consent: H.264 when both peers advertise it and
+        // the transport carries a video track, with the pipeline built now (D4) and only now. The decision is
+        // made before _approved flips, so the JPEG capture loop (gated on IsApproved) never starts for a
+        // session that then switches to video.
+        StartVideoIfAgreed();
+        _approved = true;
+        Approved?.Invoke();
+    }
+
+    /// <summary>
+    /// Builds the H.264 pipeline when the session should use it. Set by the app; called from
+    /// <see cref="Approve"/> only. Null (TCP, Linux, no FFmpeg) means JPEG.
+    /// </summary>
+    public Func<IHostVideoPipeline?>? VideoPipelineFactory { get; set; }
+
+    /// <summary>True when both peers advertise H.264, so the media path will be the video track if a pipeline starts.</summary>
+    public bool UseH264Video => _peerHello != null
+        && _transport is IVideoTrackTransport { VideoTrackNegotiated: true }
+        && HelloNegotiator.BothSupportH264(_ourHello, _peerHello);
+
+    /// <summary>True while the H.264 pipeline is running; the JPEG capture loop must stay idle then.</summary>
+    public bool VideoActive => _videoActive;
+
+    /// <summary>Why H.264 was agreed but not started (the session fell back to media-jpeg); null otherwise.</summary>
+    public string? VideoFallbackReason { get; private set; }
+
+    /// <summary>Raised after the host approved the viewer and the media path has been decided.</summary>
+    public event Action? Approved;
+
+    private void StartVideoIfAgreed()
+    {
+        VideoFallbackReason = null;
+        if (!UseH264Video) return;
+        var factory = VideoPipelineFactory;
+        if (factory == null) { VideoFallbackReason = "no video pipeline available"; return; }
+        IHostVideoPipeline? pipeline = null;
+        try
+        {
+            pipeline = factory();
+            if (pipeline == null) { VideoFallbackReason = "no video pipeline available"; return; }
+            if (!pipeline.TryStart(out var reason)) { VideoFallbackReason = reason; pipeline.Dispose(); return; }
+        }
+        catch (Exception ex)
+        {
+            VideoFallbackReason = ex.Message;
+            try { pipeline?.Dispose(); } catch { }
+            return;
+        }
+        lock (_videoGate)
+        {
+            if (!_transport.IsConnected) { pipeline.Dispose(); return; }
+            _video = pipeline;
+            _videoActive = true;
+        }
+    }
+
+    private void StopVideo()
+    {
+        IHostVideoPipeline? v;
+        lock (_videoGate) { v = _video; _video = null; _videoActive = false; }
+        try { v?.Dispose(); } catch { }
     }
 
     /// <summary>
@@ -131,7 +200,11 @@ public sealed class HostSession : IDisposable
         ? tcp.StartServerAsync(port, useTls)
         : throw new InvalidOperationException(
             $"StartServerAsync needs a TCP transport; {_transport.GetType().Name} is established by its own code before the session is created.");
-    public void Disconnect() => _transport.Disconnect();
+    public void Disconnect()
+    {
+        StopVideo();
+        _transport.Disconnect();
+    }
 
     // Outbound frames/clipboard/chat (formerly inline in MainViewModel, moved here in T9.4).
     // A full frame goes out as the raw image bytes; a delta as its serialized form.
@@ -256,6 +329,7 @@ public sealed class HostSession : IDisposable
         }
 
         _helloComplete = true;
+        _peerHello = remoteHello;
         _ = _transport.SendMessageAsync(new NetworkMessage
         {
             Type = MessageType.HelloAck,
@@ -292,5 +366,9 @@ public sealed class HostSession : IDisposable
         HandshakeVerified?.Invoke();
     }
 
-    public void Dispose() => _transport.Dispose();
+    public void Dispose()
+    {
+        StopVideo();
+        _transport.Dispose();
+    }
 }

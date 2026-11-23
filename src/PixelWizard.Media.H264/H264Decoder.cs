@@ -15,7 +15,12 @@ public sealed unsafe class H264Decoder : IDisposable
     private SwsContext* _sws;
     private bool _disposed;
 
+    private long _errors;
+
     private H264Decoder() { }
+
+    /// <summary>Access units the decoder rejected as corrupt or undecodable (they are dropped).</summary>
+    public long ErrorCount => Interlocked.Read(ref _errors);
 
     public static bool TryCreate(out H264Decoder? decoder, out string reason)
     {
@@ -50,7 +55,10 @@ public sealed unsafe class H264Decoder : IDisposable
         var r = ffmpeg.avcodec_send_packet(_ctx, _pkt);
         ffmpeg.av_packet_unref(_pkt);
         if (r < 0 && r != ffmpeg.AVERROR(ffmpeg.EAGAIN))
+        {
+            Interlocked.Increment(ref _errors);
             return result; // corrupt or undecodable data: drop it, the next keyframe recovers
+        }
 
         while (ffmpeg.avcodec_receive_frame(_ctx, _frame) == 0)
         {

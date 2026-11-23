@@ -264,10 +264,10 @@ jobs:
       - name: Assert WebRTC transport tests all executed and passed
         shell: pwsh
         run: |
-          # 24 = number of [RouterFact] and [RouterAndFfmpegFact] cases in the WebRTC test project (the latter also need PIXELWIZARD_FFMPEG_DIR, exported to $GITHUB_ENV by the FFmpeg verify step above). Update deliberately when cases are
+          # 32 = number of [RouterFact] and [RouterAndFfmpegFact] cases in the WebRTC test project (the latter also need PIXELWIZARD_FFMPEG_DIR, exported to $GITHUB_ENV by the FFmpeg verify step above). Update deliberately when cases are
           # added or removed: it exists to catch the suite reporting skipped (router variable lost) or
           # fewer tests than written as green.
-          $expected = 24
+          $expected = 32
 
           [xml]$trx = Get-Content TestResults/webrtc.trx
           $results = @($trx.TestRun.Results.UnitTestResult)
