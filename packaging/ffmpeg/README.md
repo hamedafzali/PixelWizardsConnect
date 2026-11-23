@@ -52,7 +52,7 @@ import only Windows system DLLs (no MinGW runtime to ship).
 - **Notices.** Every package carries `licenses/` with `COPYING.LGPLv2.1`, FFmpeg's `LICENSE.md`,
   `NOTICE.txt`, `BUILDINFO.txt` (version, source URL, exact configure arguments) and, on Windows,
   the MIT notices of nv-codec-headers and the AMF headers. The app's installer/About page must ship
-  this directory with the libraries (P4.9).
+  this directory with the libraries; packaging stages it (see `packaging/README.md`).
 - **Source offer.** The complete corresponding source is the pinned tarball above (exact URL and
   SHA-256 in `manifest.json`); the build scripts are in this directory.
 - **No GPL or nonfree component.** Enforced by the build and by `Build_is_lgpl_and_lists_its_h264_encoders`.
@@ -67,4 +67,4 @@ import only Windows system DLLs (no MinGW runtime to ship).
 
 macOS libraries carry `@loader_path` install names, so the libraries find each other next to
 themselves. They are ad-hoc signed by the linker only; Developer ID signing and notarization belong
-to packaging (P4.9).
+to packaging; `stage-ffmpeg.sh` verifies the install names.

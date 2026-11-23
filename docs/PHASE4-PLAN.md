@@ -283,6 +283,18 @@ the session (P4.8). The duplicate-detector BACKLOG row is decided: the Windows d
   signing-ready library paths. Licence notices are included.
 - The packaged app starts a session on a machine with no FFmpeg installed.
 
+**Done 2026-11-23.** `packaging/ffmpeg/stage-ffmpeg.sh` and `.ps1` take the zip from
+`PIXELWIZARD_FFMPEG_ZIP` or the release in `manifest.json` (not published yet: the download fails
+loudly), compare its SHA-256 with the manifest before unpacking, and stage `ffmpeg/` next to the
+executable: `Contents/MacOS/ffmpeg` in the .app, beside the exe on Windows (`installer.iss` already
+ships subfolders). FFmpeg is required by default; `--no-ffmpeg` / `-NoFfmpeg` builds JPEG-only. Linux is
+JPEG-only. The macOS dylibs already use `@loader_path` names, so the script only verifies that no absolute
+path or `LC_RPATH` remains (nothing is rewritten; ad-hoc codesign of the built .app verifies). The zip's
+`licenses/` folder (LGPL text, notices, build info) ships inside the package and `packaging/README.md`
+states the replace-the-libraries right. CI stages the pinned run's artifact with these scripts and runs the
+FFmpeg tests against the staged directory. Verified locally on macOS only; the Windows scripts and the
+CI step are unrun. Not verified: a launch of the packaged app on a clean machine (P4.11).
+
 ### P4.10 — Retire the HTTP session routes (D7)
 - Remove `/register` and `/connect` from the router and their client code. Update README,
   SIGNALING.md and BACKLOG.

@@ -20,8 +20,8 @@ client for each platform. Output goes to `dist/` at the repo root by default.
 | Script | Run on | Produces |
 | --- | --- | --- |
 | `build-all.sh [out] [macos\|linux\|all]` | macOS/Linux | Dispatcher; calls the per-platform scripts. Does **not** run Windows packaging. |
-| `macos/build-macos-app.sh [out] [arm64\|x64]` | macOS | `dist/PixelWizard Connect.app` (default `arm64` → `osx-arm64`). |
-| `windows/build-windows.ps1 [-OutDir out]` | Windows | `dist\PixelWizardConnect-win-x64\` (single-file exe; icon via `<ApplicationIcon>`). |
+| `macos/build-macos-app.sh [out] [arm64\|x64] [--no-ffmpeg]` | macOS | `dist/PixelWizard Connect.app` (default `arm64` → `osx-arm64`). |
+| `windows/build-windows.ps1 [-OutDir out] [-NoFfmpeg]` | Windows | `dist\PixelWizardConnect-win-x64\` (single-file exe; icon via `<ApplicationIcon>`). |
 | `windows/installer.iss` | Windows (`iscc`) | `dist\PixelWizardConnect-Setup-1.0.0.exe` — Start Menu + optional desktop shortcut. Run **after** `build-windows.ps1`. |
 | `linux/build-linux.sh [out]` | Linux/macOS | `dist/PixelWizardConnect-linux-x64.tar.gz` containing the binary, `pixelwizard-connect.desktop`, the PNG icon, and `install.sh` (installs into `~/.local`). |
 
@@ -55,6 +55,54 @@ cd PixelWizardConnect-linux-x64
 
 > An **AppImage** is a future option for Linux (build from the same publish
 > output with `appimagetool`); not implemented to keep the toolchain minimal.
+
+## Vendored FFmpeg (H.264)
+
+The H.264 video track needs the project's LGPL FFmpeg build (`packaging/ffmpeg/`, pinned by
+`packaging/ffmpeg/manifest.json`). The macOS and Windows scripts **require it by default** and stage
+it as `ffmpeg/` next to the executable, which is where the app looks (`FfmpegBootstrap`:
+`PIXELWIZARD_FFMPEG_DIR`, else `AppContext.BaseDirectory/ffmpeg`):
+
+- macOS: `PixelWizard Connect.app/Contents/MacOS/ffmpeg/` (arm64 only; x64 needs `--no-ffmpeg`).
+- Windows: `PixelWizardConnect-win-x64\ffmpeg\`; `installer.iss` ships it (`recursesubdirs`).
+- Linux: no vendored FFmpeg. The tarball is JPEG-only (D5).
+
+Where the zip comes from (`packaging/ffmpeg/stage-ffmpeg.sh` / `.ps1`), first match wins:
+
+1. `PIXELWIZARD_FFMPEG_ZIP` — the zip, or a directory containing the asset named in the manifest.
+2. The GitHub release tagged `manifest.releaseTag`, fetched from `PIXELWIZARD_FFMPEG_BASE_URL` or the
+   clone's `origin`. Until that release is published this fails with an explicit message; it never
+   skips silently. (To test before then, pass the zip of run 44884098400 through the variable.)
+
+The zip's SHA-256 is compared with the manifest **before** it is unpacked; a mismatch aborts the build.
+On macOS the script also checks every dylib: install names and references must be `@loader_path`/`@rpath`
+relative or system paths, with no absolute `LC_RPATH`, so the bundle can be signed and moved. The shipped
+zip already satisfies this, so nothing is rewritten and the existing ad-hoc signatures stay valid
+(`codesign --deep --force -s -` and `codesign --verify --deep --strict` succeed on the built `.app`).
+
+Opt out with `--no-ffmpeg` (shell) or `-NoFfmpeg` (PowerShell): the build warns and the app runs
+JPEG-only.
+
+```bash
+PIXELWIZARD_FFMPEG_ZIP=/path/to/zips ./packaging/macos/build-macos-app.sh
+./packaging/macos/build-macos-app.sh dist arm64 --no-ffmpeg
+```
+
+```powershell
+$env:PIXELWIZARD_FFMPEG_ZIP = "C:\zips"; .\packaging\windows\build-windows.ps1
+```
+
+**Licence.** The staged `ffmpeg/licenses/` folder (LGPL 2.1 text, FFmpeg `LICENSE.md`, `NOTICE.txt`,
+`BUILDINFO.txt` with the source URL and configure line, and on Windows the MIT notices of the NVENC and
+AMF headers and winpthreads) travels inside every package. FFmpeg is shipped only as separate shared
+libraries, so a user can replace them with their own build of the same FFmpeg major (same file names)
+in that `ffmpeg/` folder, as LGPL requires; setting `PIXELWIZARD_FFMPEG_DIR` also overrides it.
+
+**Check.** CI stages the artifact of the pinned `ffmpeg.yml` run with these scripts and runs
+`tests/PixelWizard.FFmpeg.Tests` against the staged `ffmpeg/` directory on macOS and Windows. Locally:
+`PIXELWIZARD_FFMPEG_DIR="<app>/Contents/MacOS/ffmpeg" dotnet test tests/PixelWizard.FFmpeg.Tests -c Release`.
+A machine needs no FFmpeg installed: the libraries load from the app's own folder and import only OS
+libraries.
 
 ## Icon assets
 
