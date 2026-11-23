@@ -17,12 +17,12 @@ For product direction, phased plan, and competitor notes see [docs/ROADMAP.md](d
 ```
 src/
   PixelWizard.Core        — interfaces, protocol messages, session models
-  PixelWizard.Transport   — TcpTransport (TLS), RouterHttpClient
+  PixelWizard.Transport   — TcpTransport (TLS)
   PixelWizard.WindowsHost — Windows screen capture (System.Drawing) + input (SendInput)
   PixelWizard.LinuxHost   — Linux screen capture (Xlib XGetImage) + input (XTest)
 avalonia/
   PixelWizard.AvaloniaClient — single Avalonia app: host + viewer on all platforms
-router-server/            — Go HTTP relay server
+router-server/            — Go signaling server (`/signal` WebSocket, TURN credentials)
 ```
 
 ## Features
@@ -116,21 +116,22 @@ gates access.
 
 ### Router path
 
-- Connection codes are **one-time use** — deleted from the router the moment a viewer
-  claims them (see T6 hardening below for the TTL-at-connect fix).
-- Each code is paired with a per-session secret; the viewer must present the exact secret
-  before the host shows the consent dialog.
-- **What the session secret proves, precisely**: that the viewer obtained a connection code
-  from your router within its TTL. **It is not user authentication.** Anyone who obtains or
-  guesses a valid code within its TTL — by seeing it over someone's shoulder, intercepting
+- Connection codes are **one-time use**: a code is valid for one pairing, within its TTL.
+  A host and a viewer meet on a code over the router's `/signal` WebSocket and exchange the
+  WebRTC offer, answer and ICE candidates there; the router never carries the session itself.
+- There is **no session secret** in router mode. The host only accepts the one peer that
+  joined with the code, over a DTLS connection whose fingerprint came through signaling, and
+  the **consent dialog** is the gate (see "What consent is and is not").
+- **What the code proves, precisely**: that the viewer obtained a connection code from your
+  router within its TTL. **It is not user authentication.** Anyone who obtains or
+  guesses a valid code within its TTL, by seeing it over someone's shoulder, intercepting
   an insecure channel it was shared over, or brute-forcing a short code against an
-  internet-exposed router before it expires — passes this check identically to the intended
+  internet-exposed router before it expires, passes this check identically to the intended
   recipient. The router cannot tell them apart.
-- The router validates and rate-limits requests (T6: trusted-proxy-gated `X-Forwarded-For`,
-  TTL enforced at connect time, `/register` field validation) but has no concept of user
-  identity to check the code against.
-- The router itself is plain HTTP — put it behind Caddy, Traefik, or nginx with TLS for
-  internet-facing deployments; see `TRUSTED_PROXY_CIDRS` in `router-server/README.md`.
+- The router validates and rate-limits requests (trusted-proxy-gated `X-Forwarded-For`, TTL
+  enforced at join time) but has no concept of user identity to check the code against.
+- The router itself is plain HTTP/WebSocket: put it behind Caddy, Traefik, or nginx with TLS
+  for internet-facing deployments; see `TRUSTED_PROXY_CIDRS` in `router-server/README.md`.
 
 ### Direct path (no router)
 

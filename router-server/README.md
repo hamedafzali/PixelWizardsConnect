@@ -52,48 +52,6 @@ The server will start on port 9000 by default.
 
 ## API Endpoints
 
-### POST /register
-
-Register a host and receive a connection code.
-
-**Request Body:**
-```json
-{
-  "hostId": "unique-host-id",
-  "hostName": "My Computer",
-  "hostEndpoint": "192.168.1.100:8888"
-}
-```
-
-**Response:**
-```json
-{
-  "connectionCode": "ABC123",
-  "hostId": "unique-host-id"
-}
-```
-
-### POST /connect
-
-Connect to a host using a connection code.
-
-**Request Body:**
-```json
-{
-  "connectionCode": "ABC123",
-  "clientId": "unique-client-id"
-}
-```
-
-**Response:**
-```json
-{
-  "hostEndpoint": "192.168.1.100:8888",
-  "success": true,
-  "message": "Connected"
-}
-```
-
 ### WebSocket /signal
 
 Two WebRTC peers meet on a connection code and swap SDP and ICE candidates here. The router
@@ -101,9 +59,9 @@ relays those messages unread and unaltered; media never touches it. The protocol
 error codes, reconnecting) is in [docs/SIGNALING.md](../docs/SIGNALING.md), and example
 messages are in `testdata/signaling/`.
 
-Codes are shared with the HTTP routes (a code is unique across both) but a code from `/register`
-cannot be joined here, nor a `/signal` code on `/connect`. `register`/`resume` count against the
-`/register` rate limit and `join` against the `/connect` one. Without TURN configured (see
+`register`/`resume` share one per-IP rate limit and `join` has its own. The HTTP routes
+`POST /register` and `POST /connect` that `/signal` replaced were removed in Phase 4 (P4.10)
+and return 404. Without TURN configured (see
 below), `joined` and `peer-joined` omit `turn`.
 
 Limits, with defaults, set by environment variable: `SIGNAL_MAX_FRAME_BYTES` (65536),
@@ -131,7 +89,7 @@ are never logged or exposed on `/health`.
 
 ### GET /health
 
-Check server health and status.
+Check server health and status. `hosts` is the number of open `/signal` registrations.
 
 **Response:**
 ```json
@@ -293,6 +251,3 @@ Go was chosen for this router server because:
   choice with no reverse proxy). Only set it — to your reverse proxy's actual address
   range — when this server sits behind one; see the top-level README for details and the
   rightmost-value rule used when multiple hops are present.
-- **`/register` validates its fields**: `hostId` and `hostName` are required (non-empty
-  after trimming whitespace) and, like `hostEndpoint`, capped at 256 characters. Invalid
-  requests get a `400` with a message naming the offending field.

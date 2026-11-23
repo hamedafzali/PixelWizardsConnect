@@ -279,7 +279,7 @@ from the peer connection's RTP channel (`GetRtpChannel()?.NominatedEntry`) once 
 - Stays outside the transport: registration, the code, joining and resume, which belong to
   connection establishment alongside `RouterHttpClient`, with the transport handed an
   established `SignalingClient` or equivalent; the router's retirement of `/register` and
-  `/connect` for router-mediated sessions (PHASE3-PLAN D4).
+  `/connect` for router-mediated sessions (PHASE3-PLAN D4; done in Phase 4, P4.10).
 - Stays in the probe only: the command line, console output, the ping/echo and `done`/`done-ack`
   exchange, the timeouts and the `bye` sequencing.
 - The probe once appeared to announce its relay candidate twice; P4.3 could not reproduce it

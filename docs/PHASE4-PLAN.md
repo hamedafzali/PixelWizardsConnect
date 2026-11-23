@@ -225,7 +225,7 @@ registration resumes with the same code (about 55 s of retries inside the router
 After a session ends or is refused the host re-registers and shows a new code, since codes are
 one-time use (direct mode re-listens on the same port). LAN discovery is not announced in router
 mode. The app no longer calls `/register` or `/connect`; `RouterHttpClient` and `IRouterClient`
-stay in the code and the HTTP routes retire in P4.10 (D7).
+stay in the code and the HTTP routes retire in P4.10 (D7); both are removed there.
 
 ### P4.6 — Vendored FFmpeg (D6)
 - A build workflow, a release asset, a SHA-256 manifest, and the licence notices shipped with
@@ -286,6 +286,14 @@ the session (P4.8). The duplicate-detector BACKLOG row is decided: the Windows d
 ### P4.10 — Retire the HTTP session routes (D7)
 - Remove `/register` and `/connect` from the router and their client code. Update README,
   SIGNALING.md and BACKLOG.
+
+**Done 2026-11-23.** The router serves only `/signal` and `/health`; `/register`, `/connect`,
+the registration store, their tests and `RouterHttpClient`/`IRouterClient` are gone (a test pins
+the two routes to 404). `/signal` keeps its rooms, code generation (now unique among rooms) and
+its two rate limiters, renamed `hostLimiter`/`joinLimiter`. `/health`'s `hosts` now counts open
+`/signal` registrations. The URL derivation `SignalingClient` used moved to `RouterUrl`. The
+BACKLOG fingerprint row is closed. **A deployed router must be redeployed** to drop the routes;
+an old app build would stop working against it, but no app release exists.
 
 ### P4.11 — Exit-gate run (D8, needs you)
 Record the results in `docs/PHASE4-GATE.md` with no personal details: carriers, OS, direction,

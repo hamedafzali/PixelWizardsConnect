@@ -7,8 +7,8 @@ find each other and exchange SDP and ICE candidates. It is meant to be complete 
 implement a client from without reading the Go.
 
 The endpoint does not carry a session. Media and input travel over WebRTC once ICE connects; the
-router never sees them. The HTTP `/register` and `/connect` routes are unchanged and are not
-described here (`router-server/README.md`).
+router never sees them. The HTTP `/register` and `/connect` routes this endpoint replaced were removed in Phase 4
+(P4.10); the router now serves only `/signal` and `/health`.
 
 ## Transport
 
@@ -79,7 +79,7 @@ host                         router                        viewer
 | `type` | Direction | Fields | Notes |
 |---|---|---|---|
 | `register` | host → router | none | First message on a host socket. |
-| `registered` | router → host | `code`, `resumeToken` | `code` is 6 characters from the same alphabet as `/register`, unique across both routes, one-time use, valid for the code TTL (30 min). |
+| `registered` | router → host | `code`, `resumeToken` | `code` is 6 characters from the router's code alphabet (no 0/O or 1/I), unique among open registrations, one-time use, valid for the code TTL (30 min). |
 | `resume` | host → router | `resumeToken` | First message on a new host socket, instead of `register`. See *Reconnecting*. |
 | `resumed` | router → host | `code` | Same code as before. |
 | `join` | viewer → router | `code` | First message on a viewer socket. |
@@ -158,8 +158,8 @@ registration it was issued with.
 | Frame size | 64 KiB (an SDP offer with one data channel is about 1–3 KiB) |
 | Messages per socket | 100 per 10 s, then `rate-limited` |
 | Open sockets per IP | 20 (offices share one public IP) |
-| `register` and `resume` | The same per-IP limiter as `/register` (10 per minute) |
-| `join` | The same per-IP limiter as `/connect` (10 per minute) |
+| `register` and `resume` | One per-IP limiter, shared by the two (10 per minute) |
+| `join` | Its own per-IP limiter (10 per minute) |
 | First message | Within 10 s of the upgrade |
 | Unpaired registration | Code TTL (30 min), plus the 60 s resume window after a socket drop |
 
