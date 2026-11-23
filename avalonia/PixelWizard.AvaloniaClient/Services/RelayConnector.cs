@@ -1,3 +1,4 @@
+using PixelWizard.Media.H264;
 using System;
 using System.IO;
 using System.Net.WebSockets;
@@ -56,7 +57,7 @@ public sealed class WebRtcRelayConnector : IRelayConnector
     {
         var signaling = new SignalingClient(routerHost, routerPort);
         var joined = await signaling.JoinAsync(code, ct).ConfigureAwait(false);
-        var transport = new WebRtcTransport();
+        var transport = new WebRtcTransport { EnableVideoTrack = FfmpegBootstrap.CanDecode };
         return new RelayLink(transport,
             c => transport.EstablishAsync(signaling, joined.Turn, WebRtcRole.Viewer, ct: c), signaling);
     }
@@ -99,7 +100,7 @@ public sealed class WebRtcRelayConnector : IRelayConnector
                 }
             }
             var signaling = _signaling;
-            var transport = new WebRtcTransport();
+            var transport = new WebRtcTransport { EnableVideoTrack = FfmpegBootstrap.CanEncode };
             return new RelayLink(transport,
                 c => transport.EstablishAsync(signaling, peer.Turn, WebRtcRole.Host, ct: c), signaling);
         }

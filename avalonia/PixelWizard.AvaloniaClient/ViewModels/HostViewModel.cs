@@ -11,6 +11,7 @@ using PixelWizard.AvaloniaClient.Services;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
 using PixelWizard.Media;
+using PixelWizard.Media.H264;
 using PixelWizard.Protocol;
 using PixelWizard.Session;
 using PixelWizard.Signaling;
@@ -170,6 +171,7 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
 
     private HostListener?         _hostListener;
     private CaptureLoop?          _captureLoop;
+    private IRawScreenCapture?    _rawCapture;
     private IInputInjector?       _input;
     private WebSocketHostServer?  _wsServer;
     private CancellationTokenSource? _announceCts;
@@ -285,6 +287,11 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
         {
             link = await registration.WaitForViewerAsync(round.Cts.Token);
             var session = new HostSession(link.Transport, _ourHello, "");
+            // D4: the pipeline (capture, encoder) is built by HostSession.Approve() only, never here.
+            if (link.Transport is IVideoTrackTransport track)
+                session.VideoPipelineFactory = () => _rawCapture is { } raw
+                    ? new H264HostPipeline(track, raw, log: m => System.Diagnostics.Debug.WriteLine($"[Video] {m}"))
+                    : null;
             round.Session = session;
             WireHostSession(session, () => _relayRound == round,
                 viewerWasApproved => ContinueRelayAsync(round, host, port, viewerWasApproved));
@@ -326,10 +333,12 @@ public sealed class HostViewModel : ReactiveObject, IDisposable
     {
         var settings = StreamingSettings.FromPresetIndex(HostQualityIndex);
         var capture  = _hostProvider.CreateCapture(settings.FullRefreshInterval, SelectedMonitorIndex);
+        _rawCapture  = capture as IRawScreenCapture;
+        // JPEG capture stays idle while the H.264 pipeline owns the capture.
         _captureLoop = new CaptureLoop(
             capture,
             () => StreamingSettings.FromPresetIndex(HostQualityIndex),
-            () => CurrentSession?.IsApproved == true);
+            () => CurrentSession is { IsApproved: true, VideoActive: false });
         _captureLoop.DeltaCapturedAsync = async (delta, full) =>
         {
             await CurrentSession!.SendFrameAsync(delta, full);

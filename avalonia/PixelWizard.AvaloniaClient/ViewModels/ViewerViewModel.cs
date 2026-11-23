@@ -11,6 +11,7 @@ using ReactiveUI;
 using PixelWizard.AvaloniaClient.Services;
 using PixelWizard.Core.Interfaces;
 using PixelWizard.Core.Models;
+using PixelWizard.Media.H264;
 using PixelWizard.Protocol;
 using PixelWizard.Session;
 using PixelWizard.Signaling;
@@ -450,6 +451,7 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
             ApplyDelta(delta);
             ResetFrameTimeoutTimer();
         };
+        AttachVideo(session);
         session.HostHelloAcknowledged += hostHello =>
         {
             _hostPeerRole = hostHello.Role;
@@ -481,8 +483,76 @@ public sealed class ViewerViewModel : ReactiveObject, IDisposable
         return session;
     }
 
+    // ── H.264 video (WebRTC sessions where both peers advertised it) ──────────
+
+    private H264ViewerReceiver? _receiver;
+    private DecodedFrame? _pendingVideoFrame;
+    private WriteableBitmap? _videoBitmap;
+
+    private void AttachVideo(ViewerSession session)
+    {
+        DisposeReceiver();
+        if (session.VideoTrack == null || !FfmpegBootstrap.CanDecode) return;
+        // Decoding runs on the receiver's own thread; the frame is handed to the UI thread, the only
+        // place the canvas is drawn. Only the newest undrawn frame is kept, so a slow UI drops frames.
+        if (H264ViewerReceiver.TryCreate(session.VideoTrack, OnVideoFrame, out var receiver, out var why,
+                m => System.Diagnostics.Debug.WriteLine($"[Video] {m}")))
+            _receiver = receiver;
+        else
+            System.Diagnostics.Debug.WriteLine($"[Video] viewer decoder unavailable: {why}");
+    }
+
+    private void DisposeReceiver()
+    {
+        var r = _receiver; _receiver = null;
+        r?.Dispose();
+        Interlocked.Exchange(ref _pendingVideoFrame, null);
+    }
+
+    private void OnVideoFrame(DecodedFrame frame)
+    {
+        if (Interlocked.Exchange(ref _pendingVideoFrame, frame) != null) return; // a draw is already queued; it will take the newest
+        _receivedBytes += frame.Bgra.Length / 20; // rough on-wire share; the status line only needs a trend
+        _ui.Post(() =>
+        {
+            var f = Interlocked.Exchange(ref _pendingVideoFrame, null);
+            if (f == null || _session?.VideoTrack == null) return;
+            DrawVideoFrame(f);
+            ResetFrameTimeoutTimer();
+        });
+    }
+
+    private void DrawVideoFrame(DecodedFrame f)
+    {
+        if (_videoBitmap == null || _videoBitmap.PixelSize.Width != f.Width || _videoBitmap.PixelSize.Height != f.Height)
+        {
+            _videoBitmap?.Dispose();
+            _videoBitmap = new WriteableBitmap(new PixelSize(f.Width, f.Height), new Vector(96, 96),
+                Avalonia.Platform.PixelFormats.Bgra8888, Avalonia.Platform.AlphaFormat.Opaque);
+        }
+        using (var fb = _videoBitmap.Lock())
+        {
+            for (int y = 0; y < f.Height; y++)
+                System.Runtime.InteropServices.Marshal.Copy(f.Bgra, y * f.Stride, fb.Address + y * fb.RowBytes, f.Width * 4);
+        }
+        // Same canvas path as JPEG frames; a size change rebuilds the canvas.
+        if (_canvas == null || _canvasWidth != f.Width || _canvasHeight != f.Height)
+        {
+            var old = _canvas;
+            _canvas = null; _canvasWidth = 0; _canvasHeight = 0;
+            EnsureCanvas(f.Width, f.Height);
+            old?.Dispose();
+        }
+        using (var dc = _canvas!.CreateDrawingContext(false))
+            dc.DrawImage(_videoBitmap, new Rect(0, 0, f.Width, f.Height));
+        RemoteScreen = _canvas;
+        _renderedFrames++;
+        FrameRendered?.Invoke();
+    }
+
     public void Disconnect()
     {
+        DisposeReceiver();
         _relayCts?.Cancel();
         StopFrameTimeoutTimer();
         _session?.Disconnect();

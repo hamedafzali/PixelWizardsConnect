@@ -5,6 +5,7 @@ using ReactiveUI;
 using PixelWizard.AvaloniaClient.Platform;
 using PixelWizard.AvaloniaClient.Services;
 using PixelWizard.Core.Interfaces;
+using PixelWizard.Media.H264;
 using PixelWizard.Protocol;
 using PixelWizard.Signaling;
 
@@ -147,11 +148,13 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
 
     // ── Internal state ────────────────────────────────────────────────────────
 
-    private static readonly HelloMessage OurHello = new()
+    // H.264 is advertised only when FFmpeg loaded and the encoder (host) / decoder (viewer) opened.
+    // Whether it is used also needs the peer to advertise it and the transport to be WebRTC.
+    private static HelloMessage BuildHello(bool h264) => new()
     {
         ProtocolVersion = ProtocolVersions.Current,
         Role = PeerRole.Full,
-        Codecs = SupportedCodecs.Jpeg,
+        Codecs = h264 ? SupportedCodecs.Jpeg | SupportedCodecs.H264 : SupportedCodecs.Jpeg,
         MaxConcurrentStreams = 1
     };
 
@@ -180,8 +183,9 @@ public class MainViewModel : ReactiveObject, IDisposable, IViewerShell, IHostShe
         DockScreenCommand         = ReactiveCommand.Create(() => { ScreenInOwnWindow = false; });
         Chat = new ChatViewModel(ActiveChatLink,
             () => GetClipboardCallback?.Invoke() ?? Task.FromResult<string?>(null));
-        Viewer = new ViewerViewModel(this, Chat, _settings, relay, OurHello);
-        Host   = new HostViewModel(this, Chat, _settings, relay, OurHello, hostProvider);
+        System.Diagnostics.Debug.WriteLine($"[Video] {FfmpegBootstrap.Status}");
+        Viewer = new ViewerViewModel(this, Chat, _settings, relay, BuildHello(FfmpegBootstrap.CanDecode));
+        Host   = new HostViewModel(this, Chat, _settings, relay, BuildHello(FfmpegBootstrap.CanEncode), hostProvider);
         Host.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(HostViewModel.IsHostRunning)) UpdateWindowTitle();
