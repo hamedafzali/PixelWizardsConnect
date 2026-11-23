@@ -195,8 +195,21 @@ namespace PixelWizard.Transport.WebRtc
         /// read from the RTP channel's NominatedEntry once ICE is connected. Null until a pair can be read:
         /// SIPSorcery may report ICE connected (and the channel may open) before NominatedEntry is set, so
         /// an unreadable pair is never cached and a later read tries again.
+        /// A remote "prflx" (peer-reflexive) candidate is reported as the type of the signalled candidate with
+        /// the same address and port: when the peer's connectivity check outruns its trickled candidate,
+        /// SIPSorcery learns the address from the check and types it prflx, which would hide a relay or host
+        /// pair. A prflx that no signalled candidate explains yet is reported as is and not cached.
         /// </summary>
-        public string? SelectedPairType => _selectedPair ??= ReadPair();
+        public string? SelectedPairType
+        {
+            get
+            {
+                if (_selectedPair != null) return _selectedPair;
+                var pair = ReadPair(out bool final);
+                if (final) _selectedPair = pair;
+                return pair;
+            }
+        }
 
         /// <summary>
         /// Builds the peer connection and completes when both the control and media channels are open. Faults, and cleans up
@@ -258,7 +271,7 @@ namespace PixelWizard.Transport.WebRtc
                 };
                 pc.oniceconnectionstatechange += s =>
                 {
-                    if (s == RTCIceConnectionState.connected) _selectedPair ??= ReadPair();
+                    if (s == RTCIceConnectionState.connected) _ = SelectedPairType;
                     if (s == RTCIceConnectionState.failed || s == RTCIceConnectionState.closed)
                         Fail(new IOException($"ICE {s}"));
                 };
@@ -391,7 +404,7 @@ namespace PixelWizard.Transport.WebRtc
             // is applied once, as soon as the association carries its first open channel.
             if (firstOpen && _pc != null) SctpTuned = SctpTuning.TryApply(_pc);
             if (!bothOpen) return;
-            _selectedPair ??= ReadPair();
+            _ = SelectedPairType;
             try { Connected?.Invoke(); } catch (Exception ex) { HandlerError?.Invoke(ex); }
             _established?.TrySetResult();
         }
@@ -554,11 +567,36 @@ namespace PixelWizard.Transport.WebRtc
             catch (Exception) { }
         }
 
-        private string? ReadPair()
+        private string? ReadPair(out bool final)
         {
+            final = false;
             var entry = _pc?.GetRtpChannel()?.NominatedEntry;
             if (entry == null) return null;
-            return $"{entry.LocalCandidate.type}/{entry.RemoteCandidate.type}";
+            var remote = entry.RemoteCandidate;
+            var remoteType = remote.type;
+            final = true;
+            if (remoteType == RTCIceCandidateType.prflx)
+            {
+                var signalled = SignalledType(remote.address, remote.port);
+                if (signalled != null) remoteType = signalled.Value;
+                else final = false;
+            }
+            return $"{entry.LocalCandidate.type}/{remoteType}";
+        }
+
+        private RTCIceCandidateType? SignalledType(string address, ushort port)
+        {
+            foreach (var init in AppliedRemoteCandidates)
+            {
+                try
+                {
+                    var line = init.candidate ?? "";
+                    var c = RTCIceCandidate.Parse(line.StartsWith("candidate:") ? line : "candidate:" + line);
+                    if (c.port == port && string.Equals(c.address, address, StringComparison.OrdinalIgnoreCase)) return c.type;
+                }
+                catch (Exception) { } // an unparsable candidate cannot explain the pair
+            }
+            return null;
         }
 
         // A fault: fails a pending establishment, otherwise reports Error (unless it is just the peer
